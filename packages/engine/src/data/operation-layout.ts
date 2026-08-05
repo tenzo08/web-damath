@@ -1,4 +1,4 @@
-import type { OperationSquare, Position } from '../types.js';
+import type { Operation, OperationSquare, Position } from '../types.js';
 
 /**
  * The operation carried by each of the 32 playable squares, transcribed
@@ -64,3 +64,20 @@ export const PROMOTION_SQUARES_ROW_0: readonly Position[] = OPERATION_LAYOUT.fil
 export const PROMOTION_SQUARES_ROW_7: readonly Position[] = OPERATION_LAYOUT.filter(
   (square) => square.row === 7,
 ).map(({ row, col }) => ({ row, col }));
+
+function positionKey(pos: Position): string {
+  return `${String(pos.row)},${String(pos.col)}`;
+}
+
+const OPERATION_BY_SQUARE: ReadonlyMap<string, Operation> = new Map(
+  OPERATION_LAYOUT.map((square) => [positionKey(square), square.operation]),
+);
+
+/** The operation carried by a playable square (§1.3). Throws for a non-playable square — every landing square in a legal move is always playable. */
+export function operationAt(pos: Position): Operation {
+  const operation = OPERATION_BY_SQUARE.get(positionKey(pos));
+  if (!operation) {
+    throw new Error(`(${String(pos.row)},${String(pos.col)}) is not a playable square`);
+  }
+  return operation;
+}

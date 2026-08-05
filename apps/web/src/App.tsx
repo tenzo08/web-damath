@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { INTEGER_VARIANTS } from '@damath/engine';
+import type { DifficultyTier } from '@damath/ai';
 import { useGame } from './hooks/useGame';
+import { useComputerOpponent } from './hooks/useComputerOpponent';
 import { Board } from './components/Board';
 import { Rail } from './components/Rail';
 import { ScorePanel } from './components/ScorePanel';
 import { MoveLedger } from './components/MoveLedger';
+import { OpponentPanel } from './components/OpponentPanel';
 import { playerLabel } from './lib/notation';
 
 export function App() {
@@ -28,10 +32,16 @@ export function App() {
     activateCursor,
     clearSelection,
     newGame,
+    playMove,
   } = game0;
 
+  const [tier, setTier] = useState<DifficultyTier | null>(null);
+  const computersTurn = tier !== null && !gameOver && game.turn === 'black';
+  useComputerOpponent(game, tier, 'black', playMove);
+
   const lastMove = (ledger.at(-1) ?? null)?.move ?? null;
-  const statusLine = gameOver ? announcement : `${playerLabel(game.turn)} to move`;
+  const statusLine = gameOver ? announcement : computersTurn ? 'Computer is thinking…' : `${playerLabel(game.turn)} to move`;
+  const scoreLabels = tier ? { black: `Computer (${tier})` } : undefined;
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -68,12 +78,12 @@ export function App() {
               destinations={destinations}
               lastMove={lastMove}
               onActivateSquare={(pos) => {
-                if (gameOver) return;
+                if (gameOver || computersTurn) return;
                 activateSquare(pos);
               }}
               onMoveCursor={moveCursor}
               onActivateCursor={() => {
-                if (gameOver) return;
+                if (gameOver || computersTurn) return;
                 activateCursor();
               }}
               onClearSelection={clearSelection}
@@ -90,7 +100,8 @@ export function App() {
               alignSelf: 'stretch',
             }}
           >
-            <ScorePanel game={game} finalScores={finalScores} />
+            <ScorePanel game={game} finalScores={finalScores} labelOverrides={scoreLabels} />
+            <OpponentPanel tier={tier} onChange={setTier} thinking={computersTurn} />
             <MoveLedger entries={ledger} />
           </div>
         </div>

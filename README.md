@@ -21,6 +21,7 @@ digital versions are thin. This aims to be the tool a maths teacher actually use
 
 ```
 packages/engine   Pure TypeScript rules engine. Zero dependencies, zero I/O.
+packages/ai       Minimax + alpha-beta opponent. Depends only on the engine.
 apps/web          React client. Renders state; computes no rules.
 apps/server       Node + WebSocket. Validates every move with the same engine.
 ```
@@ -54,6 +55,7 @@ See [`PLANNING.md`](PLANNING.md) and [`docs/adr/`](docs/adr/).
 ```bash
 pnpm install
 pnpm -F @damath/engine test     # rules engine test suite
+pnpm -F @damath/ai test         # AI test suite (search, tactics, self-play)
 pnpm -F web dev
 pnpm -F server dev
 ```
@@ -74,8 +76,9 @@ official DepEd rulebook in [`docs/source/`](docs/source/). Chip layouts in
 
 ## Status
 
-Milestone 1 (rules engine) and Milestone 2 (local 2-player web UI) complete. Milestone 3
-(AI opponent) in progress. See [`TASK.md`](TASK.md).
+Milestones 1–3 complete: rules engine, local 2-player web UI, and a minimax AI
+opponent (four difficulty tiers, playable in-browser via a Web Worker practice mode).
+Milestone 4 (authoritative multiplayer server) in progress. See [`TASK.md`](TASK.md).
 
 ## License
 

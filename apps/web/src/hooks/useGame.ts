@@ -200,6 +200,9 @@ export function useGame(initialVariant: IntegerVariant) {
 
   const newGame = useCallback((variant: IntegerVariant) => dispatch({ type: 'NEW_GAME', variant }), []);
 
+  /** Applies a move chosen elsewhere (the computer opponent's worker), bypassing select/deselect semantics. */
+  const playMove = useCallback((move: Move) => dispatch({ type: 'MOVE', move }), []);
+
   return {
     game: state.game,
     variant: state.variant,
@@ -216,5 +219,6 @@ export function useGame(initialVariant: IntegerVariant) {
     activateCursor,
     clearSelection,
     newGame,
+    playMove,
   };
 }

@@ -4,9 +4,21 @@ import { playerLabel } from '../lib/notation';
 interface ScorePanelProps {
   game: GameState;
   finalScores: Record<Player, number> | null;
+  /** docs/AI_OPPONENT.md §9: a bot must always be visibly labelled, never a human-looking handle. */
+  labelOverrides?: Partial<Record<Player, string>> | undefined;
 }
 
-function Row({ player, score, active }: { player: Player; score: number; active: boolean }) {
+function Row({
+  player,
+  score,
+  active,
+  label,
+}: {
+  player: Player;
+  score: number;
+  active: boolean;
+  label: string;
+}) {
   const color = player === 'white' ? 'var(--piece-light)' : 'var(--piece-dark)';
   return (
     <div
@@ -23,7 +35,7 @@ function Row({ player, score, active }: { player: Player; score: number; active:
           style={{ width: 10, height: 10, borderRadius: '50%', background: color }}
         />
         <span style={{ fontSize: 'var(--fs-label)', color: active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-          {playerLabel(player)}
+          {label}
         </span>
         {active && (
           <span
@@ -46,7 +58,7 @@ function Row({ player, score, active }: { player: Player; score: number; active:
   );
 }
 
-export function ScorePanel({ game, finalScores }: ScorePanelProps) {
+export function ScorePanel({ game, finalScores, labelOverrides }: ScorePanelProps) {
   const scores = finalScores ?? game.scores;
   return (
     <section
@@ -69,8 +81,18 @@ export function ScorePanel({ game, finalScores }: ScorePanelProps) {
       >
         Score
       </h2>
-      <Row player="white" score={scores.white} active={!finalScores && game.turn === 'white'} />
-      <Row player="black" score={scores.black} active={!finalScores && game.turn === 'black'} />
+      <Row
+        player="white"
+        score={scores.white}
+        active={!finalScores && game.turn === 'white'}
+        label={labelOverrides?.white ?? playerLabel('white')}
+      />
+      <Row
+        player="black"
+        score={scores.black}
+        active={!finalScores && game.turn === 'black'}
+        label={labelOverrides?.black ?? playerLabel('black')}
+      />
     </section>
   );
 }

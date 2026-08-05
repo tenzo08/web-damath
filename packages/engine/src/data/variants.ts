@@ -14,7 +14,9 @@
  * docs/VARIANTS.md.
  */
 
-export type IntegerVariantId = 'whole' | 'counting' | 'integer';
+import type { IntegerVariantId } from '../types.js';
+
+export type { IntegerVariantId } from '../types.js';
 
 export interface IntegerVariant {
   readonly id: IntegerVariantId;

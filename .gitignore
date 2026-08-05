@@ -26,5 +26,7 @@ npm-debug.log*
 pnpm-debug.log*
 
 # personal planning notes — not pushed, local only
+/legacy/
+/reference/
 /docs/
 /*.md

@@ -1,23 +1,16 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../src/app.js';
-import { FileUserStore } from '../src/auth/store.js';
+import { makeTestApp, type TestApp } from './helpers.js';
 
-let dir: string;
+let testApp: TestApp;
 let app: FastifyInstance;
 
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), 'damath-server-auth-'));
-  app = buildApp({ jwtSecret: 'test-secret', userStore: new FileUserStore(path.join(dir, 'users.json')) });
+  testApp = makeTestApp();
+  app = testApp.app;
 });
 
-afterEach(async () => {
-  await app.close();
-  rmSync(dir, { recursive: true, force: true });
-});
+afterEach(() => testApp.cleanup());
 
 const CREDENTIALS = { email: 'Teacher@Example.com', password: 'hunter22222', displayName: 'Ms. Cruz' };
 

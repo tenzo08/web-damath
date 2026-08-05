@@ -1,12 +1,13 @@
 import type { LedgerEntry } from '../lib/ledger';
 import { formatLedgerRow } from '../lib/ledger';
 
-interface MoveLedgerProps {
-  entries: LedgerEntry[];
+interface MoveLedgerProps<V> {
+  entries: LedgerEntry<V>[];
+  format: (value: V) => string;
 }
 
 /** docs/DESIGN.md §8, the signature element: a monospace running record, one line per move. */
-export function MoveLedger({ entries }: MoveLedgerProps) {
+export function MoveLedger<V>({ entries, format }: MoveLedgerProps<V>) {
   return (
     <section
       aria-label="Move ledger"
@@ -45,7 +46,7 @@ export function MoveLedger({ entries }: MoveLedgerProps) {
           }}
         >
           {entries.map((entry) => {
-            const row = formatLedgerRow(entry);
+            const row = formatLedgerRow(entry, format);
             return (
               <li
                 key={row.index}

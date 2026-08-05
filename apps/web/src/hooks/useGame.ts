@@ -1,23 +1,22 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import { applyMove, createGame, finalScores, legalMoves, pieceAt } from '@damath/engine';
-import type { GameState, IntegerVariant, Move, Player, Position } from '@damath/engine';
+import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
 import { playerLabel, toAlgebraic } from '../lib/notation';
 
-interface State {
-  game: GameState;
-  variant: IntegerVariant;
+interface State<V> {
+  game: GameState<V>;
+  ledger: LedgerEntry<V>[];
   selected: Position | null;
   cursor: Position;
-  ledger: LedgerEntry[];
   announcement: string;
 }
 
-type Action =
-  | { type: 'NEW_GAME'; variant: IntegerVariant }
+type Action<V> =
+  | { type: 'NEW_GAME' }
   | { type: 'SELECT'; pos: Position }
-  | { type: 'MOVE'; move: Move }
+  | { type: 'MOVE'; move: Move<V> }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_CURSOR'; pos: Position };
 
@@ -41,86 +40,91 @@ function opponentOf(player: Player): Player {
   return player === 'white' ? 'black' : 'white';
 }
 
-function describeMove(entry: LedgerEntry, mover: NonNullable<ReturnType<typeof pieceAt>>): string {
+function describeMove<V>(entry: LedgerEntry<V>, mover: NonNullable<ReturnType<typeof pieceAt<V>>>, variant: Variant<V>): string {
   const who = playerLabel(entry.player);
+  const format = variant.arithmetic.format;
   if (entry.steps.length === 0) {
-    return `${who} ${String(mover.value)} moves to ${toAlgebraic(entry.move.to)}.`;
+    return `${who} ${format(mover.value)} moves to ${toAlgebraic(entry.move.to)}.`;
   }
   if (entry.steps.length === 1) {
     const step = entry.steps[0];
     if (!step) throw new Error('unreachable: steps.length === 1');
     const takenLabel = playerLabel(opponentOf(entry.player)).toLowerCase();
     const word = OPERATION_NOUN_BY_GLYPH[step.operation] ?? 'arithmetic';
-    return `${who} ${String(mover.value)} captures ${takenLabel} ${String(step.taken)} by ${word}. Score ${String(entry.runningTotal)}.`;
+    return `${who} ${format(mover.value)} captures ${takenLabel} ${format(step.taken)} by ${word}. Score ${format(entry.runningTotal)}.`;
   }
-  return `${who} ${String(mover.value)} captures ${String(entry.steps.length)} chips. Score ${String(entry.runningTotal)}.`;
+  return `${who} ${format(mover.value)} captures ${String(entry.steps.length)} chips. Score ${format(entry.runningTotal)}.`;
 }
 
-function endOfGameMessage(game: GameState): string {
-  const scores = finalScores(game);
+function endOfGameMessage<V>(game: GameState<V>, variant: Variant<V>): string {
+  const arithmetic = variant.arithmetic;
+  const scores = finalScores(game, arithmetic);
   const stillHasMoves = legalMoves(game).length > 0;
   const reason = stillHasMoves ? 'Position repeated three times' : 'No legal moves';
-  if (scores.white === scores.black) {
-    return `${reason}. Draw at ${String(scores.white)} each.`;
+  const order = arithmetic.compare(scores.white, scores.black);
+  if (order === 0) {
+    return `${reason}. Draw at ${arithmetic.format(scores.white)} each.`;
   }
-  const winner: Player = scores.white > scores.black ? 'white' : 'black';
-  const winnerScore = Math.max(scores.white, scores.black);
-  const loserScore = Math.min(scores.white, scores.black);
-  return `${reason}. ${playerLabel(winner)} wins on score ${String(winnerScore)} to ${String(loserScore)}.`;
+  const winner: Player = order > 0 ? 'white' : 'black';
+  const winnerScore = order > 0 ? scores.white : scores.black;
+  const loserScore = order > 0 ? scores.black : scores.white;
+  return `${reason}. ${playerLabel(winner)} wins on score ${arithmetic.format(winnerScore)} to ${arithmetic.format(loserScore)}.`;
 }
 
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case 'NEW_GAME': {
-      const game = createGame(action.variant.id);
-      return {
-        game,
-        variant: action.variant,
-        selected: null,
-        cursor: firstPlayableSquare(),
-        ledger: [],
-        announcement: `New match. ${action.variant.name}. ${playerLabel(game.turn)} to move.`,
-      };
+function makeReducer<V>(variant: Variant<V>) {
+  return function reducer(state: State<V>, action: Action<V>): State<V> {
+    switch (action.type) {
+      case 'NEW_GAME': {
+        const game = createGame(variant);
+        return {
+          game,
+          selected: null,
+          cursor: firstPlayableSquare(),
+          ledger: [],
+          announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
+        };
+      }
+      case 'SELECT': {
+        if (state.game.status === 'finished') return state;
+        const piece = pieceAt(state.game.board, action.pos);
+        if (!piece || piece.owner !== state.game.turn) return state;
+        const hasLegalMove = legalMoves(state.game).some((m) => samePosition(m.from, action.pos));
+        if (!hasLegalMove) return state;
+        return { ...state, selected: action.pos, cursor: action.pos };
+      }
+      case 'CLEAR_SELECTION':
+        return { ...state, selected: null };
+      case 'SET_CURSOR':
+        return { ...state, cursor: action.pos };
+      case 'MOVE': {
+        if (state.game.status === 'finished') return state;
+        const mover = pieceAt(state.game.board, action.move.from);
+        if (!mover) return state;
+        const next = applyMove(state.game, action.move, variant);
+        const entry = buildLedgerEntry(state.game, mover, action.move, next, variant);
+        const announcement =
+          next.status === 'finished'
+            ? `${describeMove(entry, mover, variant)} ${endOfGameMessage(next, variant)}`
+            : describeMove(entry, mover, variant);
+        return {
+          ...state,
+          game: next,
+          selected: null,
+          cursor: action.move.to,
+          ledger: [...state.ledger, entry],
+          announcement,
+        };
+      }
+      default:
+        return state;
     }
-    case 'SELECT': {
-      if (state.game.status === 'finished') return state;
-      const piece = pieceAt(state.game.board, action.pos);
-      if (!piece || piece.owner !== state.game.turn) return state;
-      const hasLegalMove = legalMoves(state.game).some((m) => samePosition(m.from, action.pos));
-      if (!hasLegalMove) return state;
-      return { ...state, selected: action.pos, cursor: action.pos };
-    }
-    case 'CLEAR_SELECTION':
-      return { ...state, selected: null };
-    case 'SET_CURSOR':
-      return { ...state, cursor: action.pos };
-    case 'MOVE': {
-      if (state.game.status === 'finished') return state;
-      const mover = pieceAt(state.game.board, action.move.from);
-      if (!mover) return state;
-      const next = applyMove(state.game, action.move);
-      const entry = buildLedgerEntry(state.game, mover, action.move, next);
-      const announcement =
-        next.status === 'finished' ? `${describeMove(entry, mover)} ${endOfGameMessage(next)}` : describeMove(entry, mover);
-      return {
-        ...state,
-        game: next,
-        selected: null,
-        cursor: action.move.to,
-        ledger: [...state.ledger, entry],
-        announcement,
-      };
-    }
-    default:
-      return state;
-  }
+  };
 }
 
-function init(variant: IntegerVariant): State {
-  const game = createGame(variant.id);
+function init<V>(variant: Variant<V>): State<V> {
+  const game = createGame(variant);
   return {
     game,
-    variant,
     selected: null,
     cursor: firstPlayableSquare(),
     ledger: [],
@@ -128,8 +132,9 @@ function init(variant: IntegerVariant): State {
   };
 }
 
-export function useGame(initialVariant: IntegerVariant) {
-  const [state, dispatch] = useReducer(reducer, initialVariant, init);
+/** One React tree per variant — a caller switching to a different chip-value type remounts via `key`, so `variant` is stable for this hook's whole lifetime (see `App.tsx`). */
+export function useGame<V>(variant: Variant<V>) {
+  const [state, dispatch] = useReducer(makeReducer(variant), variant, init);
 
   const moves = useMemo(() => legalMoves(state.game), [state.game]);
   const legalFrom = useMemo(() => new Set(moves.map((m) => positionKey(m.from))), [moves]);
@@ -198,14 +203,14 @@ export function useGame(initialVariant: IntegerVariant) {
 
   const clearSelection = useCallback(() => dispatch({ type: 'CLEAR_SELECTION' }), []);
 
-  const newGame = useCallback((variant: IntegerVariant) => dispatch({ type: 'NEW_GAME', variant }), []);
+  const newGame = useCallback(() => dispatch({ type: 'NEW_GAME' }), []);
 
   /** Applies a move chosen elsewhere (the computer opponent's worker), bypassing select/deselect semantics. */
-  const playMove = useCallback((move: Move) => dispatch({ type: 'MOVE', move }), []);
+  const playMove = useCallback((move: Move<V>) => dispatch({ type: 'MOVE', move }), []);
 
   return {
     game: state.game,
-    variant: state.variant,
+    variant,
     selected: state.selected,
     cursor: state.cursor,
     ledger: state.ledger,
@@ -213,7 +218,7 @@ export function useGame(initialVariant: IntegerVariant) {
     legalFrom,
     destinations,
     gameOver: state.game.status === 'finished',
-    finalScores: state.game.status === 'finished' ? finalScores(state.game) : null,
+    finalScores: state.game.status === 'finished' ? finalScores(state.game, variant.arithmetic) : null,
     activateSquare,
     moveCursor,
     activateCursor,

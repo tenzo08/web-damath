@@ -10,10 +10,10 @@ import type { AiWorkerRequest, AiWorkerResponse, DifficultyTier } from '@damath/
  * down in the effect's cleanup before a new one spins up.
  */
 export function useComputerOpponent(
-  game: GameState,
+  game: GameState<number>,
   tier: DifficultyTier | null,
   computerPlayer: Player,
-  onMove: (move: Move) => void,
+  onMove: (move: Move<number>) => void,
 ) {
   const onMoveRef = useRef(onMove);
   onMoveRef.current = onMove;

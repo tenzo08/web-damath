@@ -3,10 +3,11 @@ import type { Operation, Piece as PieceModel, Position } from '@damath/engine';
 import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
 import { Piece } from './Piece';
 
-interface SquareProps {
+interface SquareProps<V> {
   pos: Position;
   operation: Operation | null;
-  piece: PieceModel | null;
+  piece: PieceModel<V> | null;
+  format: (value: V) => string;
   isSelected: boolean;
   isLegalDestination: boolean;
   isLastMove: boolean;
@@ -16,21 +17,22 @@ interface SquareProps {
   registerRef: (el: HTMLButtonElement | HTMLDivElement | null) => void;
 }
 
-function accessibleName(pos: Position, operation: Operation | null, piece: PieceModel | null): string {
+function accessibleName<V>(pos: Position, operation: Operation | null, piece: PieceModel<V> | null, format: (value: V) => string): string {
   const alg = toAlgebraic(pos);
   if (!operation) return `${alg}, not playable`;
   const parts = [alg, operationVerb(operation)];
   if (piece) {
-    parts.push(`${playerLabel(piece.owner).toLowerCase()} ${String(piece.value)}`);
+    parts.push(`${playerLabel(piece.owner).toLowerCase()} ${format(piece.value)}`);
     if (piece.isDama) parts.push('Dama');
   }
   return parts.join(', ');
 }
 
-export function Square({
+export function Square<V>({
   pos,
   operation,
   piece,
+  format,
   isSelected,
   isLegalDestination,
   isLastMove,
@@ -38,7 +40,7 @@ export function Square({
   isSelectable,
   onActivate,
   registerRef,
-}: SquareProps) {
+}: SquareProps<V>) {
   const baseStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -56,7 +58,7 @@ export function Square({
       // through void squares mid-navigation — see useGame's moveCursor comment.
       <div
         role="gridcell"
-        aria-label={accessibleName(pos, operation, piece)}
+        aria-label={accessibleName(pos, operation, piece, format)}
         tabIndex={isCursor ? 0 : -1}
         ref={registerRef}
         style={{ ...baseStyle, background: 'var(--square-void)' }}
@@ -72,7 +74,7 @@ export function Square({
     <button
       type="button"
       role="gridcell"
-      aria-label={accessibleName(pos, operation, piece)}
+      aria-label={accessibleName(pos, operation, piece, format)}
       aria-selected={isSelected}
       tabIndex={isCursor ? 0 : -1}
       ref={registerRef}
@@ -88,7 +90,7 @@ export function Square({
           chip sits on that square, the printed glyph is physically covered. A piece
           hides the operation entirely rather than the two ever sharing the square. */}
       {piece ? (
-        <Piece piece={piece} />
+        <Piece piece={piece} format={format} />
       ) : (
         <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
           {operationGlyph(operation)}

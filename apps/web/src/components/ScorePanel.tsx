@@ -1,9 +1,10 @@
 import type { GameState, Player } from '@damath/engine';
 import { playerLabel } from '../lib/notation';
 
-interface ScorePanelProps {
-  game: GameState;
-  finalScores: Record<Player, number> | null;
+interface ScorePanelProps<V> {
+  game: GameState<V>;
+  finalScores: Record<Player, V> | null;
+  format: (value: V) => string;
   /** docs/AI_OPPONENT.md §9: a bot must always be visibly labelled, never a human-looking handle. */
   labelOverrides?: Partial<Record<Player, string>> | undefined;
 }
@@ -15,7 +16,7 @@ function Row({
   label,
 }: {
   player: Player;
-  score: number;
+  score: string;
   active: boolean;
   label: string;
 }) {
@@ -58,7 +59,7 @@ function Row({
   );
 }
 
-export function ScorePanel({ game, finalScores, labelOverrides }: ScorePanelProps) {
+export function ScorePanel<V>({ game, finalScores, format, labelOverrides }: ScorePanelProps<V>) {
   const scores = finalScores ?? game.scores;
   return (
     <section
@@ -83,13 +84,13 @@ export function ScorePanel({ game, finalScores, labelOverrides }: ScorePanelProp
       </h2>
       <Row
         player="white"
-        score={scores.white}
+        score={format(scores.white)}
         active={!finalScores && game.turn === 'white'}
         label={labelOverrides?.white ?? playerLabel('white')}
       />
       <Row
         player="black"
-        score={scores.black}
+        score={format(scores.black)}
         active={!finalScores && game.turn === 'black'}
         label={labelOverrides?.black ?? playerLabel('black')}
       />

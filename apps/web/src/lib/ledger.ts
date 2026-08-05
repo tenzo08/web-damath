@@ -1,21 +1,21 @@
 import { operationAt, scoreCapture } from '@damath/engine';
-import type { GameState, Move, Piece, Player } from '@damath/engine';
+import type { GameState, Move, Piece, Player, Variant } from '@damath/engine';
 import { operationGlyph, playerLetter, toAlgebraic } from './notation';
 
-export interface LedgerStep {
-  readonly taker: number;
-  readonly taken: number;
+export interface LedgerStep<V> {
+  readonly taker: V;
+  readonly taken: V;
   readonly operation: string;
-  readonly result: number;
+  readonly result: V;
 }
 
-export interface LedgerEntry {
+export interface LedgerEntry<V> {
   readonly ply: number;
   readonly player: Player;
-  readonly move: Move;
-  readonly steps: readonly LedgerStep[];
-  readonly delta: number;
-  readonly runningTotal: number;
+  readonly move: Move<V>;
+  readonly steps: readonly LedgerStep<V>[];
+  readonly delta: V;
+  readonly runningTotal: V;
   readonly promoted: boolean;
 }
 
@@ -25,14 +25,21 @@ export interface LedgerEntry {
  * produces internally, it never reimplements the scoring rule (PLANNING.md, "UI
  * computes no rules").
  */
-export function buildLedgerEntry(before: GameState, mover: Piece, move: Move, after: GameState): LedgerEntry {
-  const steps: LedgerStep[] = move.captures.map((step) => ({
+export function buildLedgerEntry<V>(
+  before: GameState<V>,
+  mover: Piece<V>,
+  move: Move<V>,
+  after: GameState<V>,
+  variant: Variant<V>,
+): LedgerEntry<V> {
+  const arithmetic = variant.arithmetic;
+  const steps: LedgerStep<V>[] = move.captures.map((step) => ({
     taker: mover.value,
     taken: step.capturedPiece.value,
     operation: operationGlyph(operationAt(step.landedAt)),
-    result: scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt)),
+    result: scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), arithmetic),
   }));
-  const delta = steps.reduce((sum, step) => sum + step.result, 0);
+  const delta = steps.reduce((sum, step) => arithmetic.add(sum, step.result), arithmetic.zero);
   const promoted = !mover.isDama && after.board[move.to.row]?.[move.to.col]?.isDama === true;
 
   return {
@@ -46,7 +53,7 @@ export function buildLedgerEntry(before: GameState, mover: Piece, move: Move, af
   };
 }
 
-function pathNotation(entry: LedgerEntry): string {
+function pathNotation<V>(entry: LedgerEntry<V>): string {
   if (entry.steps.length === 0) {
     return `${toAlgebraic(entry.move.from)}→${toAlgebraic(entry.move.to)}`;
   }
@@ -62,19 +69,22 @@ function pathNotation(entry: LedgerEntry): string {
     .join('');
 }
 
-function arithmeticNotation(entry: LedgerEntry): string {
+function arithmeticNotation<V>(entry: LedgerEntry<V>, format: (v: V) => string): string {
   if (entry.steps.length === 0) return '';
   if (entry.steps.length === 1) {
     const s = entry.steps[0];
     if (!s) throw new Error('unreachable: steps.length === 1');
-    return `${String(s.taker)} ${s.operation} ${String(s.taken)} = ${String(s.result)}`;
+    return `${format(s.taker)} ${s.operation} ${format(s.taken)} = ${format(s.result)}`;
   }
-  const terms = entry.steps.map((s) => String(s.result)).join(' + ');
-  return `${terms} = ${String(entry.delta)}`;
+  const terms = entry.steps.map((s) => format(s.result)).join(' + ');
+  return `${terms} = ${format(entry.delta)}`;
 }
 
 /** One line per move, docs/DESIGN.md §8 — the signature element. */
-export function formatLedgerRow(entry: LedgerEntry): {
+export function formatLedgerRow<V>(
+  entry: LedgerEntry<V>,
+  format: (v: V) => string,
+): {
   index: string;
   player: string;
   path: string;
@@ -86,8 +96,8 @@ export function formatLedgerRow(entry: LedgerEntry): {
     index: `${String(entry.ply)}.`,
     player: playerLetter(entry.player),
     path: pathNotation(entry),
-    arithmetic: arithmeticNotation(entry),
-    total: String(entry.runningTotal),
+    arithmetic: arithmeticNotation(entry, format),
+    total: format(entry.runningTotal),
     promoted: entry.promoted,
   };
 }

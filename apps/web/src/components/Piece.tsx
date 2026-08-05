@@ -1,14 +1,19 @@
 import type { Piece as PieceModel } from '@damath/engine';
 
-interface PieceProps {
-  piece: PieceModel;
+interface PieceProps<V> {
+  piece: PieceModel<V>;
+  format: (value: V) => string;
 }
 
 /** docs/DESIGN.md §3: filled circle, value in the matching -on color, Dama is a ring (never a crown), plus a subtle inner border so ownership never relies on hue alone. */
-export function Piece({ piece }: PieceProps) {
+export function Piece<V>({ piece, format }: PieceProps<V>) {
   const isLight = piece.owner === 'white';
   const fill = isLight ? 'var(--piece-light)' : 'var(--piece-dark)';
   const onColor = isLight ? 'var(--piece-light-on)' : 'var(--piece-dark-on)';
+  const label = format(piece.value);
+  // Non-integer variants can print long labels ("-11/10", "36x²y") — shrink to fit
+  // rather than overflow the circle. Plain digits (the integer variants) stay full size.
+  const fontSize = label.length <= 2 ? 'var(--fs-body)' : label.length <= 4 ? 'var(--fs-meta)' : 'var(--fs-micro)';
 
   return (
     <span
@@ -44,11 +49,13 @@ export function Piece({ piece }: PieceProps) {
           alignItems: 'center',
           justifyContent: 'center',
           fontWeight: 700,
-          fontSize: 'var(--fs-body)',
+          fontSize,
           color: onColor,
+          padding: '0 2px',
+          overflow: 'hidden',
         }}
       >
-        {piece.value}
+        {label}
       </span>
     </span>
   );

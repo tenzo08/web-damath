@@ -32,8 +32,35 @@ describe('App', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'Integer Damath' }));
+    await user.click(screen.getByRole('button', { name: /^Integer Damath/ }));
     expect(screen.getByRole('heading', { name: 'Integer Damath' })).toBeInTheDocument();
     expect(screen.getByText('No moves yet.')).toBeInTheDocument();
+  });
+
+  it('"New match" restarts the same variant with a fresh board', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
+    expect(screen.getByText('Dark to move')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'New match' }));
+    expect(screen.getByRole('heading', { name: 'Whole Damath' })).toBeInTheDocument();
+    expect(screen.getByText('Light to move')).toBeInTheDocument();
+    expect(screen.getByText('No moves yet.')).toBeInTheDocument();
+  });
+
+  it('a non-integer variant renders formatted (non-numeric) chip values and has no computer opponent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /^Fraction Damath/ }));
+    expect(screen.getByRole('heading', { name: 'Fraction Damath' })).toBeInTheDocument();
+    // Fraction Damath's opening values include "1" (10/10) and fractions like "7/10".
+    expect(screen.getByRole('gridcell', { name: /light 7\/10/i })).toBeInTheDocument();
+    // No interactive "play the computer" control for this variant — just the explanatory note.
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByText(/computer opponent plays Whole, Counting, and Integer Damath only/i)).toBeInTheDocument();
   });
 });

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import type { IntegerVariant } from '@damath/engine';
+import type { AnyVariant } from '@damath/engine';
 
 interface RailProps {
-  variants: readonly IntegerVariant[];
-  current: IntegerVariant;
-  onNewGame: (variant: IntegerVariant) => void;
+  variants: readonly AnyVariant[];
+  current: AnyVariant;
+  onSelectVariant: (variant: AnyVariant) => void;
+  onNewGame: () => void;
 }
 
 function RailSection({ title, children }: { title: string; children: ReactNode }) {
@@ -36,7 +37,37 @@ function RailTip({ children }: { children: ReactNode }) {
   );
 }
 
-export function Rail({ variants, current, onNewGame }: RailProps) {
+const ELEMENTARY_IDS = new Set(['counting', 'whole', 'fraction']);
+
+export function Rail({ variants, current, onSelectVariant, onNewGame }: RailProps) {
+  const elementary = variants.filter((v) => ELEMENTARY_IDS.has(v.id));
+  const secondary = variants.filter((v) => !ELEMENTARY_IDS.has(v.id));
+
+  const variantButton = (variant: AnyVariant) => {
+    const active = variant.id === current.id;
+    return (
+      <button
+        key={variant.id}
+        type="button"
+        onClick={() => onSelectVariant(variant)}
+        aria-current={active}
+        style={{
+          textAlign: 'left',
+          padding: 'var(--pad-sm) var(--pad-md)',
+          borderRadius: 'var(--radius)',
+          border: active ? '1px solid rgba(227, 179, 65, 0.4)' : '1px solid transparent',
+          background: active ? 'var(--accent-bg)' : 'transparent',
+          color: active ? 'var(--accent)' : 'var(--text-secondary)',
+          fontSize: 'var(--fs-body)',
+          cursor: 'pointer',
+        }}
+      >
+        <div>{variant.name}</div>
+        <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>{variant.gradeLevel}</div>
+      </button>
+    );
+  };
+
   return (
     <nav
       aria-label="Match settings"
@@ -54,32 +85,12 @@ export function Rail({ variants, current, onNewGame }: RailProps) {
     >
       <div style={{ fontSize: 'var(--fs-title)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</div>
 
-      <RailSection title="Variant">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {variants.map((variant) => {
-            const active = variant.id === current.id;
-            return (
-              <button
-                key={variant.id}
-                type="button"
-                onClick={() => onNewGame(variant)}
-                aria-current={active}
-                style={{
-                  textAlign: 'left',
-                  padding: 'var(--pad-sm) var(--pad-md)',
-                  borderRadius: 'var(--radius)',
-                  border: active ? '1px solid rgba(227, 179, 65, 0.4)' : '1px solid transparent',
-                  background: active ? 'var(--accent-bg)' : 'transparent',
-                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                  fontSize: 'var(--fs-body)',
-                  cursor: 'pointer',
-                }}
-              >
-                {variant.name}
-              </button>
-            );
-          })}
-        </div>
+      <RailSection title="Elementary">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{elementary.map(variantButton)}</div>
+      </RailSection>
+
+      <RailSection title="Secondary">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{secondary.map(variantButton)}</div>
       </RailSection>
 
       <RailSection title="How to play">
@@ -97,7 +108,7 @@ export function Rail({ variants, current, onNewGame }: RailProps) {
 
       <button
         type="button"
-        onClick={() => onNewGame(current)}
+        onClick={onNewGame}
         style={{
           marginTop: 'auto',
           background: 'var(--accent)',

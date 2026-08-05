@@ -4,13 +4,14 @@ import type { GameState, Move, Position } from '@damath/engine';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
 import { Square } from './Square';
 
-interface BoardProps {
-  game: GameState;
+interface BoardProps<V> {
+  game: GameState<V>;
+  format: (value: V) => string;
   selected: Position | null;
   cursor: Position;
   legalFrom: Set<string>;
-  destinations: Move[];
-  lastMove: Move | null;
+  destinations: Move<V>[];
+  lastMove: Move<V> | null;
   onActivateSquare: (pos: Position) => void;
   onMoveCursor: (dir: 'up' | 'down' | 'left' | 'right') => void;
   onActivateCursor: () => void;
@@ -24,8 +25,9 @@ const KEY_TO_DIR: Record<string, 'up' | 'down' | 'left' | 'right'> = {
   ArrowRight: 'right',
 };
 
-export function Board({
+export function Board<V>({
   game,
+  format,
   selected,
   cursor,
   legalFrom,
@@ -35,7 +37,7 @@ export function Board({
   onMoveCursor,
   onActivateCursor,
   onClearSelection,
-}: BoardProps) {
+}: BoardProps<V>) {
   const refs = useRef(new Map<string, HTMLButtonElement | HTMLDivElement>());
 
   useEffect(() => {
@@ -100,6 +102,7 @@ export function Board({
               pos={pos}
               operation={operation}
               piece={piece}
+              format={format}
               isSelected={selected !== null && samePosition(selected, pos)}
               isLegalDestination={isDestination}
               isLastMove={isLastMoveSquare}

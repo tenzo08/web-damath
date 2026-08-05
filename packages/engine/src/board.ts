@@ -1,6 +1,6 @@
 import { OPERATION_LAYOUT } from './data/operation-layout.js';
-import { INTEGER_VARIANTS } from './data/variants.js';
-import type { Board, GameState, IntegerVariantId, Piece, Player, Position } from './types.js';
+import type { Variant } from './arithmetic.js';
+import type { Board, GameState, Piece, Player, Position } from './types.js';
 
 export const BOARD_SIZE = 8;
 
@@ -8,16 +8,8 @@ export function isOnBoard(pos: Position): boolean {
   return pos.row >= 0 && pos.row < BOARD_SIZE && pos.col >= 0 && pos.col < BOARD_SIZE;
 }
 
-export function pieceAt(board: Board, pos: Position): Piece | null {
+export function pieceAt<V>(board: Board<V>, pos: Position): Piece<V> | null {
   return board[pos.row]?.[pos.col] ?? null;
-}
-
-function findVariant(id: IntegerVariantId) {
-  const variant = INTEGER_VARIANTS.find((v) => v.id === id);
-  if (!variant) {
-    throw new Error(`Unknown variant: ${id}`);
-  }
-  return variant;
 }
 
 /**
@@ -44,7 +36,7 @@ function rotate180(pos: Position): Position {
   return { row: BOARD_SIZE - 1 - pos.row, col: BOARD_SIZE - 1 - pos.col };
 }
 
-function placePiece(board: (Piece | null)[][], pos: Position, piece: Piece): void {
+function placePiece<V>(board: (Piece<V> | null)[][], pos: Position, piece: Piece<V>): void {
   const row = board[pos.row];
   if (!row) {
     throw new Error(`Row ${String(pos.row)} is out of bounds`);
@@ -52,19 +44,18 @@ function placePiece(board: (Piece | null)[][], pos: Position, piece: Piece): voi
   row[pos.col] = piece;
 }
 
-export function createGame(variantId: IntegerVariantId): GameState {
-  const variant = findVariant(variantId);
+export function createGame<V>(variant: Variant<V>): GameState<V> {
   const whiteSquares = whiteStartingSquares();
 
-  const board: (Piece | null)[][] = Array.from({ length: BOARD_SIZE }, () =>
-    new Array<Piece | null>(BOARD_SIZE).fill(null),
+  const board: (Piece<V> | null)[][] = Array.from({ length: BOARD_SIZE }, () =>
+    new Array<Piece<V> | null>(BOARD_SIZE).fill(null),
   );
 
   whiteSquares.forEach((square, i) => {
     const value = variant.values.at(i);
     if (value === undefined) {
       throw new Error(
-        `${variantId} has fewer values (${String(variant.values.length)}) than starting squares (${String(whiteSquares.length)})`,
+        `${variant.id} has fewer values (${String(variant.values.length)}) than starting squares (${String(whiteSquares.length)})`,
       );
     }
 
@@ -77,38 +68,24 @@ export function createGame(variantId: IntegerVariantId): GameState {
     });
   });
 
+  const zeroScores: Record<Player, V> = { white: variant.arithmetic.zero, black: variant.arithmetic.zero };
+
   return {
     board: Object.freeze(board.map((row) => Object.freeze(row.slice()))),
     turn: 'white',
-    scores: { white: 0, black: 0 },
+    scores: zeroScores,
     moveHistory: [],
     status: 'active',
-    variant: variantId,
+    variant: variant.id,
   };
 }
 
-interface SerializedPiece {
-  readonly id: string;
-  readonly value: number;
-  readonly owner: Player;
-  readonly isDama: boolean;
-}
-
-interface SerializedGameState {
-  readonly board: readonly (SerializedPiece | null)[][];
-  readonly turn: Player;
-  readonly scores: Readonly<Record<Player, number>>;
-  readonly moveHistory: GameState['moveHistory'];
-  readonly status: GameState['status'];
-  readonly variant: IntegerVariantId;
-}
-
-export function serialize(state: GameState): string {
+export function serialize<V>(state: GameState<V>): string {
   return JSON.stringify(state);
 }
 
-export function deserialize(json: string): GameState {
-  const parsed = JSON.parse(json) as SerializedGameState;
+export function deserialize<V>(json: string): GameState<V> {
+  const parsed = JSON.parse(json) as GameState<V>;
   return {
     ...parsed,
     board: Object.freeze(parsed.board.map((row) => Object.freeze(row.slice()))),

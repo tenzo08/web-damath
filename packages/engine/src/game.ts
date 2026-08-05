@@ -1,14 +1,15 @@
+import type { Arithmetic, Variant } from './arithmetic.js';
 import { createGame, pieceAt } from './board.js';
 import { operationAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7 } from './data/operation-layout.js';
 import { legalMoves } from './moves.js';
 import { scoreCapture } from './scoring.js';
 import type { Board, GameState, Move, Piece, Player, Position } from './types.js';
 
-function cloneBoard(board: Board): (Piece | null)[][] {
+function cloneBoard<V>(board: Board<V>): (Piece<V> | null)[][] {
   return board.map((row) => row.slice());
 }
 
-function setSquare(board: (Piece | null)[][], pos: Position, piece: Piece | null): void {
+function setSquare<V>(board: (Piece<V> | null)[][], pos: Position, piece: Piece<V> | null): void {
   const row = board[pos.row];
   if (!row) {
     throw new Error(`Row ${String(pos.row)} is out of bounds`);
@@ -23,7 +24,7 @@ function isPromotionSquare(pos: Position, player: Player): boolean {
   return squares.some((s) => s.row === pos.row && s.col === pos.col);
 }
 
-function freezeBoard(board: (Piece | null)[][]): Board {
+function freezeBoard<V>(board: (Piece<V> | null)[][]): Board<V> {
   return Object.freeze(board.map((row) => Object.freeze(row.slice())));
 }
 
@@ -32,16 +33,16 @@ function freezeBoard(board: (Piece | null)[][]): Board {
  * block for both the public `applyMove` and repetition detection below, which
  * both need to advance a position without recursing back into `isGameOver`.
  */
-function applyMoveCore(state: GameState, move: Move): GameState {
+function applyMoveCore<V>(state: GameState<V>, move: Move<V>, arithmetic: Arithmetic<V>): GameState<V> {
   const piece = pieceAt(state.board, move.from);
   if (!piece) {
     throw new Error(`No piece at (${String(move.from.row)},${String(move.from.col)})`);
   }
 
   const board = cloneBoard(state.board);
-  let scoreDelta = 0;
+  let scoreDelta = arithmetic.zero;
   for (const step of move.captures) {
-    scoreDelta += scoreCapture(piece, step.capturedPiece, operationAt(step.landedAt));
+    scoreDelta = arithmetic.add(scoreDelta, scoreCapture(piece, step.capturedPiece, operationAt(step.landedAt), arithmetic));
     setSquare(board, step.capturedAt, null);
   }
 
@@ -55,13 +56,13 @@ function applyMoveCore(state: GameState, move: Move): GameState {
     ...state,
     board: freezeBoard(board),
     turn: piece.owner === 'white' ? 'black' : 'white',
-    scores: { ...state.scores, [piece.owner]: state.scores[piece.owner] + scoreDelta },
+    scores: { ...state.scores, [piece.owner]: arithmetic.add(state.scores[piece.owner], scoreDelta) },
     moveHistory: [...state.moveHistory, move],
   };
 }
 
 /** Board + turn only — deliberately excludes scores/history, matching "the exact position with the same player to move" (KNOWLEDGE.md, "Moves are repetitive"). */
-function positionKey(state: GameState): string {
+function positionKey<V>(state: GameState<V>): string {
   return JSON.stringify({ board: state.board, turn: state.turn });
 }
 
@@ -69,15 +70,15 @@ function positionKey(state: GameState): string {
  * Replays `state.moveHistory` from a fresh `createGame` to count how many
  * times the current position has occurred. Games are short (dozens of plies,
  * §7.2's 20-minute clock bounds it further), so replaying per check is simple
- * and correct; revisit only if AI search (Milestone 3) profiles it as a
- * bottleneck — see TASK.md backlog, "Transposition table in the AI".
+ * and correct; `packages/ai`'s search avoids this cost entirely via
+ * `applyMove`'s `checkGameOver: false` option instead (KNOWLEDGE.md).
  */
-function isThreefoldRepetition(state: GameState): boolean {
-  let cur = createGame(state.variant);
+function isThreefoldRepetition<V>(state: GameState<V>, variant: Variant<V>, arithmetic: Arithmetic<V>): boolean {
+  let cur = createGame(variant);
   const counts = new Map<string, number>();
   counts.set(positionKey(cur), 1);
   for (const move of state.moveHistory) {
-    cur = applyMoveCore(cur, move);
+    cur = applyMoveCore(cur, move, arithmetic);
     const key = positionKey(cur);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -92,9 +93,12 @@ function isThreefoldRepetition(state: GameState): boolean {
  * or the position has repeated three times (§7.5). The 20-minute clock (§7.1)
  * is wall-clock state the pure engine doesn't track; that belongs to the
  * server/UI layer that owns real time.
+ *
+ * `variant` is needed (not just `arithmetic`) because repetition detection
+ * replays from `createGame(variant)`.
  */
-export function isGameOver(state: GameState): boolean {
-  return legalMoves(state).length === 0 || isThreefoldRepetition(state);
+export function isGameOver<V>(state: GameState<V>, variant: Variant<V>): boolean {
+  return legalMoves(state).length === 0 || isThreefoldRepetition(state, variant, variant.arithmetic);
 }
 
 export interface ApplyMoveOptions {
@@ -121,22 +125,28 @@ export interface ApplyMoveOptions {
  * state `finished` when `isGameOver` holds for it (unless `checkGameOver` is
  * disabled — see `ApplyMoveOptions`).
  */
-export function applyMove(state: GameState, move: Move, options: ApplyMoveOptions = {}): GameState {
+export function applyMove<V>(
+  state: GameState<V>,
+  move: Move<V>,
+  variant: Variant<V>,
+  options: ApplyMoveOptions = {},
+): GameState<V> {
   const { checkGameOver = true } = options;
-  const next = applyMoveCore(state, move);
+  const next = applyMoveCore(state, move, variant.arithmetic);
   if (!checkGameOver) {
     return { ...next, status: 'active' };
   }
-  return { ...next, status: isGameOver(next) ? 'finished' : 'active' };
+  return { ...next, status: isGameOver(next, variant) ? 'finished' : 'active' };
 }
 
 /** Accumulated capture score plus remaining chips, Dama doubled (§8.1-8.2). */
-export function finalScores(state: GameState): Record<Player, number> {
-  const totals: Record<Player, number> = { ...state.scores };
+export function finalScores<V>(state: GameState<V>, arithmetic: Arithmetic<V>): Record<Player, V> {
+  const totals: Record<Player, V> = { ...state.scores };
   for (const row of state.board) {
     for (const piece of row) {
       if (!piece) continue;
-      totals[piece.owner] += piece.value * (piece.isDama ? 2 : 1);
+      const contribution = piece.isDama ? arithmetic.double(piece.value) : piece.value;
+      totals[piece.owner] = arithmetic.add(totals[piece.owner], contribution);
     }
   }
   return totals;

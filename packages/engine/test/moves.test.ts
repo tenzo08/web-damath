@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/board.js';
 import { legalMoves } from '../src/moves.js';
+import { INTEGER_VARIANTS } from '../src/data/variants.js';
 import type { GameState, Piece, Player, Position } from '../src/types.js';
 
 /** A mostly-empty 8x8 board with only the given pieces placed, for testing one rule in isolation. */
 function stateWith(
-  placements: readonly [Position, Piece][],
+  placements: readonly [Position, Piece<number>][],
   turn: Player = 'white',
-): GameState {
-  const board: (Piece | null)[][] = Array.from({ length: 8 }, () => new Array(8).fill(null));
+): GameState<number> {
+  const board: (Piece<number> | null)[][] = Array.from({ length: 8 }, () => new Array(8).fill(null));
   for (const [pos, piece] of placements) {
     board[pos.row]![pos.col] = piece;
   }
@@ -22,18 +23,18 @@ function stateWith(
   };
 }
 
-function ordinary(owner: Player, value = 1): Piece {
+function ordinary(owner: Player, value = 1): Piece<number> {
   return { id: `${owner}-test`, value, owner, isDama: false };
 }
 
-function dama(owner: Player, value = 1): Piece {
+function dama(owner: Player, value = 1): Piece<number> {
   return { id: `${owner}-dama-test`, value, owner, isDama: true };
 }
 
 describe('opening position (§3.3)', () => {
   it('white has exactly 7 legal quiet moves, all from row 2', () => {
-    for (const id of ['whole', 'counting', 'integer'] as const) {
-      const moves = legalMoves(createGame(id));
+    for (const variant of INTEGER_VARIANTS) {
+      const moves = legalMoves(createGame(variant));
       expect(moves).toHaveLength(7);
       for (const move of moves) {
         expect(move.captures).toEqual([]);

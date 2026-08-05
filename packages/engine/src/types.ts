@@ -21,38 +21,48 @@ export interface OperationSquare extends Position {
  */
 export type Player = 'white' | 'black';
 
-export interface Piece {
+/** All seven official variants (docs/VARIANTS.md, "Variant interface"). */
+export type VariantId =
+  | 'counting'
+  | 'whole'
+  | 'fraction'
+  | 'integer'
+  | 'rational'
+  | 'radical'
+  | 'polynomial';
+
+/** The three variants `packages/ai` plays — an evaluation function needs a numeric scale (docs/AI_OPPONENT.md §4). */
+export type IntegerVariantId = 'whole' | 'counting' | 'integer';
+
+export interface Piece<V> {
   readonly id: string;
-  readonly value: number;
+  readonly value: V;
   readonly owner: Player;
   readonly isDama: boolean;
 }
 
-export type Board = readonly (readonly (Piece | null)[])[];
+export type Board<V> = readonly (readonly (Piece<V> | null)[])[];
 
 /** One jump within a (possibly chained) capture: the enemy taken and where the taker lands. */
-export interface CaptureStep {
-  readonly capturedPiece: Piece;
+export interface CaptureStep<V> {
+  readonly capturedPiece: Piece<V>;
   readonly capturedAt: Position;
   readonly landedAt: Position;
 }
 
-export interface Move {
+export interface Move<V> {
   readonly from: Position;
   /** Final square the taker ends on — equal to the last step's `landedAt` for a capture. */
   readonly to: Position;
   /** Empty for a quiet move; one entry per jump for a (possibly chained) capture. */
-  readonly captures: readonly CaptureStep[];
+  readonly captures: readonly CaptureStep<V>[];
 }
 
-/** The three integer-valued variants shipped this milestone (docs/VARIANTS.md). */
-export type IntegerVariantId = 'whole' | 'counting' | 'integer';
-
-export interface GameState {
-  readonly board: Board;
+export interface GameState<V> {
+  readonly board: Board<V>;
   readonly turn: Player;
-  readonly scores: Readonly<Record<Player, number>>;
-  readonly moveHistory: readonly Move[];
+  readonly scores: Readonly<Record<Player, V>>;
+  readonly moveHistory: readonly Move<V>[];
   readonly status: 'active' | 'finished';
-  readonly variant: IntegerVariantId;
+  readonly variant: VariantId;
 }

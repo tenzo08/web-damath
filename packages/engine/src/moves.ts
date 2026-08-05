@@ -32,7 +32,7 @@ function key(pos: Position): string {
  * one-step movement (§3.3); `range = Infinity` gives a dama's unbounded slide
  * (§6.3).
  */
-function scanVacant(board: Board, from: Position, dir: Position, range: number): Position[] {
+function scanVacant<V>(board: Board<V>, from: Position, dir: Position, range: number): Position[] {
   const squares: Position[] = [];
   let pos = add(from, dir);
   let steps = 0;
@@ -44,10 +44,10 @@ function scanVacant(board: Board, from: Position, dir: Position, range: number):
   return squares;
 }
 
-function quietMoves(board: Board, from: Position, piece: Piece): Move[] {
+function quietMoves<V>(board: Board<V>, from: Position, piece: Piece<V>): Move<V>[] {
   const directions = piece.isDama ? DIAGONAL_DIRECTIONS : forwardDirections(piece.owner);
   const range = piece.isDama ? Infinity : 1;
-  const moves: Move[] = [];
+  const moves: Move<V>[] = [];
   for (const dir of directions) {
     for (const to of scanVacant(board, from, dir, range)) {
       moves.push({ from, to, captures: [] });
@@ -57,7 +57,7 @@ function quietMoves(board: Board, from: Position, piece: Piece): Move[] {
 }
 
 /** A square is passable/landable if it's genuinely empty, or was captured earlier in this chain (§4.6: removed immediately, so it reads as vacant even though the immutable board snapshot still shows the piece). */
-function isVacantForChain(board: Board, pos: Position, captured: ReadonlySet<string>): boolean {
+function isVacantForChain<V>(board: Board<V>, pos: Position, captured: ReadonlySet<string>): boolean {
   return pieceAt(board, pos) === null || captured.has(key(pos));
 }
 
@@ -68,15 +68,15 @@ function isVacantForChain(board: Board, pos: Position, captured: ReadonlySet<str
  * slides to the first enemy in a direction and may land on any vacant square
  * beyond it, each landing a distinct branch (§6.4).
  */
-function captureSequences(
-  board: Board,
+function captureSequences<V>(
+  board: Board<V>,
   from: Position,
-  piece: Piece,
+  piece: Piece<V>,
   captured: ReadonlySet<string>,
-): CaptureStep[][] {
-  const sequences: CaptureStep[][] = [];
+): CaptureStep<V>[][] {
+  const sequences: CaptureStep<V>[][] = [];
 
-  const branch = (step: CaptureStep, nextCaptured: ReadonlySet<string>) => {
+  const branch = (step: CaptureStep<V>, nextCaptured: ReadonlySet<string>) => {
     const continuations = captureSequences(board, step.landedAt, piece, nextCaptured);
     if (continuations.length > 0) {
       for (const cont of continuations) sequences.push([step, ...cont]);
@@ -128,10 +128,10 @@ function captureSequences(
  * sequences are legal among them, and dama captures prevail over ordinary
  * ones among the maximal set.
  */
-export function legalMoves(state: GameState): Move[] {
+export function legalMoves<V>(state: GameState<V>): Move<V>[] {
   const { board, turn } = state;
-  const captureMoves: Move[] = [];
-  const quiet: Move[] = [];
+  const captureMoves: Move<V>[] = [];
+  const quiet: Move<V>[] = [];
 
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {

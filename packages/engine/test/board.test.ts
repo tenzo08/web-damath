@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, deserialize, pieceAt, serialize } from '../src/board.js';
+import { COUNTING_DAMATH, INTEGER_DAMATH, INTEGER_VARIANTS, WHOLE_DAMATH } from '../src/data/variants.js';
 import type { GameState } from '../src/types.js';
 
 describe('createGame', () => {
   it('places exactly 12 white pieces on rows 0-2 and 12 black pieces on rows 5-7', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     let white = 0;
     let black = 0;
     for (let row = 0; row < 8; row++) {
@@ -26,7 +27,7 @@ describe('createGame', () => {
   });
 
   it('leaves rows 3 and 4 empty', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     for (const row of [3, 4]) {
       for (let col = 0; col < 8; col++) {
         expect(state.board[row]?.[col] ?? null).toBeNull();
@@ -35,7 +36,7 @@ describe('createGame', () => {
   });
 
   it('starts white to move, zero scores, empty history, active status', () => {
-    const state = createGame('whole');
+    const state = createGame(WHOLE_DAMATH);
     expect(state.turn).toBe('white');
     expect(state.scores).toEqual({ white: 0, black: 0 });
     expect(state.moveHistory).toEqual([]);
@@ -43,7 +44,7 @@ describe('createGame', () => {
   });
 
   it('places Integer Damath values per Mapping A, spot-checked against the rulebook diagram', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     // Row 2 (white, nearest centre) = printed line 1 "-9 6 -1 4" ascending column.
     expect(pieceAt(state.board, { row: 2, col: 1 })?.value).toBe(-9);
     expect(pieceAt(state.board, { row: 2, col: 3 })?.value).toBe(6);
@@ -58,7 +59,7 @@ describe('createGame', () => {
   });
 
   it('every playable-square piece is on a valid (row+col) odd square', () => {
-    const state = createGame('counting');
+    const state = createGame(COUNTING_DAMATH);
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         if (state.board[row]?.[col]) {
@@ -69,8 +70,8 @@ describe('createGame', () => {
   });
 
   it('each variant places its full 12-value set with none left over', () => {
-    for (const id of ['whole', 'counting', 'integer'] as const) {
-      const state = createGame(id);
+    for (const variant of INTEGER_VARIANTS) {
+      const state = createGame(variant);
       const whiteValues: number[] = [];
       for (let row = 0; row <= 2; row++) {
         for (let col = 0; col < 8; col++) {
@@ -85,19 +86,19 @@ describe('createGame', () => {
 
 describe('serialize / deserialize', () => {
   it('round-trips to an equivalent state', () => {
-    const state = createGame('integer');
-    const restored = deserialize(serialize(state));
+    const state = createGame(INTEGER_DAMATH);
+    const restored = deserialize<number>(serialize(state));
     expect(restored).toEqual(state);
   });
 
   it('round-trips after moveHistory and scores change', () => {
-    const state: GameState = {
-      ...createGame('whole'),
+    const state: GameState<number> = {
+      ...createGame(WHOLE_DAMATH),
       turn: 'black',
       scores: { white: 5, black: -3 },
       status: 'finished',
     };
-    const restored = deserialize(serialize(state));
+    const restored = deserialize<number>(serialize(state));
     expect(restored).toEqual(state);
   });
 });

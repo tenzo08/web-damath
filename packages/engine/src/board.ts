@@ -44,6 +44,14 @@ function rotate180(pos: Position): Position {
   return { row: BOARD_SIZE - 1 - pos.row, col: BOARD_SIZE - 1 - pos.col };
 }
 
+function placePiece(board: (Piece | null)[][], pos: Position, piece: Piece): void {
+  const row = board[pos.row];
+  if (!row) {
+    throw new Error(`Row ${String(pos.row)} is out of bounds`);
+  }
+  row[pos.col] = piece;
+}
+
 export function createGame(variantId: IntegerVariantId): GameState {
   const variant = findVariant(variantId);
   const whiteSquares = whiteStartingSquares();
@@ -53,13 +61,20 @@ export function createGame(variantId: IntegerVariantId): GameState {
   );
 
   whiteSquares.forEach((square, i) => {
-    const value = variant.values[i]!;
-    const whitePiece: Piece = { id: `white-${i}`, value, owner: 'white', isDama: false };
-    board[square.row]![square.col] = whitePiece;
+    const value = variant.values.at(i);
+    if (value === undefined) {
+      throw new Error(
+        `${variantId} has fewer values (${String(variant.values.length)}) than starting squares (${String(whiteSquares.length)})`,
+      );
+    }
 
-    const blackSquare = rotate180(square);
-    const blackPiece: Piece = { id: `black-${i}`, value, owner: 'black', isDama: false };
-    board[blackSquare.row]![blackSquare.col] = blackPiece;
+    placePiece(board, square, { id: `white-${String(i)}`, value, owner: 'white', isDama: false });
+    placePiece(board, rotate180(square), {
+      id: `black-${String(i)}`,
+      value,
+      owner: 'black',
+      isDama: false,
+    });
   });
 
   return {

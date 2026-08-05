@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer } from 'react';
-import { applyMove, createGame, finalScores, legalMoves, pieceAt } from '@damath/engine';
+import { applyMove, createGame, finalScores, legalMoves, pieceAt, replayMoves } from '@damath/engine';
 import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
@@ -11,6 +11,10 @@ interface State<V> {
   selected: Position | null;
   cursor: Position;
   announcement: string;
+  /** Set the instant a player resigns; overrides `game.status` for "is this game over" purposes — see KNOWLEDGE.md. */
+  resignedBy: Player | null;
+  /** How many played moves the *board* currently shows — `null` means "the live position" (`game.moveHistory.length` moves in). Browsing history never touches `game` itself. */
+  viewIndex: number | null;
 }
 
 type Action<V> =
@@ -18,7 +22,10 @@ type Action<V> =
   | { type: 'SELECT'; pos: Position }
   | { type: 'MOVE'; move: Move<V> }
   | { type: 'CLEAR_SELECTION' }
-  | { type: 'SET_CURSOR'; pos: Position };
+  | { type: 'SET_CURSOR'; pos: Position }
+  | { type: 'UNDO' }
+  | { type: 'RESIGN' }
+  | { type: 'VIEW_MOVE'; index: number | null };
 
 function firstPlayableSquare(): Position {
   for (let row = 0; row < 8; row++) {
@@ -81,11 +88,13 @@ function makeReducer<V>(variant: Variant<V>) {
           selected: null,
           cursor: firstPlayableSquare(),
           ledger: [],
+          resignedBy: null,
+          viewIndex: null,
           announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
         };
       }
       case 'SELECT': {
-        if (state.game.status === 'finished') return state;
+        if (state.game.status === 'finished' || state.resignedBy || state.viewIndex !== null) return state;
         const piece = pieceAt(state.game.board, action.pos);
         if (!piece || piece.owner !== state.game.turn) return state;
         const hasLegalMove = legalMoves(state.game).some((m) => samePosition(m.from, action.pos));
@@ -97,7 +106,7 @@ function makeReducer<V>(variant: Variant<V>) {
       case 'SET_CURSOR':
         return { ...state, cursor: action.pos };
       case 'MOVE': {
-        if (state.game.status === 'finished') return state;
+        if (state.game.status === 'finished' || state.resignedBy || state.viewIndex !== null) return state;
         const mover = pieceAt(state.game.board, action.move.from);
         if (!mover) return state;
         const next = applyMove(state.game, action.move, variant);
@@ -115,6 +124,33 @@ function makeReducer<V>(variant: Variant<V>) {
           announcement,
         };
       }
+      case 'UNDO': {
+        if (state.game.moveHistory.length === 0) return state;
+        const game = replayMoves(variant, state.game.moveHistory.slice(0, -1));
+        return {
+          ...state,
+          game,
+          selected: null,
+          cursor: firstPlayableSquare(),
+          ledger: state.ledger.slice(0, -1),
+          resignedBy: null,
+          viewIndex: null,
+          announcement: `Move undone. ${playerLabel(game.turn)} to move.`,
+        };
+      }
+      case 'RESIGN': {
+        if (state.game.status === 'finished' || state.resignedBy) return state;
+        const resigner = state.game.turn;
+        return {
+          ...state,
+          selected: null,
+          resignedBy: resigner,
+          viewIndex: null,
+          announcement: `${playerLabel(resigner)} resigns. ${playerLabel(opponentOf(resigner))} wins.`,
+        };
+      }
+      case 'VIEW_MOVE':
+        return { ...state, selected: null, viewIndex: action.index };
       default:
         return state;
     }
@@ -128,6 +164,8 @@ function init<V>(variant: Variant<V>): State<V> {
     selected: null,
     cursor: firstPlayableSquare(),
     ledger: [],
+    resignedBy: null,
+    viewIndex: null,
     announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
   };
 }
@@ -142,6 +180,14 @@ export function useGame<V>(variant: Variant<V>) {
     const selected = state.selected;
     return selected ? moves.filter((m) => samePosition(m.from, selected)) : [];
   }, [moves, state.selected]);
+
+  const isViewingHistory = state.viewIndex !== null;
+
+  /** The position the board should render: the live game, or a replayed earlier point browsed via the move ledger. Never mutates or replaces `state.game` itself — undo is a distinct, reducer-driven action from this read-only browse. */
+  const boardGame = useMemo(() => {
+    if (state.viewIndex === null) return state.game;
+    return replayMoves(variant, state.game.moveHistory.slice(0, state.viewIndex));
+  }, [state.viewIndex, state.game, variant]);
 
   /**
    * Moves the cursor exactly one cell, including onto a non-playable square.
@@ -208,22 +254,51 @@ export function useGame<V>(variant: Variant<V>) {
   /** Applies a move chosen elsewhere (the computer opponent's worker), bypassing select/deselect semantics. */
   const playMove = useCallback((move: Move<V>) => dispatch({ type: 'MOVE', move }), []);
 
+  const undo = useCallback(() => dispatch({ type: 'UNDO' }), []);
+  const resign = useCallback(() => dispatch({ type: 'RESIGN' }), []);
+
+  const historyLength = state.game.moveHistory.length;
+  const goToMove = useCallback(
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(index, historyLength));
+      dispatch({ type: 'VIEW_MOVE', index: clamped === historyLength ? null : clamped });
+    },
+    [historyLength],
+  );
+  const stepBack = useCallback(() => goToMove((state.viewIndex ?? historyLength) - 1), [goToMove, state.viewIndex, historyLength]);
+  const stepForward = useCallback(() => goToMove((state.viewIndex ?? historyLength) + 1), [goToMove, state.viewIndex, historyLength]);
+  const exitReplay = useCallback(() => dispatch({ type: 'VIEW_MOVE', index: null }), []);
+
+  const gameOver = state.game.status === 'finished' || state.resignedBy !== null;
+
   return {
     game: state.game,
+    boardGame,
     variant,
-    selected: state.selected,
+    selected: isViewingHistory ? null : state.selected,
     cursor: state.cursor,
     ledger: state.ledger,
     announcement: state.announcement,
-    legalFrom,
-    destinations,
-    gameOver: state.game.status === 'finished',
-    finalScores: state.game.status === 'finished' ? finalScores(state.game, variant.arithmetic) : null,
+    legalFrom: isViewingHistory ? new Set<string>() : legalFrom,
+    destinations: isViewingHistory ? [] : destinations,
+    gameOver,
+    resignedBy: state.resignedBy,
+    finalScores: gameOver ? finalScores(state.game, variant.arithmetic) : null,
     activateSquare,
     moveCursor,
     activateCursor,
     clearSelection,
     newGame,
     playMove,
+    undo,
+    canUndo: historyLength > 0,
+    resign,
+    canResign: !gameOver,
+    viewIndex: state.viewIndex,
+    isViewingHistory,
+    goToMove,
+    stepBack,
+    stepForward,
+    exitReplay,
   };
 }

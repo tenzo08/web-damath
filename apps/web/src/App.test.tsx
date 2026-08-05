@@ -51,6 +51,49 @@ describe('App', () => {
     expect(screen.getByText('No moves yet.')).toBeInTheDocument();
   });
 
+  it('"Undo move" removes the last move and returns to the previous turn', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
+    expect(screen.getByText('Dark to move')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Undo move' }));
+
+    expect(screen.getByText('No moves yet.')).toBeInTheDocument();
+    expect(screen.getByText('Light to move')).toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: /^b3, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+  });
+
+  it('"Resign" ends the game in favor of the opponent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Resign' }));
+
+    // Both the visible status line and the visually-hidden aria-live region carry
+    // this text, so there are two matches by design.
+    expect(screen.getAllByText(/Light resigns\. Dark wins\./)).toHaveLength(2);
+  });
+
+  it('stepping back through the move ledger browses history without changing the live game', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
+
+    await user.click(screen.getByRole('button', { name: '◂ Back' }));
+    expect(screen.getByRole('gridcell', { name: /^b3, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    expect(screen.getByText('Move 0 of 1')).toBeInTheDocument();
+    // The live status line is unaffected by browsing history — only the board changes.
+    expect(screen.getByText('Dark to move')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Live' }));
+    expect(screen.getByRole('gridcell', { name: /^a4, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+  });
+
   it('a non-integer variant renders formatted (non-numeric) chip values and has no computer opponent', async () => {
     const user = userEvent.setup();
     render(<App />);

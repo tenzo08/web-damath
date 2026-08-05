@@ -12,6 +12,8 @@ interface BoardProps<V> {
   legalFrom: Set<string>;
   destinations: Move<V>[];
   lastMove: Move<V> | null;
+  /** Renders from Dark's side (row 0 at top) instead of Light's — a pass-and-play convenience, purely visual. Positions/labels are unaffected; only DOM order in the CSS grid changes. */
+  flipped: boolean;
   onActivateSquare: (pos: Position) => void;
   onMoveCursor: (dir: 'up' | 'down' | 'left' | 'right') => void;
   onActivateCursor: () => void;
@@ -33,6 +35,7 @@ export function Board<V>({
   legalFrom,
   destinations,
   lastMove,
+  flipped,
   onActivateSquare,
   onMoveCursor,
   onActivateCursor,
@@ -44,8 +47,8 @@ export function Board<V>({
     refs.current.get(positionKey(cursor))?.focus();
   }, [cursor]);
 
-  const rows = [7, 6, 5, 4, 3, 2, 1, 0];
-  const cols = [0, 1, 2, 3, 4, 5, 6, 7];
+  const rows = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+  const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
 
   return (
     <div

@@ -1,8 +1,8 @@
-import { operationAt, pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCapture } from '@damath/engine';
+import { numberArithmetic, operationAt, pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCapture } from '@damath/engine';
 import type { GameState, Move, Player } from '@damath/engine';
 import { randomInt } from './rng.js';
 
-function isPromotionSquare(move: Move, mover: Player): boolean {
+function isPromotionSquare(move: Move<number>, mover: Player): boolean {
   const squares = mover === 'white' ? PROMOTION_SQUARES_ROW_7 : PROMOTION_SQUARES_ROW_0;
   return squares.some((s) => s.row === move.to.row && s.col === move.to.col);
 }
@@ -15,12 +15,12 @@ function isPromotionSquare(move: Move, mover: Player): boolean {
  * whether it promotes (docs/AI_OPPONENT.md §6: "captures first, then higher-scoring
  * captures, then promotions").
  */
-function orderingScore(state: GameState, move: Move): number {
+function orderingScore(state: GameState<number>, move: Move<number>): number {
   const mover = pieceAt(state.board, move.from);
   if (!mover) return 0;
   let captureScore = 0;
   for (const step of move.captures) {
-    captureScore += scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt));
+    captureScore += scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), numberArithmetic);
   }
   const promotes = !mover.isDama && isPromotionSquare(move, mover.owner);
   return captureScore * 10 + (promotes ? 5 : 0);
@@ -30,7 +30,7 @@ function samePosition(a: { row: number; col: number }, b: { row: number; col: nu
   return a.row === b.row && a.col === b.col;
 }
 
-function sameMove(a: Move, b: Move): boolean {
+function sameMove(a: Move<number>, b: Move<number>): boolean {
   return samePosition(a.from, b.from) && samePosition(a.to, b.to) && a.captures.length === b.captures.length;
 }
 
@@ -40,7 +40,12 @@ function sameMove(a: Move, b: Move): boolean {
  * the fix for reference/'s F4 bug, where each depth restarted from an unordered list
  * and threw away the prior depth's work.
  */
-export function orderMoves(state: GameState, moves: readonly Move[], rng: () => number, pv: Move | null): Move[] {
+export function orderMoves(
+  state: GameState<number>,
+  moves: readonly Move<number>[],
+  rng: () => number,
+  pv: Move<number> | null,
+): Move<number>[] {
   const shuffled = moves.slice();
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = randomInt(rng, i + 1);

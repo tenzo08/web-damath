@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { INTEGER_DAMATH } from '@damath/engine';
 import { playGame, type Contestant } from './self-play.js';
 
 /**
@@ -51,7 +52,7 @@ function contest(
     const strongerIsWhite = i % 2 === 0;
     const stronger: Contestant = { opts: { ...strongerBudget, seed: seedBase + i } };
     const weaker: Contestant = { opts: { ...weakerBudget, seed: seedBase + 1000 + i } };
-    const outcome = playGame('integer', strongerIsWhite ? stronger : weaker, strongerIsWhite ? weaker : stronger);
+    const outcome = playGame(INTEGER_DAMATH, strongerIsWhite ? stronger : weaker, strongerIsWhite ? weaker : stronger);
     const strongerScore = strongerIsWhite ? outcome.finalScores.white : outcome.finalScores.black;
     const weakerScore = strongerIsWhite ? outcome.finalScores.black : outcome.finalScores.white;
     strongerMargin += strongerScore - weakerScore;

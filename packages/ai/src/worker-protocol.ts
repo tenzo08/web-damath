@@ -5,7 +5,7 @@ import type { SearchResult } from './types.js';
 
 export interface AiWorkerRequest {
   readonly id: string;
-  readonly state: GameState;
+  readonly state: GameState<number>;
   readonly tier: DifficultyTier;
   readonly seed?: number;
 }

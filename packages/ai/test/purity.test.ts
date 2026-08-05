@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame } from '@damath/engine';
+import { createGame, INTEGER_DAMATH } from '@damath/engine';
 import { chooseMove } from '../src/search.js';
 
 function deepFreeze<T>(value: T): T {
@@ -12,7 +12,7 @@ function deepFreeze<T>(value: T): T {
 
 describe('purity (docs/AI_OPPONENT.md §8)', () => {
   it('search never mutates a deep-frozen input state', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     const before = structuredClone(state);
     deepFreeze(state);
 

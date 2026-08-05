@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createGame } from '@damath/engine';
+import { createGame, INTEGER_DAMATH } from '@damath/engine';
 import { chooseMove } from '../src/search.js';
 
 describe('determinism (docs/AI_OPPONENT.md §2, §8)', () => {
   it('same position + same seed produces the same move, 100 times', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     const opts = { maxDepth: 4, timeBudgetMs: 200, seed: 12345, blunderRate: 0.1 };
     const clock = () => 0; // no time pressure — isolates seed determinism from timing jitter
 
@@ -19,7 +19,7 @@ describe('determinism (docs/AI_OPPONENT.md §2, §8)', () => {
   });
 
   it('different seeds can produce different moves (blunder path actually varies)', () => {
-    const state = createGame('integer');
+    const state = createGame(INTEGER_DAMATH);
     const clock = () => 0;
     const moves = new Set<string>();
     for (let seed = 0; seed < 20; seed++) {

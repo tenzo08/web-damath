@@ -1,9 +1,10 @@
 import { applyMove, legalMoves } from '@damath/engine';
-import type { GameState, Move } from '@damath/engine';
+import type { GameState, Move, Variant } from '@damath/engine';
 import { DEFAULT_WEIGHTS, evaluate, type EvaluationWeights } from './evaluate.js';
 import { orderMoves } from './ordering.js';
 import { createRng } from './rng.js';
 import type { Clock, SearchOptions, SearchResult } from './types.js';
+import { resolveVariant } from './variant.js';
 
 /**
  * How many extra plies to search past the nominal depth while the position is a
@@ -23,15 +24,16 @@ interface SearchContext {
   readonly clock: Clock;
   readonly deadline: number;
   readonly rng: () => number;
+  readonly variant: Variant<number>;
   nodesEvaluated: number;
 }
 
-function isForcedCapture(moves: readonly Move[]): boolean {
+function isForcedCapture(moves: readonly Move<number>[]): boolean {
   const first = moves[0];
   return first !== undefined && first.captures.length > 0;
 }
 
-function leaf(state: GameState, ctx: SearchContext, player: GameState['turn']): number {
+function leaf(state: GameState<number>, ctx: SearchContext, player: GameState<number>['turn']): number {
   ctx.nodesEvaluated++;
   return evaluate(state, player, ctx.weights);
 }
@@ -43,13 +45,13 @@ function leaf(state: GameState, ctx: SearchContext, player: GameState['turn']): 
  * turn alternation always agree.
  */
 function alphaBeta(
-  state: GameState,
+  state: GameState<number>,
   depth: number,
   quiescenceBudget: number,
   alpha: number,
   beta: number,
   maximizing: boolean,
-  rootPlayer: GameState['turn'],
+  rootPlayer: GameState<number>['turn'],
   ctx: SearchContext,
 ): number {
   if (ctx.clock() > ctx.deadline) {
@@ -73,7 +75,7 @@ function alphaBeta(
   if (maximizing) {
     let best = -Infinity;
     for (const move of ordered) {
-      const child = applyMove(state, move, { checkGameOver: false });
+      const child = applyMove(state, move, ctx.variant, { checkGameOver: false });
       const value = alphaBeta(child, nextDepth, nextBudget, alpha, beta, false, rootPlayer, ctx);
       if (value > best) best = value;
       if (best > alpha) alpha = best;
@@ -83,7 +85,7 @@ function alphaBeta(
   }
   let best = Infinity;
   for (const move of ordered) {
-    const child = applyMove(state, move, { checkGameOver: false });
+    const child = applyMove(state, move, ctx.variant, { checkGameOver: false });
     const value = alphaBeta(child, nextDepth, nextBudget, alpha, beta, true, rootPlayer, ctx);
     if (value < best) best = value;
     if (best < beta) beta = best;
@@ -93,7 +95,7 @@ function alphaBeta(
 }
 
 interface RankedMove {
-  readonly move: Move;
+  readonly move: Move<number>;
   readonly value: number;
 }
 
@@ -104,14 +106,14 @@ interface RankedMove {
  * blunder mechanic (§7) possible: it needs a real second-best move, not just a
  * pruned bound.
  */
-function searchRoot(state: GameState, depth: number, pv: Move | null, ctx: SearchContext): RankedMove[] {
+function searchRoot(state: GameState<number>, depth: number, pv: Move<number> | null, ctx: SearchContext): RankedMove[] {
   const moves = legalMoves(state);
   const ordered = orderMoves(state, moves, ctx.rng, pv);
   const rootPlayer = state.turn;
   let alpha = -Infinity;
   const ranked: RankedMove[] = [];
   for (const move of ordered) {
-    const child = applyMove(state, move, { checkGameOver: false });
+    const child = applyMove(state, move, ctx.variant, { checkGameOver: false });
     const value = alphaBeta(child, depth - 1, QUIESCENCE_BUDGET, alpha, Infinity, false, rootPlayer, ctx);
     ranked.push({ move, value });
     if (value > alpha) alpha = value;
@@ -140,7 +142,7 @@ const defaultClock: Clock = () => Date.now();
  * `MATERIAL_HEAVY_WEIGHTS` without a second copy of the search.
  */
 export function chooseMove(
-  state: GameState,
+  state: GameState<number>,
   opts: SearchOptions,
   clock: Clock = defaultClock,
   weights: EvaluationWeights = DEFAULT_WEIGHTS,
@@ -155,6 +157,7 @@ export function chooseMove(
     clock,
     deadline: start + opts.timeBudgetMs,
     rng,
+    variant: resolveVariant(state.variant),
     nodesEvaluated: 0,
   };
 

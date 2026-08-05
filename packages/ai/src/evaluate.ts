@@ -1,4 +1,4 @@
-import { finalScores, legalMoves } from '@damath/engine';
+import { finalScores, legalMoves, numberArithmetic } from '@damath/engine';
 import type { GameState, Player } from '@damath/engine';
 
 export interface EvaluationWeights {
@@ -46,8 +46,8 @@ function advancement(row: number, player: Player): number {
 }
 
 /** Own pieces the opponent could capture right now, had they the move — a static-exchange-style proxy, not a search. */
-function exposure(state: GameState, player: Player): number {
-  const hypotheticalOpponentTurn: GameState = { ...state, turn: opponentOf(player) };
+function exposure(state: GameState<number>, player: Player): number {
+  const hypotheticalOpponentTurn: GameState<number> = { ...state, turn: opponentOf(player) };
   const seen = new Set<string>();
   let total = 0;
   for (const move of legalMoves(hypotheticalOpponentTurn)) {
@@ -62,7 +62,7 @@ function exposure(state: GameState, player: Player): number {
   return total;
 }
 
-function mobility(state: GameState, player: Player): number {
+function mobility(state: GameState<number>, player: Player): number {
   return legalMoves({ ...state, turn: player }).length;
 }
 
@@ -72,11 +72,11 @@ function mobility(state: GameState, player: Player): number {
  * (§8) scaled by the score weight — exact endgame evaluation is free here and keeps the
  * AI from misplaying a position it could otherwise resolve for certain.
  */
-export function evaluate(state: GameState, player: Player, weights: EvaluationWeights = DEFAULT_WEIGHTS): number {
+export function evaluate(state: GameState<number>, player: Player, weights: EvaluationWeights = DEFAULT_WEIGHTS): number {
   const opponent = opponentOf(player);
 
   if (legalMoves(state).length === 0) {
-    const totals = finalScores(state);
+    const totals = finalScores(state, numberArithmetic);
     return weights.score * (totals[player] - totals[opponent]);
   }
 

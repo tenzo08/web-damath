@@ -17,7 +17,7 @@ export interface SearchOptions {
 }
 
 export interface SearchResult {
-  readonly move: Move;
+  readonly move: Move<number>;
   /** Evaluation from the searching player's perspective. */
   readonly score: number;
   /** Depth actually completed within the time budget. */

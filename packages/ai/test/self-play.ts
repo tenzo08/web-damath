@@ -1,5 +1,5 @@
-import { applyMove, createGame, finalScores, isGameOver } from '@damath/engine';
-import type { Player, SupportedVariantId } from '@damath/engine';
+import { applyMove, createGame, finalScores, isGameOver, numberArithmetic } from '@damath/engine';
+import type { Player, Variant } from '@damath/engine';
 import { chooseMove } from '../src/search.js';
 import type { EvaluationWeights } from '../src/evaluate.js';
 import type { SearchOptions } from '../src/types.js';
@@ -22,21 +22,16 @@ export interface GameOutcome {
  * repetition included). Capped at `maxPlies` as a backstop against a pathological
  * non-terminating line; ordinary Damath games end well before that.
  */
-export function playGame(
-  variantId: SupportedVariantId,
-  white: Contestant,
-  black: Contestant,
-  maxPlies = 150,
-): GameOutcome {
-  let state = createGame(variantId);
+export function playGame(variant: Variant<number>, white: Contestant, black: Contestant, maxPlies = 150): GameOutcome {
+  let state = createGame(variant);
   let plies = 0;
-  while (!isGameOver(state) && plies < maxPlies) {
+  while (!isGameOver(state, variant) && plies < maxPlies) {
     const mover = state.turn === 'white' ? white : black;
     const result = chooseMove(state, mover.opts, undefined, mover.weights);
-    state = applyMove(state, result.move);
+    state = applyMove(state, result.move, variant);
     plies++;
   }
-  const scores = finalScores(state);
+  const scores = finalScores(state, numberArithmetic);
   const winner: Player | 'draw' = scores.white === scores.black ? 'draw' : scores.white > scores.black ? 'white' : 'black';
   return { winner, finalScores: scores, plies };
 }

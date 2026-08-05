@@ -1,0 +1,72 @@
+/* Design tokens transcribed verbatim from docs/DAMATH_RULES.md's companion, docs/DESIGN.md.
+   docs/DESIGN.md is authoritative — do not add a color, font, or radius that isn't defined there. */
+:root {
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --fs-display: 32px;
+  --fs-title: 20px;
+  --fs-body: 14px;
+  --fs-label: 13px;
+  --fs-meta: 12px;
+  --fs-micro: 11px;
+
+  --surface-page: #0f0f12;
+  --surface-rail: #0b0b0e;
+  --surface-panel: #16161b;
+  --surface-raised: #1c1c23;
+
+  --border: #26262e;
+  --border-strong: #34343e;
+
+  --text-primary: #eaeaef;
+  --text-secondary: #9a9aa5;
+  --text-muted: #62626d;
+  --text-disabled: #43434c;
+
+  --accent: #e3b341;
+  --accent-dim: #b78d2e;
+  --accent-bg: rgba(227, 179, 65, 0.1);
+  --accent-on: #221904;
+
+  --danger: #f0836f;
+  --danger-bg: rgba(240, 131, 111, 0.1);
+  --success: #4fbf7b;
+  --success-bg: rgba(79, 191, 123, 0.1);
+  --info: #7fa6c9;
+  --info-bg: rgba(127, 166, 201, 0.1);
+
+  --square-void: #101014;
+  --square-play: #1c1c23;
+  --square-op: #4a4a55;
+  --square-legal: rgba(227, 179, 65, 0.14);
+  --square-last: rgba(127, 166, 201, 0.1);
+
+  --piece-light: #e3b341;
+  --piece-light-on: #221904;
+  --piece-dark: #7fa6c9;
+  --piece-dark-on: #0a1721;
+
+  --radius: 6px;
+  --radius-card: 8px;
+  --rail-width: 176px;
+
+  --pad-sm: 8px;
+  --pad-md: 12px;
+  --pad-lg: 16px;
+  --pad-xl: 24px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 16px;
+  --gap-xl: 24px;
+
+  --dur-fast: 90ms;
+  --dur-base: 160ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+  }
+}

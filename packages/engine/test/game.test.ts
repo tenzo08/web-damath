@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, pieceAt } from '../src/board.js';
 import { legalMoves } from '../src/moves.js';
-import { applyMove, finalScores, isGameOver } from '../src/game.js';
+import { applyMove, finalScores, isGameOver, replayMoves } from '../src/game.js';
 import { numberArithmetic } from '../src/arithmetic.js';
 import { INTEGER_DAMATH, WHOLE_DAMATH } from '../src/data/variants.js';
 import type { GameState, Move, Piece, Player, Position } from '../src/types.js';
@@ -261,12 +261,20 @@ describe('applyMove is pure (1.8)', () => {
       played = applyMove(played, move, WHOLE_DAMATH);
     }
 
-    let replayed = createGame(WHOLE_DAMATH);
-    for (const move of played.moveHistory) {
-      replayed = applyMove(replayed, move, WHOLE_DAMATH);
+    expect(replayMoves(WHOLE_DAMATH, played.moveHistory)).toEqual(played);
+  });
+
+  it('replayMoves with a truncated move list reproduces an earlier point in the same game (undo)', () => {
+    let played = createGame(WHOLE_DAMATH);
+    for (let i = 0; i < 4; i++) {
+      const move = legalMoves(played)[0];
+      if (!move) break;
+      played = applyMove(played, move, WHOLE_DAMATH);
     }
 
-    expect(replayed).toEqual(played);
+    const oneMoveBack = replayMoves(WHOLE_DAMATH, played.moveHistory.slice(0, -1));
+    expect(oneMoveBack.moveHistory).toHaveLength(played.moveHistory.length - 1);
+    expect(oneMoveBack).not.toEqual(played);
   });
 });
 

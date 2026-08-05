@@ -139,6 +139,21 @@ export function applyMove<V>(
   return { ...next, status: isGameOver(next, variant) ? 'finished' : 'active' };
 }
 
+/**
+ * Reconstructs a `GameState` by replaying `moves` from `createGame(variant)`,
+ * one `applyMove` per move. "Games are stored as move lists" (KNOWLEDGE.md) —
+ * this is the shared primitive for anything that rebuilds a position from a
+ * move list rather than a live `useGame` reducer: the replay/undo UI in
+ * `apps/web`, and eventually the server's own reconnect-by-replay (Milestone 4).
+ */
+export function replayMoves<V>(variant: Variant<V>, moves: readonly Move<V>[]): GameState<V> {
+  let state = createGame(variant);
+  for (const move of moves) {
+    state = applyMove(state, move, variant);
+  }
+  return state;
+}
+
 /** Accumulated capture score plus remaining chips, Dama doubled (§8.1-8.2). */
 export function finalScores<V>(state: GameState<V>, arithmetic: Arithmetic<V>): Record<Player, V> {
   const totals: Record<Player, V> = { ...state.scores };

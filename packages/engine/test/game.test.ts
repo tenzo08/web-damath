@@ -259,3 +259,28 @@ describe('applyMove is pure (1.8)', () => {
     expect(replayed).toEqual(played);
   });
 });
+
+describe('applyMove({ checkGameOver: false }) skips isGameOver entirely', () => {
+  it('leaves status active even when the move would otherwise end the game', () => {
+    const state = stateWith(
+      [
+        [{ row: 1, col: 0 }, ordinary('black', 5)],
+        [{ row: 0, col: 1 }, ordinary('white', 3)],
+        [{ row: 2, col: 1 }, ordinary('white', 1)], // moves elsewhere, unrelated to the corner
+      ],
+      { turn: 'white' },
+    );
+    const move: Move = { from: { row: 2, col: 1 }, to: { row: 3, col: 2 }, captures: [] };
+
+    const checked = applyMove(state, move);
+    expect(checked.status).toBe('finished'); // default behaviour, unchanged
+
+    const unchecked = applyMove(state, move, { checkGameOver: false });
+    expect(unchecked.status).toBe('active');
+    // Everything else about the transition is identical either way.
+    expect(unchecked.board).toEqual(checked.board);
+    expect(unchecked.turn).toBe(checked.turn);
+    expect(unchecked.scores).toEqual(checked.scores);
+    expect(unchecked.moveHistory).toEqual(checked.moveHistory);
+  });
+});

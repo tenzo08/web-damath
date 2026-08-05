@@ -97,14 +97,36 @@ export function isGameOver(state: GameState): boolean {
   return legalMoves(state).length === 0 || isThreefoldRepetition(state);
 }
 
+export interface ApplyMoveOptions {
+  /**
+   * Default true. When false, skips `isGameOver` entirely — in particular its
+   * O(moveHistory) threefold-repetition replay from `createGame` — and always
+   * returns `status: 'active'`.
+   *
+   * Built for search (packages/ai): minimax calls `applyMove` thousands of
+   * times per move choice, and replaying the whole game history from scratch
+   * at every simulated ply is the exact bottleneck KNOWLEDGE.md's "Repetition
+   * detection" entry flagged as a future revisit. Search does its own cheap
+   * terminal check (`legalMoves(state).length === 0`) instead and never needs
+   * repetition detection mid-search. Real gameplay must keep the default
+   * (`true`) — `status`/repetition are only correct with the check enabled.
+   */
+  checkGameOver?: boolean;
+}
+
 /**
  * Applies one legal move, returning a new `GameState` — the input is never
  * mutated (1.8). Scores each capture step individually and sums them (§5.6),
  * promotes only on the final landing square (§6.2), and marks the resulting
- * state `finished` when `isGameOver` holds for it.
+ * state `finished` when `isGameOver` holds for it (unless `checkGameOver` is
+ * disabled — see `ApplyMoveOptions`).
  */
-export function applyMove(state: GameState, move: Move): GameState {
+export function applyMove(state: GameState, move: Move, options: ApplyMoveOptions = {}): GameState {
+  const { checkGameOver = true } = options;
   const next = applyMoveCore(state, move);
+  if (!checkGameOver) {
+    return { ...next, status: 'active' };
+  }
   return { ...next, status: isGameOver(next) ? 'finished' : 'active' };
 }
 

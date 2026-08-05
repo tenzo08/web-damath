@@ -44,12 +44,19 @@ console.log(finalScores(state)); // { white: number, black: number }
   captures (§4.3), and Dama captures prevail over ordinary ones among the maximal set
   (§4.4). Returns quiet moves only when no capture is available.
 
-- **`applyMove(state: GameState, move: Move): GameState`**
+- **`applyMove(state: GameState, move: Move, options?: ApplyMoveOptions): GameState`**
   Applies one move — normally one drawn from `legalMoves(state)` — and returns a new
   `GameState`. `state` is never mutated. Scores each capture step individually and sums
   them (§5.6), promotes a chip only when it *stops* on a promotion square (§6.1–6.2,
   never mid-chain), switches `turn`, and marks the result `status: 'finished'` when
   `isGameOver` holds for it.
+
+  `options.checkGameOver` (default `true`) can be set `false` to skip that
+  `isGameOver` check — in particular its threefold-repetition replay, which is
+  O(moveHistory) and too expensive to pay on every one of the thousands of simulated
+  moves a search makes. `status` is then always `'active'`; the caller is responsible
+  for its own terminal check (`packages/ai`'s search uses the cheap
+  `legalMoves(state).length === 0`). Real gameplay should always use the default.
 
 - **`isGameOver(state: GameState): boolean`**
   True when the player to move has no legal move at all — this single check covers both

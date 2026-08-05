@@ -14,6 +14,7 @@ export type {
 export { BOARD_SIZE, createGame, deserialize, isOnBoard, pieceAt, serialize } from './board.js';
 export { legalMoves } from './moves.js';
 export { applyMove, isGameOver, finalScores } from './game.js';
+export type { ApplyMoveOptions } from './game.js';
 export { scoreCapture } from './scoring.js';
 
 export {

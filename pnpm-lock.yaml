@@ -23,6 +23,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@damath/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@damath/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -60,6 +63,22 @@ importers:
       vite:
         specifier: ^5.4.6
         version: 5.4.21
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(jsdom@25.0.1(supports-color@7.2.0))(supports-color@7.2.0)
+
+  packages/ai:
+    dependencies:
+      '@damath/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^2.1.9
+        version: 2.1.9(supports-color@7.2.0)(vitest@2.1.9(jsdom@25.0.1(supports-color@7.2.0))(supports-color@7.2.0))
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
       vitest:
         specifier: ^2.0.5
         version: 2.1.9(jsdom@25.0.1(supports-color@7.2.0))(supports-color@7.2.0)

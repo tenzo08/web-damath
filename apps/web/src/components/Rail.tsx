@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { IntegerVariant } from '@damath/engine';
 
 interface RailProps {
@@ -6,36 +7,54 @@ interface RailProps {
   onNewGame: (variant: IntegerVariant) => void;
 }
 
+function RailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 'var(--fs-micro)',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+          borderTop: '1px solid var(--border)',
+          paddingTop: 'var(--pad-lg)',
+          marginBottom: 'var(--pad-sm)',
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+    </div>
+  );
+}
+
+function RailTip({ children }: { children: ReactNode }) {
+  return (
+    <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      {children}
+    </p>
+  );
+}
+
 export function Rail({ variants, current, onNewGame }: RailProps) {
   return (
     <nav
       aria-label="Match settings"
       style={{
         width: 'var(--rail-width)',
+        flexShrink: 0,
         background: 'var(--surface-rail)',
         borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         padding: 'var(--pad-lg) var(--pad-md)',
         gap: 'var(--gap-lg)',
+        overflowY: 'auto',
       }}
     >
       <div style={{ fontSize: 'var(--fs-title)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</div>
 
-      <div>
-        <div
-          style={{
-            fontSize: 'var(--fs-micro)',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
-            borderTop: '1px solid var(--border)',
-            paddingTop: 'var(--pad-lg)',
-            marginBottom: 'var(--pad-sm)',
-          }}
-        >
-          Variant
-        </div>
+      <RailSection title="Variant">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {variants.map((variant) => {
             const active = variant.id === current.id;
@@ -61,7 +80,20 @@ export function Rail({ variants, current, onNewGame }: RailProps) {
             );
           })}
         </div>
-      </div>
+      </RailSection>
+
+      <RailSection title="How to play">
+        <RailTip>Capturing is mandatory whenever it's available.</RailTip>
+        <RailTip>The board always shows the maximum-length capture — take fewer chips isn't legal if more is available.</RailTip>
+        <RailTip>Score comes from the operation on the square you land on, not the one you started from.</RailTip>
+        <RailTip>Reach the far row to promote to a Dama — it can then move and capture any distance.</RailTip>
+      </RailSection>
+
+      <RailSection title="Keyboard">
+        <RailTip>Arrow keys move the board cursor.</RailTip>
+        <RailTip>Enter selects a piece, then confirms a move.</RailTip>
+        <RailTip>Escape clears the current selection.</RailTip>
+      </RailSection>
 
       <button
         type="button"

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Operation, Piece as PieceModel, Position } from '@damath/engine';
-import { operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
+import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
 import { Piece } from './Piece';
 
 interface SquareProps {
@@ -84,19 +84,16 @@ export function Square({
         boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: 4,
-          left: 4,
-          fontSize: 'var(--fs-meta)',
-          color: 'var(--square-op)',
-        }}
-      >
-        {operation === '*' ? '×' : operation === '/' ? '÷' : operation === '-' ? '−' : '+'}
-      </span>
-      {piece && <Piece piece={piece} />}
+      {/* The physical board prints the operation in the square's center — and once a
+          chip sits on that square, the printed glyph is physically covered. A piece
+          hides the operation entirely rather than the two ever sharing the square. */}
+      {piece ? (
+        <Piece piece={piece} />
+      ) : (
+        <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
+          {operationGlyph(operation)}
+        </span>
+      )}
     </button>
   );
 }

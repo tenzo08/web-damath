@@ -55,7 +55,7 @@ export function Board({
         gridTemplateRows: 'repeat(8, 1fr)',
         width: '100%',
         aspectRatio: '1',
-        maxWidth: 640,
+        maxWidth: 760,
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
         // Deliberately no `overflow: hidden` here — it would clip the focus ring at the

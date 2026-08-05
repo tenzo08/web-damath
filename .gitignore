@@ -3,6 +3,9 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+
+# local file-backed user store (apps/server) — never real persistence, never committed
+/apps/server/data/
 .env
 .env.*
 !.env.example

@@ -24,6 +24,7 @@ import { LobbyScreen } from './components/LobbyScreen';
 import { OnlineGameScreen } from './components/OnlineGameScreen';
 import { TournamentScreen } from './components/TournamentScreen';
 import { MatchHistoryScreen } from './components/MatchHistoryScreen';
+import { SpectateScreen } from './components/SpectateScreen';
 import { playerLabel } from './lib/notation';
 import { asIntegerVariant } from './lib/integer-variant';
 import { LocaleProvider } from './lib/i18n';
@@ -300,7 +301,7 @@ function GenericGameShell<V>({ variant, flipped, onFlip, nav }: { variant: Varia
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate';
 
 function AppShell() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
@@ -323,6 +324,9 @@ function AppShell() {
   // (a room only ever has one origin at a time); kept as its own piece of state rather than
   // folded into tournamentContext since a history entry isn't a tournament match.
   const [historyRoomId, setHistoryRoomId] = useState<string | null>(null);
+  // Same round-trip shape as historyRoomId, for SpectateScreen -> OnlineGameScreen -> back
+  // to SpectateScreen. Also mutually exclusive with the other two origin states.
+  const [spectateRoomId, setSpectateRoomId] = useState<string | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -394,6 +398,7 @@ function AppShell() {
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => setScreen('tournaments')}
           onMatchHistory={auth.user ? () => setScreen('history') : null}
+          onSpectate={auth.user ? () => setScreen('spectate') : null}
           onlineCount={live.onlineCount}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -402,8 +407,8 @@ function AppShell() {
       {screen === 'online' && (
         <OnlineGameScreen
           token={auth.token}
-          initialRoomId={historyRoomId ?? tournamentContext?.roomId ?? undefined}
-          origin={historyRoomId ? 'history' : 'tournament'}
+          initialRoomId={historyRoomId ?? spectateRoomId ?? tournamentContext?.roomId ?? undefined}
+          origin={historyRoomId ? 'history' : spectateRoomId ? 'spectate' : 'tournament'}
           onGameFinished={auth.refreshUser}
           onBackToLobby={() => {
             if (historyRoomId) {
@@ -411,10 +416,26 @@ function AppShell() {
               setScreen('history');
               return;
             }
+            if (spectateRoomId) {
+              setSpectateRoomId(null);
+              setScreen('spectate');
+              return;
+            }
             setScreen(tournamentContext ? 'tournaments' : 'lobby');
             setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));
           }}
           onOpenLogin={() => setLoginOpen(true)}
+        />
+      )}
+
+      {screen === 'spectate' && (
+        <SpectateScreen
+          token={auth.token}
+          onBackToLobby={() => setScreen('lobby')}
+          onWatch={(roomId) => {
+            setSpectateRoomId(roomId);
+            setScreen('online');
+          }}
         />
       )}
 

@@ -38,6 +38,15 @@ export interface GameStore {
   update(game: PersistedGame): Promise<void>;
   /** Every game `userId` was seated in (either color), most recently updated first — the source for the match-history page. `limit` bounds a runaway history, not a pagination cursor; this app doesn't need real pagination at classroom scale. */
   listForUser(userId: string, limit: number): Promise<PersistedGame[]>;
+  /**
+   * Every currently-in-progress human-vs-human game with both seats filled — the
+   * source for the spectator list. Queries the persisted store directly rather than
+   * `RoomManager`'s in-memory room cache, which starts empty after every server
+   * restart and only refills as each room happens to be touched again — a genuinely
+   * live game a spectator hasn't found yet would otherwise be invisible right after a
+   * cold start (Render's free tier spins down and wakes on the next request).
+   */
+  listActive(limit: number): Promise<PersistedGame[]>;
 }
 
 /**
@@ -89,6 +98,22 @@ export class FileGameStore implements GameStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   }
+
+  async listActive(limit: number): Promise<PersistedGame[]> {
+    const games = await this.readAll();
+    return games
+      .filter(
+        (g) =>
+          g.opponentType === 'human' &&
+          g.status !== 'finished' &&
+          g.resignedBy === null &&
+          !g.drawnByAgreement &&
+          g.players.white !== null &&
+          g.players.black !== null,
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
 }
 
 /**
@@ -120,6 +145,22 @@ export class PrismaGameStore implements GameStore {
   async listForUser(userId: string, limit: number): Promise<PersistedGame[]> {
     const rows = await this.prisma.game.findMany({
       where: { OR: [{ whitePlayerId: userId }, { blackPlayerId: userId }] },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+    });
+    return rows.map(toPersistedGame);
+  }
+
+  async listActive(limit: number): Promise<PersistedGame[]> {
+    const rows = await this.prisma.game.findMany({
+      where: {
+        opponentType: 'human',
+        status: { not: 'finished' },
+        resignedBy: null,
+        drawnByAgreement: false,
+        whitePlayerId: { not: null },
+        blackPlayerId: { not: null },
+      },
       orderBy: { updatedAt: 'desc' },
       take: limit,
     });

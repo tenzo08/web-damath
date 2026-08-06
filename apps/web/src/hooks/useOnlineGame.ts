@@ -38,6 +38,12 @@ export function useOnlineGame(token: string | null) {
   // socket drop (unlike `view`/`color`, which stay too, but this is what drives the
   // rejoin decision explicitly rather than relying on stale render state).
   const lastRoomIdRef = useRef<string | null>(null);
+  // Whether that room was joined as a player or watched as a spectator — a spectator
+  // reconnecting must re-send `spectate`, not `join_room`: `join_room` tries to claim
+  // an open seat, and for a full room (the normal case once two players are in) it's
+  // simply rejected with "room is full", locking a genuine third-party spectator out
+  // entirely on the very first reconnect attempt.
+  const lastRoomModeRef = useRef<'player' | 'spectator'>('player');
 
   const send = useCallback((msg: ClientMessage) => {
     const socket = socketRef.current;
@@ -104,7 +110,11 @@ export function useOnlineGame(token: string | null) {
       setStatus('idle');
       setError(null);
       if (lastRoomIdRef.current) {
-        send({ type: 'join_room', roomId: lastRoomIdRef.current });
+        send(
+          lastRoomModeRef.current === 'spectator'
+            ? { type: 'spectate', roomId: lastRoomIdRef.current }
+            : { type: 'join_room', roomId: lastRoomIdRef.current },
+        );
       }
     };
     socket.onerror = () => {
@@ -145,6 +155,7 @@ export function useOnlineGame(token: string | null) {
           return;
         case 'matched':
           lastRoomIdRef.current = msg.roomId;
+          lastRoomModeRef.current = 'player';
           setColor(msg.color);
           setView(msg.view);
           setStatus('in_game');
@@ -152,12 +163,22 @@ export function useOnlineGame(token: string | null) {
           return;
         case 'joined':
           lastRoomIdRef.current = msg.roomId;
+          lastRoomModeRef.current = 'player';
           setColor(msg.color);
           return;
         case 'room_created':
           lastRoomIdRef.current = msg.roomId;
+          lastRoomModeRef.current = 'player';
           setView(msg.view);
           setColor('white');
+          setStatus('in_game');
+          setError(null);
+          return;
+        case 'spectating':
+          lastRoomIdRef.current = msg.roomId;
+          lastRoomModeRef.current = 'spectator';
+          setColor(null);
+          setView(msg.view);
           setStatus('in_game');
           setError(null);
           return;
@@ -181,6 +202,23 @@ export function useOnlineGame(token: string | null) {
   const offerDraw = useCallback(() => send({ type: 'offer_draw' }), [send]);
   const respondDraw = useCallback((accept: boolean) => send({ type: 'respond_draw', accept }), [send]);
   const joinRoom = useCallback((roomId: string) => send({ type: 'join_room', roomId }), [send]);
+  const spectate = useCallback((roomId: string) => send({ type: 'spectate', roomId }), [send]);
 
-  return { status, view, color, error, connect, disconnect, queue, cancelQueue, declineBot, move, resign, offerDraw, respondDraw, joinRoom };
+  return {
+    status,
+    view,
+    color,
+    error,
+    connect,
+    disconnect,
+    queue,
+    cancelQueue,
+    declineBot,
+    move,
+    resign,
+    offerDraw,
+    respondDraw,
+    joinRoom,
+    spectate,
+  };
 }

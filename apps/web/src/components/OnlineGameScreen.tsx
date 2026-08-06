@@ -17,7 +17,7 @@ interface OnlineGameScreenProps {
   /** Set when arriving via TournamentScreen's "Play this match" or MatchHistoryScreen's "Replay"/"Resume" — joins that room directly instead of showing the variant picker/matchmaking flow. */
   initialRoomId?: string | undefined;
   /** Only meaningful together with `initialRoomId` — which screen handed off this room, purely for header/back-button copy. Defaults to `'tournament'` so the existing TournamentScreen call site didn't need to change. */
-  origin?: 'tournament' | 'history' | undefined;
+  origin?: 'tournament' | 'history' | 'spectate' | undefined;
   /**
    * Fires once when a game reaches `status: 'finished'` (win, loss, or draw) — App.tsx
    * wires this to `useAuth`'s `refreshUser`, since the server updates the player's Elo
@@ -115,12 +115,17 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
     return () => online.disconnect();
   }, [token]);
 
-  // `online.joinRoom` is stable (useCallback closing only over the stable `send`), so
-  // this fires exactly once per connection: the instant `status` reaches 'idle' after
-  // `connect()` opens the socket, provided a tournament match handed off a specific room.
+  // `online.joinRoom`/`online.spectate` are stable (useCallback closing only over the
+  // stable `send`), so this fires exactly once per connection: the instant `status`
+  // reaches 'idle' after `connect()` opens the socket, provided a tournament match,
+  // match-history entry, or spectate pick handed off a specific room. `spectate` never
+  // claims a seat, even if one happens to be open — `join_room` would, which is wrong
+  // for a genuine third-party spectator.
   useEffect(() => {
-    if (initialRoomId && online.status === 'idle') online.joinRoom(initialRoomId);
-  }, [initialRoomId, online.status, online.joinRoom]);
+    if (!initialRoomId || online.status !== 'idle') return;
+    if (origin === 'spectate') online.spectate(initialRoomId);
+    else online.joinRoom(initialRoomId);
+  }, [initialRoomId, origin, online.status, online.joinRoom, online.spectate]);
 
   useEffect(() => setSelected(null), [online.view?.moveCount]);
   // A genuinely new game (a fresh roomId) always starts back at the live position.
@@ -200,10 +205,16 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
       <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
-            ← {initialRoomId ? (origin === 'history' ? 'History' : 'Tournament') : 'Lobby'}
+            ← {initialRoomId ? (origin === 'history' ? 'History' : origin === 'spectate' ? 'Spectate' : 'Tournament') : 'Lobby'}
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>
-            {initialRoomId ? (origin === 'history' ? 'Match Replay' : 'Tournament Match') : 'Play Online'}
+            {initialRoomId
+              ? origin === 'history'
+                ? 'Match Replay'
+                : origin === 'spectate'
+                  ? 'Spectating'
+                  : 'Tournament Match'
+              : 'Play Online'}
           </h1>
         </header>
 
@@ -317,8 +328,10 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
             <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
               <div style={cardStyle}>
                 <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-                  You're {online.color === 'white' ? 'Light' : 'Dark'} ·{' '}
-                  {online.view.opponentType === 'bot' ? `vs Computer (${online.view.botTier ?? '?'})` : 'vs a player'}
+                  {online.color === null
+                    ? 'Spectating'
+                    : `You're ${online.color === 'white' ? 'Light' : 'Dark'}`}{' '}
+                  · {online.view.opponentType === 'bot' ? `vs Computer (${online.view.botTier ?? '?'})` : 'vs a player'}
                 </p>
                 <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-label)' }}>
                   Light {online.view.scores.white} — Dark {online.view.scores.black}
@@ -346,7 +359,9 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                   Forward ▸
                 </button>
               </div>
-              {online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
+              {/* A spectator (online.color === null) never sees any of these — there's
+                  nothing for them to offer, accept, decline, or resign. */}
+              {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
                 <div style={{ ...cardStyle, padding: 'var(--pad-md)', border: '1px solid var(--accent)' }}>
                   <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)' }}>Your opponent offered a draw.</p>
                   <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
@@ -359,12 +374,12 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                   </div>
                 </div>
               )}
-              {online.view.status !== 'finished' && online.view.drawOfferedBy === online.color && (
+              {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy === online.color && (
                 <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
                   Draw offer sent — waiting for your opponent…
                 </p>
               )}
-              {online.view.status !== 'finished' && (
+              {online.color !== null && online.view.status !== 'finished' && (
                 <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
                   {online.view.opponentType === 'human' && (
                     <button

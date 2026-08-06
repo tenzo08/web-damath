@@ -21,6 +21,8 @@ export interface GameSocketOptions {
 type ClientMessage =
   | { type: 'create_room'; variantId: VariantId }
   | { type: 'join_room'; roomId: string }
+  /** Watch a room's broadcasts without taking a seat — rejected if the room doesn't exist, but never assigns a color even if one happens to be open (that's what `join_room` is for). */
+  | { type: 'spectate'; roomId: string }
   | { type: 'queue'; variantId: VariantId }
   | { type: 'decline_bot' }
   | { type: 'cancel_queue' }
@@ -41,6 +43,7 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     case 'queue':
       return typeof msg.variantId === 'string' ? (msg as ClientMessage) : null;
     case 'join_room':
+    case 'spectate':
       return typeof msg.roomId === 'string' ? (msg as ClientMessage) : null;
     case 'move':
       return isPosition(msg.from) && isPosition(msg.to) ? (msg as ClientMessage) : null;
@@ -196,6 +199,18 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
               // single `broadcastRoom` below — never two competing state messages.
               send(socket, { type: 'joined', roomId: result.room.id, color: result.color });
               broadcastRoom(result.room.getView());
+              return;
+            }
+            case 'spectate': {
+              const room = await roomManager.getRoom(message.roomId);
+              if (!room) {
+                send(socket, { type: 'error', message: 'room not found' });
+                return;
+              }
+              subscribeToRoom(socket, room.id);
+              // Unlike join_room, nothing about the room's own state changed — only this
+              // socket needs the current view, not a broadcast to everyone already there.
+              send(socket, { type: 'spectating', roomId: room.id, view: room.getView() });
               return;
             }
             case 'queue': {

@@ -50,6 +50,8 @@ export interface WireTournament {
 export type ServerMessage =
   | { type: 'room_created'; roomId: string; view: PublicGameView }
   | { type: 'joined'; roomId: string; color: Player | null }
+  /** Response to a `spectate` request — unlike `joined`, there's no `color`, since a spectator never has one. */
+  | { type: 'spectating'; roomId: string; view: PublicGameView }
   | { type: 'queued' }
   | { type: 'queue_cancelled' }
   | { type: 'matched'; roomId: string; color: Player; view: PublicGameView }
@@ -63,6 +65,7 @@ export type ServerMessage =
 export type ClientMessage =
   | { type: 'create_room'; variantId: VariantId }
   | { type: 'join_room'; roomId: string }
+  | { type: 'spectate'; roomId: string }
   | { type: 'queue'; variantId: VariantId }
   | { type: 'decline_bot' }
   | { type: 'cancel_queue' }

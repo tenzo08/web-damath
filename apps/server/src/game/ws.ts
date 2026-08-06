@@ -52,14 +52,25 @@ function send(socket: WebSocket, message: unknown): void {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
 }
 
+/** What `registerGameSocket` hands back — the `RoomManager` most callers want, plus a way to reach every currently-connected socket, for tournament live-update broadcasts and the online-user count. */
+export interface GameSocketHandle {
+  readonly roomManager: RoomManager;
+  broadcastToAll(message: unknown): void;
+  onlineUserCount(): number;
+}
+
 /**
  * Registers the `/ws` route and builds the `RoomManager` that owns it — constructed
  * together (not passed in) because the manager's `onRoomUpdate`/`onMatched` callbacks
  * need the socket registry defined in this same closure. Returns the manager so tests
  * (and, later, other REST routes like match history) can reach it directly.
  */
-export function registerGameSocket(app: FastifyInstance, options: GameSocketOptions): RoomManager {
+export function registerGameSocket(app: FastifyInstance, options: GameSocketOptions): GameSocketHandle {
   const socketsByRoom = new Map<string, Set<WebSocket>>();
+  // Every authenticated `/ws` connection lands here regardless of what it's used for
+  // (a game room, or just being present) — `.size` is exactly "how many distinct users
+  // are currently connected," the basis for the online-user count. A user with several
+  // tabs/devices open still counts once, since it's keyed by user id, not by socket.
   const socketsByUser = new Map<string, Set<WebSocket>>();
   const roomBySocket = new Map<WebSocket, string>();
 
@@ -69,6 +80,16 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
 
   function sendToUser(userId: string, message: unknown): void {
     for (const socket of socketsByUser.get(userId) ?? []) send(socket, message);
+  }
+
+  function broadcastToAll(message: unknown): void {
+    for (const sockets of socketsByUser.values()) {
+      for (const socket of sockets) send(socket, message);
+    }
+  }
+
+  function broadcastOnlineCount(): void {
+    broadcastToAll({ type: 'online_count', count: socketsByUser.size });
   }
 
   function subscribeToRoom(socket: WebSocket, roomId: string): void {
@@ -115,11 +136,22 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
       }
 
       let sockets = socketsByUser.get(userId);
+      const isNewOnlineUser = !sockets;
       if (!sockets) {
         sockets = new Set();
         socketsByUser.set(userId, sockets);
       }
       sockets.add(socket);
+      if (isNewOnlineUser) {
+        // The count actually changed — tell everyone, this new socket included (it's
+        // already in `socketsByUser` above).
+        broadcastOnlineCount();
+      } else {
+        // Just another tab/device for someone already online — the count didn't change,
+        // so no broadcast, but this socket still needs to know the current count rather
+        // than wait for some unrelated future connect/close to learn it.
+        send(socket, { type: 'online_count', count: socketsByUser.size });
+      }
 
       socket.on('message', (raw: Buffer) => {
         void (async () => {
@@ -201,7 +233,12 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
       });
 
       socket.on('close', () => {
-        socketsByUser.get(userId)?.delete(socket);
+        const userSockets = socketsByUser.get(userId);
+        userSockets?.delete(socket);
+        if (userSockets && userSockets.size === 0) {
+          socketsByUser.delete(userId);
+          broadcastOnlineCount();
+        }
         const roomId = roomBySocket.get(socket);
         if (roomId) socketsByRoom.get(roomId)?.delete(socket);
         roomBySocket.delete(socket);
@@ -210,5 +247,5 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
     });
   });
 
-  return roomManager;
+  return { roomManager, broadcastToAll, onlineUserCount: () => socketsByUser.size };
 }

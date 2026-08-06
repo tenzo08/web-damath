@@ -20,17 +20,25 @@ const createBodySchema = {
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 80 },
     variantId: { type: 'string' },
+    // Display metadata only (manager.ts) — validated as real ISO date-times here so a
+    // malformed value never reaches the store, but never cross-checked against each
+    // other or enforced against joining/starting/reporting.
+    startTime: { type: 'string', format: 'date-time', nullable: true },
+    endTime: { type: 'string', format: 'date-time', nullable: true },
   },
 } as const;
 
 export function registerTournamentRoutes(app: FastifyInstance, manager: TournamentManager, roomManager: RoomManager): void {
-  app.post<{ Body: { name: string; variantId: VariantId } }>(
+  app.post<{ Body: { name: string; variantId: VariantId; startTime?: string | null; endTime?: string | null } }>(
     '/tournaments',
     { schema: { body: createBodySchema } },
     async (request, reply) => {
       const userId = await requireUserId(request, reply);
       if (!userId) return;
-      const tournament = await manager.create(request.body.name.trim(), request.body.variantId, userId);
+      const tournament = await manager.create(request.body.name.trim(), request.body.variantId, userId, {
+        startTime: request.body.startTime,
+        endTime: request.body.endTime,
+      });
       return reply.code(201).send({ tournament });
     },
   );

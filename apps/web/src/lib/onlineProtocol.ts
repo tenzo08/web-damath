@@ -30,6 +30,19 @@ export interface PublicGameView {
   tournamentMatch: { tournamentId: string; round: number; index: number } | null;
 }
 
+/** A tournament, exactly as `tournamentClient.ts`'s `Tournament` shape — duplicated rather than imported (that file's types are for REST responses; this one's for the WS payload) to keep the two boundaries independently editable, same reasoning as `WirePiece`/`PublicGameView` above. */
+export interface WireTournament {
+  id: string;
+  name: string;
+  variantId: VariantId;
+  creatorUserId: string;
+  joinCode: string;
+  participants: string[];
+  status: 'lobby' | 'in_progress' | 'complete';
+  startTime: string | null;
+  endTime: string | null;
+}
+
 export type ServerMessage =
   | { type: 'room_created'; roomId: string; view: PublicGameView }
   | { type: 'joined'; roomId: string; color: Player | null }
@@ -37,7 +50,11 @@ export type ServerMessage =
   | { type: 'queue_cancelled' }
   | { type: 'matched'; roomId: string; color: Player; view: PublicGameView }
   | { type: 'state'; view: PublicGameView }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  /** Broadcast to every connected socket — see ws.ts's `broadcastOnlineCount`. */
+  | { type: 'online_count'; count: number }
+  /** Broadcast to every connected socket whenever any tournament is created, joined, started, or has a result reported (manually or auto-reported) — see manager.ts's `onChange`. */
+  | { type: 'tournament_updated'; tournament: WireTournament };
 
 export type ClientMessage =
   | { type: 'create_room'; variantId: VariantId }

@@ -23,6 +23,9 @@ export interface Tournament {
   participants: string[];
   bracket: Bracket | null;
   status: 'lobby' | 'in_progress' | 'complete';
+  /** ISO 8601, both optional — display metadata only, never enforced (manager.ts). */
+  startTime: string | null;
+  endTime: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,8 +65,13 @@ export function getTournament(id: string): Promise<{ tournament: Tournament; sta
   );
 }
 
-export function createTournament(token: string, name: string, variantId: VariantId): Promise<{ tournament: Tournament }> {
-  return call('/tournaments', token, { method: 'POST', body: JSON.stringify({ name, variantId }) });
+export function createTournament(
+  token: string,
+  name: string,
+  variantId: VariantId,
+  schedule?: { startTime?: string | undefined; endTime?: string | undefined },
+): Promise<{ tournament: Tournament }> {
+  return call('/tournaments', token, { method: 'POST', body: JSON.stringify({ name, variantId, ...schedule }) });
 }
 
 export function joinTournament(token: string, code: string): Promise<{ tournament: Tournament }> {

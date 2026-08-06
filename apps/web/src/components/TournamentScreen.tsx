@@ -14,6 +14,10 @@ interface TournamentScreenProps {
   initialSelectedId?: string | null;
   /** Fires once the match's room has been created — App.tsx switches to OnlineGameScreen with it. */
   onPlayMatch: (tournamentId: string, roomId: string) => void;
+  /** Bumps every time any tournament changes anywhere — App.tsx's `useLiveUpdates`. Triggers a refetch of whatever's currently shown, so a new tournament (or someone else joining/starting one) appears automatically, no manual refresh needed. */
+  tournamentEventCount: number;
+  /** How many users are currently connected — `null` while signed out or still connecting. */
+  onlineCount: number | null;
 }
 
 const cardStyle = {
@@ -61,6 +65,21 @@ function playerLabel(id: string | null, user: AuthUser | null): string {
   return shortId(id);
 }
 
+/** `<input type="datetime-local">` gives `"YYYY-MM-DDTHH:mm"` in the browser's local time zone, with no timezone info — `new Date(...)` interprets that as local time, exactly matching what the user picked, and `.toISOString()` converts it to the UTC the server stores. */
+function localDateTimeToIso(value: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function formatSchedule(startTime: string | null, endTime: string | null): string | null {
+  if (!startTime && !endTime) return null;
+  const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  if (startTime && endTime) return `${fmt(startTime)} – ${fmt(endTime)}`;
+  if (startTime) return `Starts ${fmt(startTime)}`;
+  return `Closes ${fmt(endTime as string)}`;
+}
+
 /**
  * "Play this match" creates a room seated for that exact bracket match and hands off to
  * OnlineGameScreen; once it finishes with a clear winner, apps/server auto-reports the
@@ -98,12 +117,23 @@ function ReportButtons({
   );
 }
 
-export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, initialSelectedId, onPlayMatch }: TournamentScreenProps) {
+export function TournamentScreen({
+  token,
+  user,
+  onBackToLobby,
+  onOpenLogin,
+  initialSelectedId,
+  onPlayMatch,
+  tournamentEventCount,
+  onlineCount,
+}: TournamentScreenProps) {
   const [list, setList] = useState<Tournament[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [detail, setDetail] = useState<{ tournament: Tournament; standings: Standing[] } | null>(null);
   const [name, setName] = useState('');
   const [variantId, setVariantId] = useState<VariantId>('integer');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [reachable, setReachable] = useState(true);
@@ -118,7 +148,11 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
       .catch(() => setReachable(false));
   }
 
-  useEffect(refreshList, []);
+  // `tournamentEventCount` bumps whenever any tournament changes anywhere (App.tsx's
+  // `useLiveUpdates`) — this is what makes a newly-created tournament, or someone else
+  // joining/starting one, "appear automatically to all the users that are online"
+  // instead of needing a manual refresh.
+  useEffect(refreshList, [tournamentEventCount]);
 
   function refreshDetail(id: string) {
     tournamentClient
@@ -130,14 +164,19 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
   useEffect(() => {
     if (selectedId) refreshDetail(selectedId);
     else setDetail(null);
-  }, [selectedId]);
+  }, [selectedId, tournamentEventCount]);
 
   async function handleCreate() {
     if (!token) return;
     setError(null);
     try {
-      const { tournament } = await tournamentClient.createTournament(token, name.trim(), variantId);
+      const { tournament } = await tournamentClient.createTournament(token, name.trim(), variantId, {
+        startTime: localDateTimeToIso(startTime),
+        endTime: localDateTimeToIso(endTime),
+      });
       setName('');
+      setStartTime('');
+      setEndTime('');
       refreshList();
       setSelectedId(tournament.id);
     } catch (err) {
@@ -203,6 +242,12 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
             ← {selectedId ? 'All tournaments' : 'Lobby'}
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Tournaments</h1>
+          {onlineCount !== null && (
+            <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+              {onlineCount} online
+            </span>
+          )}
         </header>
 
         {!reachable && (
@@ -243,6 +288,14 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
                         </option>
                       ))}
                     </select>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                      Starts (optional)
+                      <input type="datetime-local" style={inputStyle} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                      Closes (optional)
+                      <input type="datetime-local" style={inputStyle} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                    </label>
                     <button type="button" onClick={() => void handleCreate()} disabled={!name.trim()} style={primaryButton}>
                       Create
                     </button>
@@ -279,6 +332,9 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
                     >
                       <span>
                         {t.name} · {t.participants.length} player{t.participants.length === 1 ? '' : 's'}
+                        {formatSchedule(t.startTime, t.endTime) && (
+                          <span style={{ color: 'var(--text-muted)' }}> · {formatSchedule(t.startTime, t.endTime)}</span>
+                        )}
                       </span>
                       <span style={{ color: 'var(--text-muted)' }}>{t.status}</span>
                     </button>
@@ -296,6 +352,9 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
               <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
                 Join code <strong>{detail.tournament.joinCode}</strong> · {detail.tournament.participants.length} players ·{' '}
                 {detail.tournament.status}
+                {formatSchedule(detail.tournament.startTime, detail.tournament.endTime) && (
+                  <> · {formatSchedule(detail.tournament.startTime, detail.tournament.endTime)}</>
+                )}
               </p>
               {token && detail.tournament.status === 'lobby' && detail.tournament.creatorUserId === user?.id && (
                 <button

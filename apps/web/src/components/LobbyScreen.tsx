@@ -12,6 +12,8 @@ interface LobbyScreenProps {
   onPlayOnline: () => void;
   onLearn: () => void;
   onTournaments: () => void;
+  /** How many users are currently connected — `null` while signed out or still connecting (App.tsx's `useLiveUpdates`). */
+  onlineCount: number | null;
 }
 
 function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; title: string; description: string; onClick: () => void }) {
@@ -77,6 +79,7 @@ export function LobbyScreen({
   onPlayOnline,
   onLearn,
   onTournaments,
+  onlineCount,
 }: LobbyScreenProps) {
   const { t } = useLocale();
   return (
@@ -87,7 +90,13 @@ export function LobbyScreen({
       <div style={{ width: '100%', maxWidth: 'min(1600px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+            {onlineCount !== null && (
+              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+                {onlineCount} online
+              </span>
+            )}
             <LocaleSwitcher />
             <AuthBar user={user} onSignIn={onSignIn} onSignOut={onSignOut} />
           </div>

@@ -18,17 +18,39 @@ export type JoinResult = { ok: true; tournament: PersistedTournament } | { ok: f
 export type StartResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
 export type ReportResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
 
+export interface TournamentManagerOptions {
+  /**
+   * Fires after every mutation that actually changed a tournament — create, join,
+   * start, or a reported result — regardless of which path triggered it. `app.ts` wires
+   * this to a WS broadcast so every connected client's tournament list/detail can
+   * refresh itself live. A single hook here, rather than a broadcast call at each REST
+   * route, is what guarantees the auto-report path (`RoomManager`'s
+   * `onTournamentMatchFinished`, which calls `reportResult` directly, never through
+   * `routes.ts`) also broadcasts — no call site can forget it.
+   */
+  onChange?: ((tournament: PersistedTournament) => void) | undefined;
+}
+
 /**
  * Teacher-created tournaments with a join code, single-elimination bracket
- * (bracket.ts), and standings. Deliberately not wired to `RoomManager` — reporting a
- * match result is a manual action (by a match participant or the tournament creator),
- * not automatically triggered by a room's game-over event. Documented scope decision,
- * see KNOWLEDGE.md.
+ * (bracket.ts), and standings.
  */
 export class TournamentManager {
-  constructor(private readonly store: TournamentStore) {}
+  constructor(
+    private readonly store: TournamentStore,
+    private readonly options: TournamentManagerOptions = {},
+  ) {}
 
-  async create(name: string, variantId: VariantId, creatorUserId: string): Promise<PersistedTournament> {
+  private notify(tournament: PersistedTournament): void {
+    this.options.onChange?.(tournament);
+  }
+
+  async create(
+    name: string,
+    variantId: VariantId,
+    creatorUserId: string,
+    schedule?: { startTime?: string | null | undefined; endTime?: string | null | undefined },
+  ): Promise<PersistedTournament> {
     const now = new Date().toISOString();
     const tournament: PersistedTournament = {
       id: randomUUID(),
@@ -39,10 +61,13 @@ export class TournamentManager {
       participants: [creatorUserId],
       bracket: null,
       status: 'lobby',
+      startTime: schedule?.startTime ?? null,
+      endTime: schedule?.endTime ?? null,
       createdAt: now,
       updatedAt: now,
     };
     await this.store.create(tournament);
+    this.notify(tournament);
     return tournament;
   }
 
@@ -57,6 +82,7 @@ export class TournamentManager {
       updatedAt: new Date().toISOString(),
     };
     await this.store.update(updated);
+    this.notify(updated);
     return { ok: true, tournament: updated };
   }
 
@@ -70,6 +96,7 @@ export class TournamentManager {
     const bracket = generateBracket(tournament.participants);
     const updated: PersistedTournament = { ...tournament, bracket, status: 'in_progress', updatedAt: new Date().toISOString() };
     await this.store.update(updated);
+    this.notify(updated);
     return { ok: true, tournament: updated };
   }
 
@@ -94,6 +121,7 @@ export class TournamentManager {
       updatedAt: new Date().toISOString(),
     };
     await this.store.update(updated);
+    this.notify(updated);
     return { ok: true, tournament: updated };
   }
 

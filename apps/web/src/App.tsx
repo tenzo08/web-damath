@@ -6,6 +6,7 @@ import { useGame } from './hooks/useGame';
 import { useComputerOpponent } from './hooks/useComputerOpponent';
 import { useGameClock } from './hooks/useGameClock';
 import { useAuth } from './hooks/useAuth';
+import { useLiveUpdates } from './hooks/useLiveUpdates';
 import { Board } from './components/Board';
 import { Rail } from './components/Rail';
 import { ScorePanel } from './components/ScorePanel';
@@ -305,6 +306,11 @@ function AppShell() {
   // still needs to offer both.
   const [setupFixedKind, setSetupFixedKind] = useState<'friend' | 'computer' | undefined>(undefined);
   const auth = useAuth();
+  // A second, independent /ws connection from the one useOnlineGame opens while
+  // actually playing — active whenever signed in, regardless of which screen is showing,
+  // so the online count and "a tournament changed" signal are available on the lobby and
+  // tournaments screen without needing to be inside a game.
+  const live = useLiveUpdates(auth.token);
   const integerVariant = asIntegerVariant(variant);
 
   function enterGame(newVariant: AnyVariant, opponent: OpponentChoice) {
@@ -355,6 +361,7 @@ function AppShell() {
           onPlayOnline={() => setScreen('online')}
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => setScreen('tournaments')}
+          onlineCount={live.onlineCount}
         />
       )}
 
@@ -375,6 +382,8 @@ function AppShell() {
           token={auth.token}
           user={auth.user}
           initialSelectedId={tournamentContext?.tournamentId ?? null}
+          tournamentEventCount={live.tournamentEventCount}
+          onlineCount={live.onlineCount}
           onPlayMatch={(tournamentId, roomId) => {
             setTournamentContext({ tournamentId, roomId });
             setScreen('online');

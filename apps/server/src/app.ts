@@ -89,9 +89,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     app.get('/health', async () => ({ status: 'ok' }));
 
-    const tournamentManager = new TournamentManager(options.tournamentStore);
+    // `TournamentManager` needs `broadcastToAll` (from `registerGameSocket`, below) to
+    // push live updates; `registerGameSocket` needs `tournamentManager.reportResult`
+    // (via `onTournamentMatchFinished`) to auto-report a finished match — a genuine
+    // circular dependency between the two, broken with a ref box (`.current` mutated
+    // once, right after `registerGameSocket` returns; `broadcastRef` itself never
+    // reassigned). `onChange` is never actually *called* until some later tournament
+    // mutation happens, by which point `.current` is always set.
+    const broadcastRef: { current: ((message: unknown) => void) | undefined } = { current: undefined };
 
-    const roomManager = registerGameSocket(app, {
+    const tournamentManager = new TournamentManager(options.tournamentStore, {
+      onChange: (tournament) => broadcastRef.current?.({ type: 'tournament_updated', tournament }),
+    });
+
+    const gameSocket = registerGameSocket(app, {
       gameStore: options.gameStore,
       queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
       queueBotEnabled: options.queueBotEnabled ?? true,
@@ -106,9 +117,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
         await tournamentManager.reportResult(ref.tournamentId, ref.round, ref.index, winnerUserId, winnerUserId).catch(() => {});
       },
     });
-    app.decorate('roomManager', roomManager);
+    broadcastRef.current = gameSocket.broadcastToAll;
+    app.decorate('roomManager', gameSocket.roomManager);
 
-    registerTournamentRoutes(app, tournamentManager, roomManager);
+    registerTournamentRoutes(app, tournamentManager, gameSocket.roomManager);
   });
 
   return app;

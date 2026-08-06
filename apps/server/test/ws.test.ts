@@ -24,17 +24,44 @@ async function signupToken(email: string): Promise<string> {
   return (res.json() as { token: string }).token;
 }
 
+/** Resolves once connected *and* past the connection-time `online_count` message every `/ws` handshake now sends — callers that don't care about it (most of this file) shouldn't need to know it exists. */
 function connect(token: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`${baseUrl}/ws?token=${token}`);
-    socket.once('open', () => resolve(socket));
+    socket.once('open', () => {
+      socket.once('message', (raw: Buffer) => {
+        const first = JSON.parse(raw.toString()) as { type: string };
+        if (first.type !== 'online_count') throw new Error(`expected the first message to be online_count, got ${first.type}`);
+        resolve(socket);
+      });
+    });
     socket.once('error', reject);
   });
 }
 
+/** Skips `online_count` broadcasts transparently — they can arrive at any moment as other sockets in the same test connect/disconnect, and are irrelevant noise for every test in this file except the dedicated one below (which uses `waitFor` instead). */
 function nextMessage(socket: WebSocket): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
-    socket.once('message', (raw: Buffer) => resolve(JSON.parse(raw.toString()) as Record<string, unknown>));
+    function handler(raw: Buffer) {
+      const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+      if (msg.type === 'online_count') return;
+      socket.off('message', handler);
+      resolve(msg);
+    }
+    socket.on('message', handler);
+  });
+}
+
+function waitFor(socket: WebSocket, predicate: (msg: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    function handler(raw: Buffer) {
+      const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+      if (predicate(msg)) {
+        socket.off('message', handler);
+        resolve(msg);
+      }
+    }
+    socket.on('message', handler);
   });
 }
 
@@ -84,5 +111,28 @@ describe('the /ws game protocol', () => {
     expect(result).toEqual({ type: 'error', message: 'illegal move' });
 
     socket.close();
+  });
+});
+
+describe('the online-user count', () => {
+  it('broadcasts to everyone as users connect and disconnect, counting each user once regardless of tabs', async () => {
+    const [tokenA, tokenB] = await Promise.all([signupToken('online-a@example.com'), signupToken('online-b@example.com')]);
+    // connect() already asserts the very first message on each socket is online_count.
+    const socketA = await connect(tokenA);
+
+    const nextCountOnA = waitFor(socketA, (m) => m.type === 'online_count');
+    const socketB = await connect(tokenB);
+    expect(await nextCountOnA).toMatchObject({ count: 2 });
+
+    // A second tab for the same already-online user doesn't change the distinct-user
+    // count, so it shouldn't trigger a broadcast to anyone else either.
+    const socketA2 = await connect(tokenA);
+
+    const nextCountOnA2 = waitFor(socketA2, (m) => m.type === 'online_count');
+    socketB.close();
+    expect(await nextCountOnA2).toMatchObject({ count: 1 });
+
+    socketA.close();
+    socketA2.close();
   });
 });

@@ -45,6 +45,49 @@ describe('POST /tournaments', () => {
     const res = await app.inject({ method: 'POST', url: '/tournaments', payload: { name: 'x', variantId: 'integer' } });
     expect(res.statusCode).toBe(401);
   });
+
+  it('persists an optional start/end schedule, display metadata only — not enforced against joining or starting', async () => {
+    const token = await signupToken('scheduler@example.com');
+    const startTime = '2026-09-01T08:00:00.000Z';
+    const endTime = '2026-09-01T17:00:00.000Z';
+    const res = await app.inject({
+      method: 'POST',
+      url: '/tournaments',
+      headers: auth(token),
+      payload: { name: 'Scheduled Cup', variantId: 'integer', startTime, endTime },
+    });
+    expect(res.statusCode).toBe(201);
+    const { tournament } = res.json() as { tournament: { startTime: string | null; endTime: string | null } };
+    expect(tournament.startTime).toBe(startTime);
+    expect(tournament.endTime).toBe(endTime);
+
+    const fetched = await app.inject({ method: 'GET', url: `/tournaments/${(res.json() as { tournament: { id: string } }).tournament.id}` });
+    expect((fetched.json() as { tournament: { startTime: string } }).tournament.startTime).toBe(startTime);
+  });
+
+  it('rejects a malformed schedule timestamp', async () => {
+    const token = await signupToken('badschedule@example.com');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/tournaments',
+      headers: auth(token),
+      payload: { name: 'x', variantId: 'integer', startTime: 'not-a-date' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('defaults to no schedule when none is given', async () => {
+    const token = await signupToken('noschedule@example.com');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/tournaments',
+      headers: auth(token),
+      payload: { name: 'x', variantId: 'integer' },
+    });
+    const { tournament } = res.json() as { tournament: { startTime: string | null; endTime: string | null } };
+    expect(tournament.startTime).toBeNull();
+    expect(tournament.endTime).toBeNull();
+  });
 });
 
 describe('joining and starting', () => {

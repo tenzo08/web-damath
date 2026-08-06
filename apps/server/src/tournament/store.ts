@@ -13,6 +13,9 @@ export interface PersistedTournament {
   readonly participants: readonly string[];
   readonly bracket: Bracket | null;
   readonly status: 'lobby' | 'in_progress' | 'complete';
+  /** ISO 8601 timestamps, both optional — display metadata only, not enforced server-side (joining/starting/reporting a result never checks these). Neither field changes `status`: a tournament past its `endTime` doesn't auto-complete, since Damath's rules don't define what "closing" a tournament mid-bracket should even do to unplayed matches. */
+  readonly startTime: string | null;
+  readonly endTime: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

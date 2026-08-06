@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { GoogleSignInButton, googleSignInConfigured } from './GoogleSignInButton';
-import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import { forgotPassword, type GooglePendingSignup } from '../lib/authClient';
 
 interface LoginModalProps {
@@ -235,11 +234,6 @@ export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onC
               ← Back to sign in
             </button>
           )}
-
-          <p style={{ margin: 0, fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>
-            Signing in is only needed for online multiplayer and match history — local play never requires it. Talks to{' '}
-            <code>{SERVER_HTTP_URL}</code>.
-          </p>
         </form>
       )}
     </Modal>

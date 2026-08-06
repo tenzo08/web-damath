@@ -4,6 +4,7 @@ import type { DifficultyTier } from '@damath/ai';
 import { buildApp } from './app.js';
 import { FileUserStore } from './auth/store.js';
 import { FileGameStore } from './game/store.js';
+import { FileTournamentStore } from './tournament/store.js';
 
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) {
@@ -13,6 +14,7 @@ if (!jwtSecret) {
 const dataDir = process.env.DATA_DIR ?? fileURLToPath(new URL('../data', import.meta.url));
 const userStore = new FileUserStore(path.join(dataDir, 'users.json'));
 const gameStore = new FileGameStore(path.join(dataDir, 'games.json'));
+const tournamentStore = new FileTournamentStore(path.join(dataDir, 'tournaments.json'));
 
 const TIERS: readonly DifficultyTier[] = ['learner', 'steady', 'sharp', 'tournament'];
 function readTier(value: string | undefined, fallback: DifficultyTier): DifficultyTier {
@@ -23,6 +25,7 @@ const app = buildApp({
   jwtSecret,
   userStore,
   gameStore,
+  tournamentStore,
   logger: true,
   // docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants.
   queueBotTimeoutMs: process.env.QUEUE_BOT_TIMEOUT_MS ? Number(process.env.QUEUE_BOT_TIMEOUT_MS) : undefined,

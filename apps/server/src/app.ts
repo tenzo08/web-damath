@@ -8,6 +8,9 @@ import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import type { GameStore } from './game/store.js';
 import type { RoomManager } from './game/rooms.js';
+import { registerTournamentRoutes } from './tournament/routes.js';
+import { TournamentManager } from './tournament/manager.js';
+import type { TournamentStore } from './tournament/store.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -20,6 +23,7 @@ export interface AppOptions {
   jwtSecret: string;
   userStore: UserStore;
   gameStore: GameStore;
+  tournamentStore: TournamentStore;
   /** docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants. Defaults match the doc's table. */
   queueBotTimeoutMs?: number | undefined;
   queueBotEnabled?: boolean | undefined;
@@ -62,6 +66,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
     queueBotTier: options.queueBotTier ?? 'steady',
   });
   app.decorate('roomManager', roomManager);
+
+  const tournamentManager = new TournamentManager(options.tournamentStore);
+  registerTournamentRoutes(app, tournamentManager);
 
   return app;
 }

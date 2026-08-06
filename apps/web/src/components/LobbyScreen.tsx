@@ -12,6 +12,7 @@ interface LobbyScreenProps {
   onPlayOnline: () => void;
   onLearn: () => void;
   onTournaments: () => void;
+  onPuzzles: () => void;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled, same reasoning as `ProfileStrip`. */
   onMatchHistory: (() => void) | null;
   /** `null` when signed out, same reasoning as `onMatchHistory`. */
@@ -136,6 +137,7 @@ export function LobbyScreen({
   onPlayOnline,
   onLearn,
   onTournaments,
+  onPuzzles,
   onMatchHistory,
   onSpectate,
   onlineCount,
@@ -199,6 +201,7 @@ export function LobbyScreen({
           <ModeCard icon="🤖" title={t('lobby.playComputer.title')} description={t('lobby.playComputer.description')} onClick={onPlayComputer} />
           <ModeCard icon="🌐" title={t('lobby.playOnline.title')} description={t('lobby.playOnline.description')} onClick={onPlayOnline} />
           <ModeCard icon="🎓" title={t('lobby.learn.title')} description={t('lobby.learn.description')} onClick={onLearn} />
+          <ModeCard icon="🧩" title={t('lobby.puzzles.title')} description={t('lobby.puzzles.description')} onClick={onPuzzles} />
           <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
           {onMatchHistory && (
             <ModeCard icon="📜" title={t('lobby.matchHistory.title')} description={t('lobby.matchHistory.description')} onClick={onMatchHistory} />

@@ -51,9 +51,11 @@ export interface MiniSquareSpec {
   playable?: boolean;
   /** A short caption drawn over the square corner — the tutorial uses this for step numbers/arrows ("1", "2", "→"). */
   badge?: string;
+  /** Set only by an interactive caller (PuzzleScreen) — every other use of this component stays a static, non-interactive diagram. */
+  onActivate?: (() => void) | undefined;
 }
 
-export function MiniSquareView({ operation, piece, highlight, playable = true, badge }: MiniSquareSpec) {
+export function MiniSquareView({ operation, piece, highlight, playable = true, badge, onActivate }: MiniSquareSpec) {
   if (!playable) {
     return <div style={{ background: 'var(--square-void)', aspectRatio: '1' }} />;
   }
@@ -63,6 +65,19 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
 
   return (
     <div
+      role={onActivate ? 'button' : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate}
+      onKeyDown={
+        onActivate
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onActivate();
+              }
+            }
+          : undefined
+      }
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -71,6 +86,7 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
         position: 'relative',
         background,
         boxShadow: highlight === 'selected' ? 'inset 0 0 0 2px var(--accent)' : undefined,
+        cursor: onActivate ? 'pointer' : undefined,
       }}
     >
       {piece ? (

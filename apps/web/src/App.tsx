@@ -26,6 +26,7 @@ import { OnlineGameScreen } from './components/OnlineGameScreen';
 import { TournamentScreen } from './components/TournamentScreen';
 import { MatchHistoryScreen } from './components/MatchHistoryScreen';
 import { SpectateScreen } from './components/SpectateScreen';
+import { PuzzleScreen } from './components/PuzzleScreen';
 import { playerLabel } from './lib/notation';
 import { verifyEmail } from './lib/authClient';
 import { asIntegerVariant } from './lib/integer-variant';
@@ -303,7 +304,7 @@ function GenericGameShell<V>({ variant, flipped, onFlip, nav }: { variant: Varia
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles';
 
 function AppShell() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
@@ -420,12 +421,15 @@ function AppShell() {
           onPlayOnline={() => setScreen('online')}
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => setScreen('tournaments')}
+          onPuzzles={() => setScreen('puzzles')}
           onMatchHistory={auth.user ? () => setScreen('history') : null}
           onSpectate={auth.user ? () => setScreen('spectate') : null}
           onlineCount={live.onlineCount}
           onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
+
+      {screen === 'puzzles' && <PuzzleScreen onBackToLobby={() => setScreen('lobby')} />}
 
       {screen === 'online' && (
         <OnlineGameScreen

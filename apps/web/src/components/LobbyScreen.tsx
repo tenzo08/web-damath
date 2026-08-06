@@ -37,6 +37,8 @@ function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; titl
         flexDirection: 'column',
         gap: 'var(--gap-sm)',
         minHeight: 160,
+        flex: '0 1 260px',
+        minWidth: 220,
       }}
     >
       <span aria-hidden="true" style={{ fontSize: 'var(--fs-display)' }}>
@@ -91,36 +93,56 @@ export function LobbyScreen({
 }: LobbyScreenProps) {
   const { t } = useLocale();
   return (
-    <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
+    // `<main>` is a column: the header stays pinned at the top (natural for a
+    // persistent nav element), and the tagline+card cluster below it centers in
+    // whatever space is left — rather than everything packed at the top with a large
+    // dead void underneath on any screen taller than the content needs (found by
+    // actually rendering this at 1280x900: the old single-column layout left the
+    // bottom two-thirds of the viewport empty).
+    <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-xl)' }}>
       {/* A generous soft ceiling (`min()`), not a fixed cap — fills the available viewport
           on any realistic screen instead of leaving large dead margins at 100% zoom, while
           still stopping short of absurd line lengths on an ultrawide monitor. */}
-      <div style={{ width: '100%', maxWidth: 'min(1600px, 96vw)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-xl)' }}>
-        <header style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
-            <ProfileButton user={user} onOpenSettings={onOpenSettings} onSignIn={onSignIn} />
-            <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
-            {onlineCount !== null && (
-              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
-                {onlineCount} online
-              </span>
-            )}
-            <LocaleSwitcher />
-          </div>
-        </header>
+      <header style={{ width: '100%', maxWidth: 'min(1600px, 96vw)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+          <ProfileButton user={user} onOpenSettings={onOpenSettings} onSignIn={onSignIn} />
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+          {onlineCount !== null && (
+            <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+              {onlineCount} online
+            </span>
+          )}
+          <LocaleSwitcher />
+        </div>
+      </header>
 
+      <div
+        style={{
+          flex: 1,
+          width: '100%',
+          maxWidth: 'min(1600px, 96vw)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 'var(--gap-xl)',
+        }}
+      >
         <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560, textAlign: 'center' }}>{t('lobby.tagline')}</p>
 
-        {/* A fixed card width (not `1fr`) plus a centered grid — on a wide screen the
-            cards form a tidy, evenly-sized cluster in the middle instead of stretching
-            edge-to-edge just because the viewport happens to be wide. */}
+        {/* Wrapping flexbox, not CSS grid — a grid's `justifyContent: center` only
+            centers the whole column-track block, not an incomplete last row (found by
+            actually rendering seven cards in a four-column grid: the fifth/sixth cards
+            sat left-aligned under the first row instead of centered as their own pair,
+            reading as more dead space). Flex-wrap centers every row independently, the
+            fifth/sixth/seventh cards included. */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 260px))',
+            display: 'flex',
+            flexWrap: 'wrap',
             justifyContent: 'center',
             gap: 'var(--gap-lg)',
             width: '100%',

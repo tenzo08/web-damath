@@ -37,7 +37,12 @@
 
   --square-void: #101014;
   --square-play: #1c1c23;
-  --square-op: #4a4a55;
+  /* WCAG AA needs 4.5:1 for text this size (20px, weight 500 doesn't clear the "large
+     text" bold/size threshold) -- the original #4a4a55 measured 1.94:1 against
+     --square-play, verified live in a real browser, not assumed. #8f8fa0 measures
+     5.33:1, comfortably over the line while staying a muted "printed on the board"
+     gray rather than a bright highlight. */
+  --square-op: #8f8fa0;
   --square-legal: rgba(227, 179, 65, 0.14);
   --square-last: rgba(127, 166, 201, 0.1);
 
@@ -110,7 +115,9 @@
 
   --square-void: #e6e6ea;
   --square-play: #fafafc;
-  --square-op: #a8a8b2;
+  /* Same fix as the dark theme's --square-op: the original #a8a8b2 measured ~2.26:1
+     against --square-play, well under WCAG AA's 4.5:1. #6e6e7c measures 4.81:1. */
+  --square-op: #6e6e7c;
   --square-legal: rgba(156, 107, 10, 0.14);
   --square-last: rgba(63, 111, 150, 0.12);
 }

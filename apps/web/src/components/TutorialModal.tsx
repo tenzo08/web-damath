@@ -89,12 +89,12 @@ const STEPS: Step[] = [
   {
     title: '6. Promotion to Dama',
     board: [
-      [{ highlight: 'legal', playable: true }, VOID, { playable: true }, VOID],
-      [VOID, { piece: { owner: 'white', label: '9' } }, VOID, { playable: true }],
+      [{ playable: true, piece: { owner: 'white', label: '9', isDama: true } }, VOID, { playable: true }, VOID],
+      [VOID, { playable: true }, VOID, { playable: true }],
       [{ playable: true }, VOID, { playable: true }, VOID],
       [VOID, { playable: true }, VOID, { playable: true }],
     ],
-    boardLabel: 'Reaching the far row promotes an ordinary chip to a Dama (the ring).',
+    boardLabel: 'A chip that reached the far row — now a Dama, shown as a ring around it.',
     body: [
       'A chip that reaches the opponent\'s home row promotes to a Dama — shown as a ring around the chip, never a crown.',
       'A Dama moves and captures any distance along a diagonal, like a checkers king, and only promotes by stopping on that row — passing through it mid-chain does not count.',

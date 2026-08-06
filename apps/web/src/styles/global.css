@@ -6,8 +6,21 @@
   box-sizing: border-box;
 }
 
+/* `height: 100%` on html/body, not `min-height` -- a percentage `min-height` doesn't
+   reliably resolve through the html -> body -> #root chain (confirmed live: #root's
+   rendered height collapsed to its own content's height, well short of the viewport,
+   leaving large dead space below short pages like the lobby). `height: 100%` here is
+   safe from the earlier clipping concern that motivated `min-height`: `overflow` stays
+   at its default `visible`, so a page taller than the viewport still grows and scrolls
+   normally -- verified against both a short page (lobby) and one taller than the
+   viewport (a long modal). `#root` keeps `min-height: 100%` deliberately: it's the one
+   layer that actually needs to grow past the viewport for tall content, while still
+   filling it exactly for short content. */
 html,
-body,
+body {
+  height: 100%;
+}
+
 #root {
   min-height: 100%;
 }
@@ -23,8 +36,7 @@ body {
 }
 
 /* The whole page scrolls as one region — no nested scrollbars inside the rail or the
-   game column. A fixed `height: 100%` on the root elements clipped content instead of
-   growing with it; `min-height` lets the page be exactly as tall as it needs to be. */
+   game column. */
 #root {
   display: flex;
   flex-direction: column;

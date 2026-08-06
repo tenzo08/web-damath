@@ -23,6 +23,7 @@ import { OnlineGameScreen } from './components/OnlineGameScreen';
 import { TournamentScreen } from './components/TournamentScreen';
 import { playerLabel } from './lib/notation';
 import { asIntegerVariant } from './lib/integer-variant';
+import { LocaleProvider } from './lib/i18n';
 
 /** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses." */
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -274,7 +275,7 @@ function GenericGameShell<V>({ variant, flipped, onFlip, nav }: { variant: Varia
 
 type Screen = 'lobby' | 'game' | 'online' | 'tournaments';
 
-export function App() {
+function AppShell() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
   if (!defaultVariant) {
     throw new Error('unreachable: ALL_VARIANTS always includes Whole Damath');
@@ -392,5 +393,13 @@ export function App() {
         initialOpponent={setupInitial.opponent}
       />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <LocaleProvider>
+      <AppShell />
+    </LocaleProvider>
   );
 }

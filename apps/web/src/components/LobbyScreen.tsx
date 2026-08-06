@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AuthUser } from '../lib/authClient';
+import { useLocale, type Locale } from '../lib/i18n';
 import { AuthBar } from './AuthBar';
 
 interface LobbyScreenProps {
@@ -40,6 +41,32 @@ function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; titl
   );
 }
 
+const LOCALE_LABEL: Record<Locale, string> = { en: 'EN', fil: 'FIL' };
+
+function LocaleSwitcher() {
+  const { locale, setLocale } = useLocale();
+  const other: Locale = locale === 'en' ? 'fil' : 'en';
+  return (
+    <button
+      type="button"
+      onClick={() => setLocale(other)}
+      aria-label={`Switch language to ${LOCALE_LABEL[other]}`}
+      style={{
+        background: 'transparent',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        color: 'var(--text-secondary)',
+        fontSize: 'var(--fs-micro)',
+        fontWeight: 700,
+        padding: '4px 8px',
+        cursor: 'pointer',
+      }}
+    >
+      {LOCALE_LABEL[locale]}
+    </button>
+  );
+}
+
 /** The landing screen — chess.com-style mode selection instead of dropping straight into a board. */
 export function LobbyScreen({
   user,
@@ -51,40 +78,26 @@ export function LobbyScreen({
   onLearn,
   onTournaments,
 }: LobbyScreenProps) {
+  const { t } = useLocale();
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
-          <AuthBar user={user} onSignIn={onSignIn} onSignOut={onSignOut} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+            <LocaleSwitcher />
+            <AuthBar user={user} onSignIn={onSignIn} onSignOut={onSignOut} />
+          </div>
         </header>
 
-        <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560 }}>
-          The Filipino educational board game — Dama plus Mathematics. Capture is mandatory, scoring runs through the
-          landing square's operation, and reaching the far row promotes a chip to a Dama.
-        </p>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560 }}>{t('lobby.tagline')}</p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--gap-lg)' }}>
-          <ModeCard icon="👥" title="Play a Friend" description="Local, pass-and-play — two players, one board, any variant." onClick={onPlayFriend} />
-          <ModeCard
-            icon="🤖"
-            title="Play the Computer"
-            description="Minimax with four difficulty tiers — Whole, Counting, and Integer Damath."
-            onClick={onPlayComputer}
-          />
-          <ModeCard
-            icon="🌐"
-            title="Play Online"
-            description="Matched with a real opponent, or a labelled computer if no one's waiting."
-            onClick={onPlayOnline}
-          />
-          <ModeCard icon="🎓" title="Learn to Play" description="An interactive, illustrated walkthrough of every rule." onClick={onLearn} />
-          <ModeCard
-            icon="🏆"
-            title="Tournaments"
-            description="Teacher-created brackets with a join code — create one, join one, or watch the standings."
-            onClick={onTournaments}
-          />
+          <ModeCard icon="👥" title={t('lobby.playFriend.title')} description={t('lobby.playFriend.description')} onClick={onPlayFriend} />
+          <ModeCard icon="🤖" title={t('lobby.playComputer.title')} description={t('lobby.playComputer.description')} onClick={onPlayComputer} />
+          <ModeCard icon="🌐" title={t('lobby.playOnline.title')} description={t('lobby.playOnline.description')} onClick={onPlayOnline} />
+          <ModeCard icon="🎓" title={t('lobby.learn.title')} description={t('lobby.learn.description')} onClick={onLearn} />
+          <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
         </div>
       </div>
     </main>

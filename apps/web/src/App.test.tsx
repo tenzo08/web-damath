@@ -59,6 +59,21 @@ describe('the lobby', () => {
     expect(screen.getByRole('heading', { name: 'Damath' })).toBeInTheDocument();
   });
 
+  it('the locale switcher translates the lobby into Filipino and back, persisting the choice', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByRole('button', { name: /^Play a Friend/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Switch language to FIL' }));
+
+    expect(screen.getByRole('button', { name: /^Laro Kasama ang Kaibigan/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Play a Friend/ })).not.toBeInTheDocument();
+    expect(localStorage.getItem('damath.locale')).toBe('fil');
+
+    await user.click(screen.getByRole('button', { name: 'Switch language to EN' }));
+    expect(screen.getByRole('button', { name: /^Play a Friend/ })).toBeInTheDocument();
+  });
+
   it('"Play the Computer" opens a setup step — the player must choose a difficulty before the game starts', async () => {
     const user = userEvent.setup();
     render(<App />);

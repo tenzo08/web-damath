@@ -20,5 +20,8 @@ if (!window.matchMedia) {
 
 afterEach(() => {
   cleanup();
+  // Real localStorage writes now happen in tests (auth token, locale preference) —
+  // without this, one test's localStorage state leaks into the next render(<App />).
+  localStorage.clear();
 });
 

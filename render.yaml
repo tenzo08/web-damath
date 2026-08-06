@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: damath-server
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm -F @damath/server start
+    healthCheckPath: /health
+    envVars:
+      # Generated once by Render on first deploy — never committed, never a default.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 3001
+      # Set to the deployed web app's real origin after the first deploy — see
+      # apps/server/src/app.ts's corsOrigin option.
+      - key: CORS_ORIGIN
+        sync: false
+      - key: QUEUE_BOT_TIER
+        value: steady
+      - key: QUEUE_BOT_TIMEOUT_MS
+        value: '45000'

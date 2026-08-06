@@ -4,7 +4,7 @@ import type { AnyVariant, Move, Player, Variant, VariantId } from '@damath/engin
 import { botThinkDelayMs, computeBotMove } from './bot.js';
 import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandle, type TournamentMatchRef } from './room.js';
 import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
-import { findIntegerVariant, findVariant } from './variants.js';
+import { findVariant } from './variants.js';
 import type { UserStore } from '../auth/store.js';
 import type { ModerationStore } from '../moderation/store.js';
 import { BOT_TIER_RATING, nextRating, nextRatings } from '../rating/elo.js';
@@ -119,7 +119,7 @@ export class RoomManager {
     return { ok: true, room, color };
   }
 
-  /** docs/AI_OPPONENT.md §9. Pairs immediately with another queued player wanting the same variant, else starts a bot-fallback timer (only for AI-supported variants). */
+  /** docs/AI_OPPONENT.md §9. Pairs immediately with another queued player wanting the same variant, else starts a bot-fallback timer. Every variant has an AI now (valueScale.ts's `ToNumber<V>` bridge), so the fallback is no longer restricted to the three integer variants. */
   async enqueue(userId: string, variantId: VariantId): Promise<EnqueueResult> {
     this.cancelQueue(userId);
 
@@ -136,10 +136,10 @@ export class RoomManager {
     }
 
     const entry: QueueEntry = { userId, variantId, declined: false, timer: null };
-    const integerVariant = findIntegerVariant(variantId);
-    if (this.options.queueBotEnabled && integerVariant) {
+    const variant = findVariant(variantId);
+    if (this.options.queueBotEnabled && variant) {
       entry.timer = setTimeout(() => {
-        void this.fallBackToBot(userId, integerVariant);
+        void this.fallBackToBot(userId, variant);
       }, this.options.queueBotTimeoutMs);
     }
     this.queue.set(userId, entry);
@@ -255,7 +255,7 @@ export class RoomManager {
     }
   }
 
-  private async fallBackToBot(userId: string, variant: Variant<number>): Promise<void> {
+  private async fallBackToBot(userId: string, variant: AnyVariant): Promise<void> {
     const entry = this.queue.get(userId);
     if (!entry || entry.declined) return;
     this.queue.delete(userId);
@@ -309,7 +309,7 @@ export class RoomManager {
     return handle;
   }
 
-  private async persistAndInstantiateBot(variant: Variant<number>, humanUserId: string): Promise<RoomHandle> {
+  private async persistAndInstantiateBot(variant: AnyVariant, humanUserId: string): Promise<RoomHandle> {
     const id = randomUUID();
     const now = new Date().toISOString();
     const persisted: PersistedGame = {
@@ -335,8 +335,8 @@ export class RoomManager {
   private hydrate(persisted: PersistedGame): RoomHandle {
     let handle: RoomHandle;
     if (persisted.opponentType === 'bot') {
-      const variant = findIntegerVariant(persisted.variantId);
-      if (!variant) throw new Error(`persisted bot room has non-integer variant ${persisted.variantId}`);
+      const variant = findVariant(persisted.variantId);
+      if (!variant) throw new Error(`unknown variant id ${persisted.variantId}`);
       handle = this.instantiateBot(persisted, variant, persisted.botTier ?? this.options.queueBotTier);
     } else {
       const variant = findVariant(persisted.variantId);
@@ -376,18 +376,21 @@ export class RoomManager {
     });
   }
 
-  private instantiateBot(persisted: PersistedGame, variant: Variant<number>, tier: string): RoomHandle {
-    return createRoomHandle<number>({
+  private instantiateBot(persisted: PersistedGame, variant: AnyVariant, tier: string): RoomHandle {
+    type V = ValueOf<AnyVariant>;
+    // Same JSON-boundary trust point as instantiateHuman -- `variant` and
+    // `persisted.moveHistory` are re-united with a concrete `V` here.
+    return createRoomHandle<V>({
       id: persisted.id,
-      variant,
+      variant: variant as Variant<V>,
       players: persisted.players,
       opponentType: 'bot',
       botTier: tier,
       tournamentMatch: null,
-      initialMoveHistory: persisted.moveHistory as Move<number>[],
+      initialMoveHistory: persisted.moveHistory as Move<V>[],
       initialResignedBy: persisted.resignedBy,
       initialDrawnByAgreement: persisted.drawnByAgreement,
-      chooseBotMove: (game) => computeBotMove(game, tier as DifficultyTier),
+      chooseBotMove: (game) => computeBotMove<V>(game, tier as DifficultyTier),
       onPersist: async (moveHistory, status, resignedBy, drawnByAgreement, players) => {
         await this.options.gameStore.update({
           ...persisted,

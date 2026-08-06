@@ -312,12 +312,17 @@ describe('matchmaking', () => {
     expect(matched[0]?.view.players.black).toBe('bot');
   });
 
-  it('never falls back to a bot for a variant the AI cannot play', async () => {
+  it('also falls back to a bot for a non-integer variant (valueScale.ts extends the AI to every variant)', async () => {
     const manager = makeManager({ queueBotTimeoutMs: 20 });
-    await manager.enqueue('lonely-user', 'radical');
-
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const result = await manager.enqueue('lonely-user', 'radical');
+    expect(result).toEqual({ status: 'queued' });
     expect(matched).toHaveLength(0);
+
+    await waitFor(() => matched.length === 1);
+
+    expect(matched[0]).toMatchObject({ userId: 'lonely-user', color: 'white' });
+    expect(matched[0]?.view.opponentType).toBe('bot');
+    expect(matched[0]?.view.players.black).toBe('bot');
   });
 
   it('"keep waiting" (declineBot) cancels the fallback without leaving the queue', async () => {

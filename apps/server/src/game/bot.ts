@@ -22,7 +22,7 @@ export function botThinkDelayMs(tier: DifficultyTier): number {
  * Web Worker adapter) is the natural next step and is isolated entirely behind this one
  * function — nothing else in `apps/server` needs to change when that lands.
  */
-export function computeBotMove(state: GameState<number>, tier: DifficultyTier, seed?: number): Move<number> {
+export function computeBotMove<V>(state: GameState<V>, tier: DifficultyTier, seed?: number): Move<V> {
   const options = seed === undefined ? tierOptions(tier) : tierOptions(tier, seed);
   return chooseMove(state, options).move;
 }

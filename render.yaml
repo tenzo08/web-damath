@@ -8,6 +8,17 @@ services:
     startCommand: pnpm -F @damath/server start
     healthCheckPath: /health
     envVars:
+      # Works around a real Render build failure: `corepack enable` fails with "Cannot
+      # find matching keyid" because the corepack bundled with the pinned Node version
+      # (.node-version) has a stale npm-registry signing-key set (nodejs/corepack#625 —
+      # this hits many CI/host providers, not specific to this repo). Setting this to
+      # '0' skips corepack's signature check on the pnpm binary it fetches. That's a
+      # real, understood tradeoff (not "no risk") in exchange for not having to change
+      # buildCommand to upgrade corepack itself first. `pnpm install --frozen-lockfile`
+      # right after it still verifies every dependency against the committed lockfile,
+      # so this only weakens the one link in the chain: corepack's own download of pnpm.
+      - key: COREPACK_INTEGRITY_KEYS
+        value: '0'
       # Generated once by Render on first deploy — never committed, never a default.
       - key: JWT_SECRET
         generateValue: true

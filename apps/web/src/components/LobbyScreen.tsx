@@ -10,6 +10,7 @@ interface LobbyScreenProps {
   onPlayComputer: () => void;
   onPlayOnline: () => void;
   onLearn: () => void;
+  onTournaments: () => void;
 }
 
 function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; title: string; description: string; onClick: () => void }) {
@@ -40,7 +41,16 @@ function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; titl
 }
 
 /** The landing screen — chess.com-style mode selection instead of dropping straight into a board. */
-export function LobbyScreen({ user, onSignIn, onSignOut, onPlayFriend, onPlayComputer, onPlayOnline, onLearn }: LobbyScreenProps) {
+export function LobbyScreen({
+  user,
+  onSignIn,
+  onSignOut,
+  onPlayFriend,
+  onPlayComputer,
+  onPlayOnline,
+  onLearn,
+  onTournaments,
+}: LobbyScreenProps) {
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
@@ -69,6 +79,12 @@ export function LobbyScreen({ user, onSignIn, onSignOut, onPlayFriend, onPlayCom
             onClick={onPlayOnline}
           />
           <ModeCard icon="🎓" title="Learn to Play" description="An interactive, illustrated walkthrough of every rule." onClick={onLearn} />
+          <ModeCard
+            icon="🏆"
+            title="Tournaments"
+            description="Teacher-created brackets with a join code — create one, join one, or watch the standings."
+            onClick={onTournaments}
+          />
         </div>
       </div>
     </main>

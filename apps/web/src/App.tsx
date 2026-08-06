@@ -17,6 +17,7 @@ import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
 import { LobbyScreen } from './components/LobbyScreen';
 import { OnlineGameScreen } from './components/OnlineGameScreen';
+import { TournamentScreen } from './components/TournamentScreen';
 import { playerLabel } from './lib/notation';
 import { asIntegerVariant } from './lib/integer-variant';
 
@@ -235,7 +236,7 @@ function GenericGameShell<V>({ variant, flipped, onFlip }: { variant: Variant<V>
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments';
 
 export function App() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
@@ -269,11 +270,21 @@ export function App() {
           onPlayComputer={() => enterGame('computer')}
           onPlayOnline={() => setScreen('online')}
           onLearn={() => setTutorialOpen(true)}
+          onTournaments={() => setScreen('tournaments')}
         />
       )}
 
       {screen === 'online' && (
         <OnlineGameScreen token={auth.token} onBackToLobby={() => setScreen('lobby')} onOpenLogin={() => setLoginOpen(true)} />
+      )}
+
+      {screen === 'tournaments' && (
+        <TournamentScreen
+          token={auth.token}
+          user={auth.user}
+          onBackToLobby={() => setScreen('lobby')}
+          onOpenLogin={() => setLoginOpen(true)}
+        />
       )}
 
       {screen === 'game' && (

@@ -177,6 +177,99 @@ describe('resign', () => {
   });
 });
 
+describe('draw offers', () => {
+  it('ends the game as a real draw once the opponent accepts, regardless of the current score', async () => {
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    const offer = await manager.offerDraw(room.id, 'white-user');
+    expect(offer.ok).toBe(true);
+    if (offer.ok) expect(offer.view.drawOfferedBy).toBe('white');
+
+    const response = await manager.respondDraw(room.id, 'black-user', true);
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.view.status).toBe('finished');
+      expect(response.view.winner).toBeNull();
+      expect(response.view.resignedBy).toBeNull();
+      expect(response.view.drawOfferedBy).toBeNull();
+    }
+
+    const blocked = await manager.playMove(room.id, 'white-user', { row: 2, col: 1 }, { row: 3, col: 0 });
+    expect(blocked).toEqual({ ok: false, error: 'game is over' });
+  });
+
+  it('clears the offer without ending the game when declined, and play continues normally', async () => {
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    await manager.offerDraw(room.id, 'white-user');
+    const declined = await manager.respondDraw(room.id, 'black-user', false);
+    expect(declined.ok).toBe(true);
+    if (declined.ok) {
+      expect(declined.view.status).toBe('active');
+      expect(declined.view.drawOfferedBy).toBeNull();
+    }
+
+    const move = await manager.playMove(room.id, 'white-user', { row: 2, col: 1 }, { row: 3, col: 0 });
+    expect(move.ok).toBe(true);
+  });
+
+  it('is implicitly cancelled by either side making a move', async () => {
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    await manager.offerDraw(room.id, 'white-user');
+    const afterMove = await manager.playMove(room.id, 'white-user', { row: 2, col: 1 }, { row: 3, col: 0 });
+    expect(afterMove.ok).toBe(true);
+    if (afterMove.ok) expect(afterMove.view.drawOfferedBy).toBeNull();
+
+    const staleResponse = await manager.respondDraw(room.id, 'black-user', true);
+    expect(staleResponse).toEqual({ ok: false, error: 'no draw offer is pending' });
+  });
+
+  it('rejects a response from the player who made the offer', async () => {
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    await manager.offerDraw(room.id, 'white-user');
+    const result = await manager.respondDraw(room.id, 'white-user', true);
+    expect(result).toEqual({ ok: false, error: 'you cannot respond to your own draw offer' });
+  });
+
+  it('rejects a draw offer against the computer opponent', async () => {
+    const manager = makeManager({ queueBotTimeoutMs: 20 });
+    await manager.enqueue('lonely-user', 'integer');
+    await waitFor(() => matched.length === 1);
+    const botRoomId = matched[0]?.view.roomId;
+    if (!botRoomId) throw new Error('expected a bot room to have been created');
+
+    const outcome = await manager.offerDraw(botRoomId, 'lonely-user');
+    expect(outcome).toEqual({ ok: false, error: 'the computer opponent does not accept draw offers' });
+  });
+
+  it('updates ratings for both players when a draw is agreed, same as any other finish', async () => {
+    await makeUser('white-user');
+    await makeUser('black-user');
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    await manager.offerDraw(room.id, 'white-user');
+    await manager.respondDraw(room.id, 'black-user', true);
+
+    const white = await userStore.findById('white-user');
+    const black = await userStore.findById('black-user');
+    // Equal-rated players drawing shouldn't move either rating at all.
+    expect(white?.rating).toBe(STARTING_RATING);
+    expect(black?.rating).toBe(STARTING_RATING);
+  });
+});
+
 describe('matchmaking', () => {
   it('pairs two queued players wanting the same variant immediately', async () => {
     const manager = makeManager();

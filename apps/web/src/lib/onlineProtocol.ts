@@ -20,6 +20,10 @@ export interface PublicGameView {
   status: 'active' | 'finished';
   finalScores: { white: string; black: string } | null;
   winner: Player | null;
+  /** A real draw the players agreed to, distinct from a score-tie or resignation — see apps/server/src/game/room.ts. */
+  drawnByAgreement: boolean;
+  /** The color that currently has a pending draw offer out, or `null` if none. */
+  drawOfferedBy: Player | null;
   moveCount: number;
   /** Genuine `Move<V>` values, untyped here for the same reason the server's own `PublicGameView` leaves it `unknown` — see room.ts. Cast to `Move<V>[]` once `variantId` identifies the concrete `V`, same JSON-boundary pattern used everywhere else this data crosses a process boundary. */
   moveHistory: readonly unknown[];
@@ -63,4 +67,6 @@ export type ClientMessage =
   | { type: 'decline_bot' }
   | { type: 'cancel_queue' }
   | { type: 'move'; from: Position; to: Position }
-  | { type: 'resign' };
+  | { type: 'resign' }
+  | { type: 'offer_draw' }
+  | { type: 'respond_draw'; accept: boolean };

@@ -23,6 +23,8 @@ export interface PersistedGame {
   readonly status: 'active' | 'finished';
   /** UI-level state, not an engine concept — see KNOWLEDGE.md's "Resignation is UI state, not an engine concept." Persisted here (unlike the hot-seat client) because the server is authoritative across reconnects. */
   readonly resignedBy: Player | null;
+  /** A real draw the players agreed to (draw offer + acceptance) — distinct from a score-tie or resignation, same "UI-level, not an engine concept" reasoning as `resignedBy`. */
+  readonly drawnByAgreement: boolean;
   /** Set only for a room created to play a specific tournament bracket match — `rooms.ts` reports the result back to `TournamentManager` automatically once such a room finishes. */
   readonly tournamentMatch: { readonly tournamentId: string; readonly round: number; readonly index: number } | null;
   readonly createdAt: string;
@@ -136,6 +138,7 @@ function toRow(game: PersistedGame) {
     moveHistory: game.moveHistory as Prisma.InputJsonValue,
     status: game.status,
     resignedBy: game.resignedBy,
+    drawnByAgreement: game.drawnByAgreement,
     tournamentId: game.tournamentMatch?.tournamentId ?? null,
     tournamentRound: game.tournamentMatch?.round ?? null,
     tournamentIndex: game.tournamentMatch?.index ?? null,
@@ -154,6 +157,7 @@ interface PrismaGameRow {
   moveHistory: Prisma.JsonValue;
   status: string;
   resignedBy: string | null;
+  drawnByAgreement: boolean;
   tournamentId: string | null;
   tournamentRound: number | null;
   tournamentIndex: number | null;
@@ -171,6 +175,7 @@ function toPersistedGame(row: PrismaGameRow): PersistedGame {
     moveHistory: row.moveHistory as readonly unknown[],
     status: row.status as 'active' | 'finished',
     resignedBy: row.resignedBy as Player | null,
+    drawnByAgreement: row.drawnByAgreement,
     tournamentMatch:
       row.tournamentId !== null && row.tournamentRound !== null && row.tournamentIndex !== null
         ? { tournamentId: row.tournamentId, round: row.tournamentRound, index: row.tournamentIndex }

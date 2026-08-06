@@ -180,6 +180,22 @@ export class RoomManager {
     return outcome;
   }
 
+  async offerDraw(roomId: string, userId: string): Promise<MoveOutcome> {
+    const room = await this.getRoom(roomId);
+    if (!room) return { ok: false, error: 'room not found' };
+    return room.offerDraw(userId);
+  }
+
+  async respondDraw(roomId: string, userId: string, accept: boolean): Promise<MoveOutcome> {
+    const room = await this.getRoom(roomId);
+    if (!room) return { ok: false, error: 'room not found' };
+    const outcome = await room.respondDraw(userId, accept);
+    // A drawn room never has a `view.winner`, so reportTournamentResultIfFinished's own
+    // guard already leaves it for the manual report route — no separate check needed here.
+    if (outcome.ok) await this.updateRatingsIfFinished(room, outcome.view);
+    return outcome;
+  }
+
   /**
    * Updates Elo ratings (rating/elo.ts) the instant a room finishes — human vs human
    * updates both accounts, human vs bot updates the human's rating against that tier's
@@ -278,6 +294,7 @@ export class RoomManager {
       moveHistory: [],
       status: 'active',
       resignedBy: null,
+      drawnByAgreement: false,
       tournamentMatch,
       createdAt: now,
       updatedAt: now,
@@ -300,6 +317,7 @@ export class RoomManager {
       moveHistory: [],
       status: 'active',
       resignedBy: null,
+      drawnByAgreement: false,
       tournamentMatch: null,
       createdAt: now,
       updatedAt: now,
@@ -339,8 +357,17 @@ export class RoomManager {
       tournamentMatch: persisted.tournamentMatch,
       initialMoveHistory: persisted.moveHistory as Move<V>[],
       initialResignedBy: persisted.resignedBy,
-      onPersist: async (moveHistory, status, resignedBy, players) => {
-        await this.options.gameStore.update({ ...persisted, moveHistory, status, resignedBy, players, updatedAt: new Date().toISOString() });
+      initialDrawnByAgreement: persisted.drawnByAgreement,
+      onPersist: async (moveHistory, status, resignedBy, drawnByAgreement, players) => {
+        await this.options.gameStore.update({
+          ...persisted,
+          moveHistory,
+          status,
+          resignedBy,
+          drawnByAgreement,
+          players,
+          updatedAt: new Date().toISOString(),
+        });
       },
     });
   }
@@ -355,9 +382,18 @@ export class RoomManager {
       tournamentMatch: null,
       initialMoveHistory: persisted.moveHistory as Move<number>[],
       initialResignedBy: persisted.resignedBy,
+      initialDrawnByAgreement: persisted.drawnByAgreement,
       chooseBotMove: (game) => computeBotMove(game, tier as DifficultyTier),
-      onPersist: async (moveHistory, status, resignedBy, players) => {
-        await this.options.gameStore.update({ ...persisted, moveHistory, status, resignedBy, players, updatedAt: new Date().toISOString() });
+      onPersist: async (moveHistory, status, resignedBy, drawnByAgreement, players) => {
+        await this.options.gameStore.update({
+          ...persisted,
+          moveHistory,
+          status,
+          resignedBy,
+          drawnByAgreement,
+          players,
+          updatedAt: new Date().toISOString(),
+        });
       },
     });
   }

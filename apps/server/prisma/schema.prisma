@@ -48,6 +48,9 @@ model Game {
   moveHistory     Json
   status          String
   resignedBy      String?
+  /// A real draw the players agreed to (draw offer + acceptance), distinct from a
+  /// score-tie or resignation — see game/room.ts.
+  drawnByAgreement Boolean @default(false)
   tournamentId    String?
   tournamentRound Int?
   tournamentIndex Int?

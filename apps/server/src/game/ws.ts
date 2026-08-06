@@ -25,7 +25,9 @@ type ClientMessage =
   | { type: 'decline_bot' }
   | { type: 'cancel_queue' }
   | { type: 'move'; from: Position; to: Position }
-  | { type: 'resign' };
+  | { type: 'resign' }
+  | { type: 'offer_draw' }
+  | { type: 'respond_draw'; accept: boolean };
 
 function isPosition(value: unknown): value is Position {
   return typeof value === 'object' && value !== null && typeof (value as Position).row === 'number' && typeof (value as Position).col === 'number';
@@ -45,7 +47,10 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     case 'decline_bot':
     case 'cancel_queue':
     case 'resign':
+    case 'offer_draw':
       return msg as ClientMessage;
+    case 'respond_draw':
+      return typeof msg.accept === 'boolean' ? (msg as ClientMessage) : null;
     default:
       return null;
   }
@@ -228,6 +233,28 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
                 return;
               }
               const outcome = await roomManager.resign(roomId, userId);
+              if (outcome.ok) broadcastRoom(outcome.view);
+              else send(socket, { type: 'error', message: outcome.error });
+              return;
+            }
+            case 'offer_draw': {
+              const roomId = roomBySocket.get(socket);
+              if (!roomId) {
+                send(socket, { type: 'error', message: 'not in a room' });
+                return;
+              }
+              const outcome = await roomManager.offerDraw(roomId, userId);
+              if (outcome.ok) broadcastRoom(outcome.view);
+              else send(socket, { type: 'error', message: outcome.error });
+              return;
+            }
+            case 'respond_draw': {
+              const roomId = roomBySocket.get(socket);
+              if (!roomId) {
+                send(socket, { type: 'error', message: 'not in a room' });
+                return;
+              }
+              const outcome = await roomManager.respondDraw(roomId, userId, message.accept);
               if (outcome.ok) broadcastRoom(outcome.view);
               else send(socket, { type: 'error', message: outcome.error });
               return;

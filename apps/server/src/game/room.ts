@@ -38,6 +38,10 @@ export interface PublicGameView {
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
   readonly resignedBy: Player | null;
+  /** A real draw the players agreed to, distinct from a score-tie or resignation — see `computeWinner`. */
+  readonly drawnByAgreement: boolean;
+  /** The color that currently has a pending draw offer out, or `null` if none. Cleared by any move, by a response, or once the game ends. */
+  readonly drawOfferedBy: Player | null;
   readonly tournamentMatch: TournamentMatchRef | null;
 }
 
@@ -66,6 +70,9 @@ export interface RoomHandle {
   /** Server-side validation, never the client's move: looks up the matching entry in `legalMoves(state)` by `from`/`to` and rejects anything else (PLANNING.md, "never trust the client"). Awaited so the move is durably persisted before the caller's response goes out — "a game is its move list" only holds if the list is actually on disk. */
   applyPlayerMove(from: Position, to: Position, byUserId: string): Promise<MoveOutcome>;
   resign(byUserId: string): Promise<MoveOutcome>;
+  /** Human-vs-human only — a bot has no draw-acceptance logic to invoke, so this is rejected for a bot room rather than silently doing nothing. */
+  offerDraw(byUserId: string): Promise<MoveOutcome>;
+  respondDraw(byUserId: string, accept: boolean): Promise<MoveOutcome>;
   isBotTurn(): boolean;
   applyBotMove(): Promise<MoveOutcome>;
 }
@@ -79,10 +86,12 @@ export interface CreateRoomParams<V> {
   tournamentMatch: TournamentMatchRef | null;
   initialMoveHistory: readonly Move<V>[];
   initialResignedBy: Player | null;
+  initialDrawnByAgreement: boolean;
   onPersist: (
     moveHistory: readonly Move<V>[],
     status: 'active' | 'finished',
     resignedBy: Player | null,
+    drawnByAgreement: boolean,
     players: { white: string | null; black: string | null },
   ) => Promise<void>;
   /**
@@ -103,6 +112,11 @@ export interface CreateRoomParams<V> {
 export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
   let game: GameState<V> = replayMoves(params.variant, params.initialMoveHistory);
   let resignedBy: Player | null = params.initialResignedBy;
+  let drawnByAgreement = params.initialDrawnByAgreement;
+  // Ephemeral, deliberately never persisted (same reasoning as not persisting whose turn
+  // it "feels like" — a pending offer that vanishes on a server restart is a fine
+  // tradeoff, not worth a migration for).
+  let drawOfferedBy: Player | null = null;
   let players = { ...params.players };
 
   function colorOf(userId: string): Player | null {
@@ -114,17 +128,18 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
   async function assignPlayer(color: Player, userId: string): Promise<void> {
     if (players[color] !== null) return;
     players = { ...players, [color]: userId };
-    await params.onPersist(game.moveHistory, game.status, resignedBy, players);
+    await params.onPersist(game.moveHistory, game.status, resignedBy, drawnByAgreement, players);
   }
 
   function isOver(): boolean {
-    return game.status === 'finished' || resignedBy !== null;
+    return game.status === 'finished' || resignedBy !== null || drawnByAgreement;
   }
 
-  /** Resignation overrides score comparison — mirrors apps/web's App.tsx, the client's own winner computation for local play. */
+  /** Resignation overrides score comparison — mirrors apps/web's App.tsx, the client's own winner computation for local play. A draw by agreement is always `null`, regardless of the actual score split — the players agreed to stop, not to a tie. */
   function computeWinner(over: boolean, finals: { white: V; black: V } | null): Player | null {
     if (!over) return null;
     if (resignedBy) return resignedBy === 'white' ? 'black' : 'white';
+    if (drawnByAgreement) return null;
     if (!finals) return null;
     const order = params.variant.arithmetic.compare(finals.white, finals.black);
     return order > 0 ? 'white' : order < 0 ? 'black' : null;
@@ -151,13 +166,18 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
       opponentType: params.opponentType,
       botTier: params.botTier,
       resignedBy,
+      drawnByAgreement,
+      drawOfferedBy,
       tournamentMatch: params.tournamentMatch,
     };
   }
 
   async function commit(next: GameState<V>): Promise<MoveOutcome> {
     game = next;
-    await params.onPersist(game.moveHistory, game.status, resignedBy, players);
+    // Playing a move implicitly cancels any pending draw offer — standard board-game
+    // convention (an offer is only live until the next move either side makes).
+    drawOfferedBy = null;
+    await params.onPersist(game.moveHistory, game.status, resignedBy, drawnByAgreement, players);
     return { ok: true, view: getView() };
   }
 
@@ -176,7 +196,32 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
     const color = colorOf(byUserId);
     if (color === null) return { ok: false, error: 'you are not a player in this room' };
     resignedBy = color;
-    await params.onPersist(game.moveHistory, game.status, resignedBy, players);
+    await params.onPersist(game.moveHistory, game.status, resignedBy, drawnByAgreement, players);
+    return { ok: true, view: getView() };
+  }
+
+  async function offerDraw(byUserId: string): Promise<MoveOutcome> {
+    if (isOver()) return { ok: false, error: 'game is over' };
+    if (params.opponentType === 'bot') return { ok: false, error: 'the computer opponent does not accept draw offers' };
+    const color = colorOf(byUserId);
+    if (color === null) return { ok: false, error: 'you are not a player in this room' };
+    drawOfferedBy = color;
+    return { ok: true, view: getView() };
+  }
+
+  async function respondDraw(byUserId: string, accept: boolean): Promise<MoveOutcome> {
+    if (isOver()) return { ok: false, error: 'game is over' };
+    const color = colorOf(byUserId);
+    if (color === null) return { ok: false, error: 'you are not a player in this room' };
+    if (drawOfferedBy === null) return { ok: false, error: 'no draw offer is pending' };
+    if (drawOfferedBy === color) return { ok: false, error: 'you cannot respond to your own draw offer' };
+    if (!accept) {
+      drawOfferedBy = null;
+      return { ok: true, view: getView() };
+    }
+    drawnByAgreement = true;
+    drawOfferedBy = null;
+    await params.onPersist(game.moveHistory, game.status, resignedBy, drawnByAgreement, players);
     return { ok: true, view: getView() };
   }
 
@@ -206,6 +251,8 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
     assignPlayer,
     applyPlayerMove,
     resign,
+    offerDraw,
+    respondDraw,
     isBotTurn,
     applyBotMove,
   };

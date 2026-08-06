@@ -327,9 +327,11 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                   {online.view.status === 'finished'
                     ? online.view.resignedBy
                       ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                      : online.view.winner
-                        ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                        : 'Game over — draw.'
+                      : online.view.drawnByAgreement
+                        ? 'Draw by agreement.'
+                        : online.view.winner
+                          ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                          : 'Game over — draw.'
                     : `${online.view.turn === 'white' ? 'Light' : 'Dark'} to move`}
                 </p>
               </div>
@@ -344,15 +346,45 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                   Forward ▸
                 </button>
               </div>
+              {online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
+                <div style={{ ...cardStyle, padding: 'var(--pad-md)', border: '1px solid var(--accent)' }}>
+                  <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)' }}>Your opponent offered a draw.</p>
+                  <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                    <button type="button" onClick={() => online.respondDraw(true)} style={primaryButton}>
+                      Accept
+                    </button>
+                    <button type="button" onClick={() => online.respondDraw(false)} style={secondaryButton}>
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              )}
+              {online.view.status !== 'finished' && online.view.drawOfferedBy === online.color && (
+                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
+                  Draw offer sent — waiting for your opponent…
+                </p>
+              )}
               {online.view.status !== 'finished' && (
-                <button
-                  type="button"
-                  onClick={online.resign}
-                  disabled={isViewingHistory || online.status !== 'in_game'}
-                  style={{ ...secondaryButton, color: 'var(--danger)' }}
-                >
-                  Resign
-                </button>
+                <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                  {online.view.opponentType === 'human' && (
+                    <button
+                      type="button"
+                      onClick={online.offerDraw}
+                      disabled={isViewingHistory || online.status !== 'in_game' || online.view.drawOfferedBy !== null}
+                      style={secondaryButton}
+                    >
+                      Offer Draw
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={online.resign}
+                    disabled={isViewingHistory || online.status !== 'in_game'}
+                    style={{ ...secondaryButton, color: 'var(--danger)' }}
+                  >
+                    Resign
+                  </button>
+                </div>
               )}
               {online.error && (
                 <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>

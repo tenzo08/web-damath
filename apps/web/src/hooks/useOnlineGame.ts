@@ -178,7 +178,9 @@ export function useOnlineGame(token: string | null) {
   const declineBot = useCallback(() => send({ type: 'decline_bot' }), [send]);
   const move = useCallback((from: Position, to: Position) => send({ type: 'move', from, to }), [send]);
   const resign = useCallback(() => send({ type: 'resign' }), [send]);
+  const offerDraw = useCallback(() => send({ type: 'offer_draw' }), [send]);
+  const respondDraw = useCallback((accept: boolean) => send({ type: 'respond_draw', accept }), [send]);
   const joinRoom = useCallback((roomId: string) => send({ type: 'join_room', roomId }), [send]);
 
-  return { status, view, color, error, connect, disconnect, queue, cancelQueue, declineBot, move, resign, joinRoom };
+  return { status, view, color, error, connect, disconnect, queue, cancelQueue, declineBot, move, resign, offerDraw, respondDraw, joinRoom };
 }

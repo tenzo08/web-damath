@@ -44,12 +44,14 @@ async function summarize(game: PersistedGame, userId: string, variant: AnyVarian
   type V = ValueOf<AnyVariant>;
   const v = variant as Variant<V>;
   const state = replayMoves(v, game.moveHistory as Move<V>[]);
-  const isOver = game.status === 'finished' || game.resignedBy !== null;
+  const isOver = game.status === 'finished' || game.resignedBy !== null || game.drawnByAgreement;
 
   let winner: Player | null = null;
   if (isOver) {
     if (game.resignedBy) {
       winner = game.resignedBy === 'white' ? 'black' : 'white';
+    } else if (game.drawnByAgreement) {
+      winner = null;
     } else {
       const finals = finalScores(state, v.arithmetic);
       const order = v.arithmetic.compare(finals.white, finals.black);

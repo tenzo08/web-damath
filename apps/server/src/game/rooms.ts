@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DifficultyTier } from '@damath/ai';
 import type { AnyVariant, Move, Player, Variant, VariantId } from '@damath/engine';
 import { botThinkDelayMs, computeBotMove } from './bot.js';
-import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandle } from './room.js';
+import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandle, type TournamentMatchRef } from './room.js';
 import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
 import { findIntegerVariant, findVariant } from './variants.js';
 
@@ -18,6 +18,16 @@ export interface RoomManagerOptions {
   onRoomUpdate: (view: PublicGameView) => void;
   /** Fires when a queued player is matched by an event they didn't themselves trigger (paired by someone else's `enqueue`, or the bot-fallback timer firing). The player who *called* `enqueue` gets their own match result as that call's return value instead. */
   onMatched: (userId: string, color: Player, view: PublicGameView) => void;
+  /**
+   * Fires once, the moment a tournament-linked room's game ends with a clear winner (not
+   * a draw) — `app.ts` wires this to `TournamentManager.reportResult`, replacing the
+   * manual "X won" report for rooms created via `createTournamentMatchRoom`. Awaited by
+   * `playMove`/`resign` before their own promise resolves, so the tournament store is
+   * durably updated before the caller (and the room's state broadcast) can be observed —
+   * same "await so it's persisted first" rule room.ts's own docstrings describe. Optional
+   * so tests/other embedders that don't care about tournaments can omit it.
+   */
+  onTournamentMatchFinished?: (ref: TournamentMatchRef, winnerUserId: string) => Promise<void>;
 }
 
 export type EnqueueResult = { status: 'queued' } | { status: 'matched'; room: RoomHandle; color: Player };
@@ -38,6 +48,8 @@ interface QueueEntry {
 export class RoomManager {
   private readonly rooms = new Map<string, RoomHandle>();
   private readonly queue = new Map<string, QueueEntry>();
+  /** `${tournamentId}:${round}:${index}` → roomId, so a second "play this match" click (or a page reload) returns the same room instead of spawning a duplicate. In-memory only — same scope as the file-backed stores (KNOWLEDGE.md), fine for a single dev server instance. */
+  private readonly tournamentRoomIndex = new Map<string, string>();
 
   constructor(private readonly options: RoomManagerOptions) {}
 
@@ -54,6 +66,33 @@ export class RoomManager {
     const variant = findVariant(variantId);
     if (!variant) throw new Error(`unknown variant id ${variantId}`);
     return this.persistAndInstantiateHuman(variant, { white: creatorUserId, black: null });
+  }
+
+  /**
+   * A room seated for a specific tournament bracket match, both players known up front
+   * (unlike `createRoom`'s invite-link flow, there's no waiting seat). Idempotent per
+   * `(tournamentId, round, index)` — a second call (a re-click, a page reload) returns
+   * the same room rather than creating a duplicate.
+   */
+  async createTournamentMatchRoom(
+    variantId: VariantId,
+    tournamentId: string,
+    round: number,
+    index: number,
+    playerAId: string,
+    playerBId: string,
+  ): Promise<RoomHandle> {
+    const key = `${tournamentId}:${String(round)}:${String(index)}`;
+    const existingId = this.tournamentRoomIndex.get(key);
+    if (existingId) {
+      const existing = await this.getRoom(existingId);
+      if (existing) return existing;
+    }
+    const variant = findVariant(variantId);
+    if (!variant) throw new Error(`unknown variant id ${variantId}`);
+    const room = await this.persistAndInstantiateHuman(variant, { white: playerAId, black: playerBId }, { tournamentId, round, index });
+    this.tournamentRoomIndex.set(key, room.id);
+    return room;
   }
 
   async joinRoom(roomId: string, userId: string): Promise<JoinResult> {
@@ -118,14 +157,31 @@ export class RoomManager {
     const room = await this.getRoom(roomId);
     if (!room) return { ok: false, error: 'room not found' };
     const outcome = await room.applyPlayerMove(from, to, userId);
-    if (outcome.ok) this.scheduleBotReplyIfNeeded(room);
+    if (outcome.ok) {
+      await this.reportTournamentResultIfFinished(room, outcome.view);
+      this.scheduleBotReplyIfNeeded(room);
+    }
     return outcome;
   }
 
   async resign(roomId: string, userId: string): Promise<MoveOutcome> {
     const room = await this.getRoom(roomId);
     if (!room) return { ok: false, error: 'room not found' };
-    return room.resign(userId);
+    const outcome = await room.resign(userId);
+    if (outcome.ok) await this.reportTournamentResultIfFinished(room, outcome.view);
+    return outcome;
+  }
+
+  /** Reports a tournament-linked room's result the moment it finishes with a clear winner — a draw (no resignation, tied score) is left for the existing manual "X won" report, since Damath's rules don't define an automatic tiebreak (docs/DAMATH_RULES.md). */
+  private async reportTournamentResultIfFinished(room: RoomHandle, view: PublicGameView): Promise<void> {
+    if (!room.tournamentMatch || view.status !== 'finished' || !view.winner) return;
+    const winnerUserId = view.winner === 'white' ? view.players.white : view.players.black;
+    if (!winnerUserId) return;
+    try {
+      await this.options.onTournamentMatchFinished?.(room.tournamentMatch, winnerUserId);
+    } catch {
+      // Best-effort: a rare double-fire or store error shouldn't break the room's own move/resign response.
+    }
   }
 
   private async fallBackToBot(userId: string, variant: Variant<number>): Promise<void> {
@@ -158,6 +214,7 @@ export class RoomManager {
   private async persistAndInstantiateHuman(
     variant: AnyVariant,
     players: { white: string | null; black: string | null },
+    tournamentMatch: TournamentMatchRef | null = null,
   ): Promise<RoomHandle> {
     const id = randomUUID();
     const now = new Date().toISOString();
@@ -170,6 +227,7 @@ export class RoomManager {
       moveHistory: [],
       status: 'active',
       resignedBy: null,
+      tournamentMatch,
       createdAt: now,
       updatedAt: now,
     };
@@ -191,6 +249,7 @@ export class RoomManager {
       moveHistory: [],
       status: 'active',
       resignedBy: null,
+      tournamentMatch: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -226,6 +285,7 @@ export class RoomManager {
       players: persisted.players,
       opponentType: 'human',
       botTier: null,
+      tournamentMatch: persisted.tournamentMatch,
       initialMoveHistory: persisted.moveHistory as Move<V>[],
       initialResignedBy: persisted.resignedBy,
       onPersist: async (moveHistory, status, resignedBy, players) => {
@@ -241,6 +301,7 @@ export class RoomManager {
       players: persisted.players,
       opponentType: 'bot',
       botTier: tier,
+      tournamentMatch: null,
       initialMoveHistory: persisted.moveHistory as Move<number>[],
       initialResignedBy: persisted.resignedBy,
       chooseBotMove: (game) => computeBotMove(game, tier as DifficultyTier),

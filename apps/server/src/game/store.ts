@@ -22,6 +22,8 @@ export interface PersistedGame {
   readonly status: 'active' | 'finished';
   /** UI-level state, not an engine concept — see KNOWLEDGE.md's "Resignation is UI state, not an engine concept." Persisted here (unlike the hot-seat client) because the server is authoritative across reconnects. */
   readonly resignedBy: Player | null;
+  /** Set only for a room created to play a specific tournament bracket match — `rooms.ts` reports the result back to `TournamentManager` automatically once such a room finishes. */
+  readonly tournamentMatch: { readonly tournamentId: string; readonly round: number; readonly index: number } | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

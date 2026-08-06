@@ -3,6 +3,13 @@ import type { GameState, Move, Player, Position, Variant, VariantId } from '@dam
 
 export type OpponentType = 'human' | 'bot';
 
+/** Identifies the tournament bracket match (tournament/bracket.ts's `Match`) this room was created to play — `null` for an ordinary direct or matchmade game. */
+export interface TournamentMatchRef {
+  readonly tournamentId: string;
+  readonly round: number;
+  readonly index: number;
+}
+
 export interface PublicGameView {
   readonly roomId: string;
   readonly variantId: VariantId;
@@ -11,11 +18,14 @@ export interface PublicGameView {
   readonly scores: { readonly white: string; readonly black: string };
   readonly status: 'active' | 'finished';
   readonly finalScores: { readonly white: string; readonly black: string } | null;
+  /** Resignation overrides score comparison, same rule apps/web's App.tsx uses for local play. `null` while active, or on an unresigned tie. */
+  readonly winner: Player | null;
   readonly moveCount: number;
   readonly players: { readonly white: string | null; readonly black: string | null };
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
   readonly resignedBy: Player | null;
+  readonly tournamentMatch: TournamentMatchRef | null;
 }
 
 export type MoveOutcome = { ok: true; view: PublicGameView } | { ok: false; error: string };
@@ -29,6 +39,7 @@ export interface RoomHandle {
   readonly variantId: VariantId;
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
+  readonly tournamentMatch: TournamentMatchRef | null;
   readonly players: { readonly white: string | null; readonly black: string | null };
   colorOf(userId: string): Player | null;
   getView(): PublicGameView;
@@ -52,6 +63,7 @@ export interface CreateRoomParams<V> {
   players: { white: string | null; black: string | null };
   opponentType: OpponentType;
   botTier: string | null;
+  tournamentMatch: TournamentMatchRef | null;
   initialMoveHistory: readonly Move<V>[];
   initialResignedBy: Player | null;
   onPersist: (
@@ -96,6 +108,15 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
     return game.status === 'finished' || resignedBy !== null;
   }
 
+  /** Resignation overrides score comparison — mirrors apps/web's App.tsx, the client's own winner computation for local play. */
+  function computeWinner(over: boolean, finals: { white: V; black: V } | null): Player | null {
+    if (!over) return null;
+    if (resignedBy) return resignedBy === 'white' ? 'black' : 'white';
+    if (!finals) return null;
+    const order = params.variant.arithmetic.compare(finals.white, finals.black);
+    return order > 0 ? 'white' : order < 0 ? 'black' : null;
+  }
+
   function getView(): PublicGameView {
     const arithmetic = params.variant.arithmetic;
     const over = isOver();
@@ -110,11 +131,13 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
       scores: { white: arithmetic.format(game.scores.white), black: arithmetic.format(game.scores.black) },
       status: over ? 'finished' : 'active',
       finalScores: finals ? { white: arithmetic.format(finals.white), black: arithmetic.format(finals.black) } : null,
+      winner: computeWinner(over, finals),
       moveCount: game.moveHistory.length,
       players,
       opponentType: params.opponentType,
       botTier: params.botTier,
       resignedBy,
+      tournamentMatch: params.tournamentMatch,
     };
   }
 
@@ -160,6 +183,7 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
     variantId: params.variant.id,
     opponentType: params.opponentType,
     botTier: params.botTier,
+    tournamentMatch: params.tournamentMatch,
     get players() {
       return players;
     },

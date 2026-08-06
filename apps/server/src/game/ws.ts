@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { DifficultyTier } from '@damath/ai';
 import type { Position, VariantId } from '@damath/engine';
-import type { PublicGameView } from './room.js';
+import type { PublicGameView, TournamentMatchRef } from './room.js';
 import { RoomManager } from './rooms.js';
 import type { GameStore } from './store.js';
 
@@ -11,6 +11,8 @@ export interface GameSocketOptions {
   queueBotTimeoutMs: number;
   queueBotEnabled: boolean;
   queueBotTier: DifficultyTier;
+  /** Forwarded straight into `RoomManager`'s option of the same name — see rooms.ts. */
+  onTournamentMatchFinished?: (ref: TournamentMatchRef, winnerUserId: string) => Promise<void>;
 }
 
 type ClientMessage =
@@ -86,6 +88,7 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
     queueBotTimeoutMs: options.queueBotTimeoutMs,
     queueBotEnabled: options.queueBotEnabled,
     queueBotTier: options.queueBotTier,
+    ...(options.onTournamentMatchFinished ? { onTournamentMatchFinished: options.onTournamentMatchFinished } : {}),
     onRoomUpdate: broadcastRoom,
     onMatched: (userId, color, view) => {
       // Unlike the `queue` message handler's own synchronous "matched" branch (which

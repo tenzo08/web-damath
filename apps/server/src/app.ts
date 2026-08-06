@@ -59,16 +59,26 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
   app.get('/health', async () => ({ status: 'ok' }));
 
+  const tournamentManager = new TournamentManager(options.tournamentStore);
+
   const roomManager = registerGameSocket(app, {
     gameStore: options.gameStore,
     queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
     queueBotEnabled: options.queueBotEnabled ?? true,
     queueBotTier: options.queueBotTier ?? 'steady',
+    // A drawn match (no clear winner) is left for the manual report route — Damath has
+    // no automatic tiebreak (docs/DAMATH_RULES.md). Awaited by `RoomManager` before its
+    // own move/resign response resolves, so the tournament store is durably updated
+    // before the room's "finished" state ever reaches a client (rooms.ts). A
+    // late/duplicate report (e.g. a rare double-fire) is rejected by `reportResult`
+    // itself and swallowed here rather than crashing the room's move-handling path.
+    onTournamentMatchFinished: async (ref, winnerUserId) => {
+      await tournamentManager.reportResult(ref.tournamentId, ref.round, ref.index, winnerUserId, winnerUserId).catch(() => {});
+    },
   });
   app.decorate('roomManager', roomManager);
 
-  const tournamentManager = new TournamentManager(options.tournamentStore);
-  registerTournamentRoutes(app, tournamentManager);
+  registerTournamentRoutes(app, tournamentManager, roomManager);
 
   return app;
 }

@@ -178,7 +178,8 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
   function activateSquare(pos: Position) {
     // Board clicks only ever act on the live position — browsing history is view-only,
     // same rule local play's `useGame` enforces (jump back to Live first to move again).
-    if (!online.view || online.color === null || isViewingHistory) return;
+    // Also disabled while reconnecting: the socket that would carry the move isn't open yet.
+    if (!online.view || online.color === null || isViewingHistory || online.status !== 'in_game') return;
     const piece = online.view.board[pos.row]?.[pos.col] ?? null;
     if (selected) {
       if (piece && piece.owner === online.color) {
@@ -283,8 +284,24 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
           </div>
         )}
 
-        {online.status === 'in_game' && online.view && (
+        {(online.status === 'in_game' || online.status === 'reconnecting') && online.view && (
           <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
+            {online.status === 'reconnecting' && (
+              <div
+                role="status"
+                style={{
+                  width: '100%',
+                  background: 'var(--surface-panel)',
+                  border: '1px solid var(--warning, var(--border))',
+                  borderRadius: 'var(--radius-card)',
+                  padding: 'var(--pad-sm) var(--pad-md)',
+                  color: 'var(--text-secondary)',
+                  fontSize: 'var(--fs-meta)',
+                }}
+              >
+                Connection lost — reconnecting to the match…
+              </div>
+            )}
             <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%' }}>
               <OnlineBoard
                 view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
@@ -324,7 +341,12 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                 </button>
               </div>
               {online.view.status !== 'finished' && (
-                <button type="button" onClick={online.resign} disabled={isViewingHistory} style={{ ...secondaryButton, color: 'var(--danger)' }}>
+                <button
+                  type="button"
+                  onClick={online.resign}
+                  disabled={isViewingHistory || online.status !== 'in_game'}
+                  style={{ ...secondaryButton, color: 'var(--danger)' }}
+                >
                   Resign
                 </button>
               )}

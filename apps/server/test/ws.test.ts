@@ -112,6 +112,52 @@ describe('the /ws game protocol', () => {
 
     socket.close();
   });
+
+  it('a dropped connection can reconnect with a fresh socket and rejoin the same seat, mid-game', async () => {
+    const [tokenA, tokenB] = await Promise.all([signupToken('reconnect-a@example.com'), signupToken('reconnect-b@example.com')]);
+    const socketA = await connect(tokenA);
+    const socketB = await connect(tokenB);
+
+    socketA.send(JSON.stringify({ type: 'create_room', variantId: 'whole' }));
+    const created = await nextMessage(socketA);
+    const roomId = created.roomId as string;
+
+    socketB.send(JSON.stringify({ type: 'join_room', roomId }));
+    await Promise.all([nextMessage(socketB), nextMessage(socketA)]); // joined / state broadcast
+
+    socketA.send(JSON.stringify({ type: 'move', from: { row: 2, col: 1 }, to: { row: 3, col: 0 } }));
+    await Promise.all([nextMessage(socketA), nextMessage(socketB)]); // the move's state broadcast
+
+    // Simulate a network drop: close A's socket with no explicit resignation or
+    // "leave room" message, exactly what a WiFi hiccup or a laptop sleeping looks like
+    // from the server's perspective — nothing here should end or forfeit the game.
+    socketA.close();
+    await new Promise((resolve) => socketA.once('close', resolve));
+
+    // A brand-new socket for the same user (what apps/web's useOnlineGame reconnect
+    // logic opens automatically) rejoins the room it already has a seat in.
+    const reconnectedA = await connect(tokenA);
+    // Both listeners must be registered before sending — the server answers `join_room`
+    // with two back-to-back messages (a direct `joined`, then a `state` broadcast), and
+    // they can both arrive before a *second*, sequentially-attached listener gets a
+    // chance to register, silently dropping whichever one arrives first (same reason
+    // the join step above uses `Promise.all`, not two sequential awaits).
+    const rejoinPromise = nextMessage(reconnectedA);
+    const statePromise = waitFor(reconnectedA, (m) => m.type === 'state');
+    reconnectedA.send(JSON.stringify({ type: 'join_room', roomId }));
+    const [rejoin, state] = await Promise.all([rejoinPromise, statePromise]);
+    // Must reclaim the same seat, never "room is full" — rooms.ts's joinRoom returns
+    // the existing color for a user already seated, exactly what makes this safe.
+    expect(rejoin).toMatchObject({ type: 'joined', color: 'white' });
+
+    // The state must be the live position, not a fresh game — the move played before
+    // the drop is still there, and the room never got forfeited/reset by the drop.
+    expect((state as { view: { turn: string; moveCount: number } }).view.turn).toBe('black');
+    expect((state as { view: { turn: string; moveCount: number } }).view.moveCount).toBe(1);
+
+    reconnectedA.close();
+    socketB.close();
+  });
 });
 
 describe('the online-user count', () => {

@@ -14,8 +14,10 @@ interface OnlineGameScreenProps {
   token: string | null;
   onBackToLobby: () => void;
   onOpenLogin: () => void;
-  /** Set when arriving via TournamentScreen's "Play this match" — joins that room directly instead of showing the variant picker/matchmaking flow. */
+  /** Set when arriving via TournamentScreen's "Play this match" or MatchHistoryScreen's "Replay"/"Resume" — joins that room directly instead of showing the variant picker/matchmaking flow. */
   initialRoomId?: string | undefined;
+  /** Only meaningful together with `initialRoomId` — which screen handed off this room, purely for header/back-button copy. Defaults to `'tournament'` so the existing TournamentScreen call site didn't need to change. */
+  origin?: 'tournament' | 'history' | undefined;
   /**
    * Fires once when a game reaches `status: 'finished'` (win, loss, or draw) — App.tsx
    * wires this to `useAuth`'s `refreshUser`, since the server updates the player's Elo
@@ -95,7 +97,7 @@ const secondaryButton = {
  * gracefully degraded when the server isn't reachable rather than erroring out, per
  * the request to showcase the flow even where it can't run in this environment.
  */
-export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId, onGameFinished }: OnlineGameScreenProps) {
+export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId, origin = 'tournament', onGameFinished }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
@@ -198,9 +200,11 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
       <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
-            ← {initialRoomId ? 'Tournament' : 'Lobby'}
+            ← {initialRoomId ? (origin === 'history' ? 'History' : 'Tournament') : 'Lobby'}
           </button>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{initialRoomId ? 'Tournament Match' : 'Play Online'}</h1>
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>
+            {initialRoomId ? (origin === 'history' ? 'Match Replay' : 'Tournament Match') : 'Play Online'}
+          </h1>
         </header>
 
         {!token && (

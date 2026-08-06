@@ -7,6 +7,7 @@ import type { DifficultyTier } from '@damath/ai';
 import { registerAuthRoutes } from './auth/routes.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
+import { registerGameHistoryRoutes } from './game/history.js';
 import type { GameStore } from './game/store.js';
 import { redactTokenFromUrl } from './log.js';
 import type { RoomManager } from './game/rooms.js';
@@ -86,6 +87,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // test asserting a 429 actually shows up, not just that the config object looks right.
   app.after(() => {
     registerAuthRoutes(app, options.userStore);
+    registerGameHistoryRoutes(app, options.gameStore, options.userStore);
 
     app.get('/health', async () => ({ status: 'ok' }));
 

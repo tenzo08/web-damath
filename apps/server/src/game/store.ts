@@ -34,6 +34,8 @@ export interface GameStore {
   findById(id: string): Promise<PersistedGame | null>;
   /** Replaces one game's `moveHistory`/`status`/`updatedAt` after a validated move — never partial-patches, always the whole persisted record. */
   update(game: PersistedGame): Promise<void>;
+  /** Every game `userId` was seated in (either color), most recently updated first — the source for the match-history page. `limit` bounds a runaway history, not a pagination cursor; this app doesn't need real pagination at classroom scale. */
+  listForUser(userId: string, limit: number): Promise<PersistedGame[]>;
 }
 
 /**
@@ -77,6 +79,14 @@ export class FileGameStore implements GameStore {
     games[index] = game;
     await this.writeAll(games);
   }
+
+  async listForUser(userId: string, limit: number): Promise<PersistedGame[]> {
+    const games = await this.readAll();
+    return games
+      .filter((g) => g.players.white === userId || g.players.black === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
 }
 
 /**
@@ -103,6 +113,15 @@ export class PrismaGameStore implements GameStore {
   async update(game: PersistedGame): Promise<void> {
     const { id, ...data } = toRow(game);
     await this.prisma.game.update({ where: { id }, data });
+  }
+
+  async listForUser(userId: string, limit: number): Promise<PersistedGame[]> {
+    const rows = await this.prisma.game.findMany({
+      where: { OR: [{ whitePlayerId: userId }, { blackPlayerId: userId }] },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+    });
+    return rows.map(toPersistedGame);
   }
 }
 

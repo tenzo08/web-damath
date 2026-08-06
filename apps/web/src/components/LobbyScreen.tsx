@@ -12,6 +12,8 @@ interface LobbyScreenProps {
   onPlayOnline: () => void;
   onLearn: () => void;
   onTournaments: () => void;
+  /** `null` when signed out — the card is omitted entirely rather than shown disabled, same reasoning as `ProfileStrip`. */
+  onMatchHistory: (() => void) | null;
   /** How many users are currently connected — `null` while signed out or still connecting (App.tsx's `useLiveUpdates`). */
   onlineCount: number | null;
   onOpenSettings: () => void;
@@ -132,6 +134,7 @@ export function LobbyScreen({
   onPlayOnline,
   onLearn,
   onTournaments,
+  onMatchHistory,
   onlineCount,
   onOpenSettings,
 }: LobbyScreenProps) {
@@ -194,6 +197,9 @@ export function LobbyScreen({
           <ModeCard icon="🌐" title={t('lobby.playOnline.title')} description={t('lobby.playOnline.description')} onClick={onPlayOnline} />
           <ModeCard icon="🎓" title={t('lobby.learn.title')} description={t('lobby.learn.description')} onClick={onLearn} />
           <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
+          {onMatchHistory && (
+            <ModeCard icon="📜" title={t('lobby.matchHistory.title')} description={t('lobby.matchHistory.description')} onClick={onMatchHistory} />
+          )}
         </div>
       </div>
     </main>

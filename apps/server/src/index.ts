@@ -28,6 +28,7 @@ const app = buildApp({
   queueBotTimeoutMs: process.env.QUEUE_BOT_TIMEOUT_MS ? Number(process.env.QUEUE_BOT_TIMEOUT_MS) : undefined,
   queueBotEnabled: process.env.QUEUE_BOT_ENABLED ? process.env.QUEUE_BOT_ENABLED !== 'false' : undefined,
   queueBotTier: readTier(process.env.QUEUE_BOT_TIER, 'steady'),
+  corsOrigin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : undefined,
 });
 const port = Number(process.env.PORT ?? 3001);
 

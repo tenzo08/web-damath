@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyCors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
@@ -24,6 +25,12 @@ export interface AppOptions {
   queueBotEnabled?: boolean | undefined;
   queueBotTier?: DifficultyTier | undefined;
   logger?: boolean | undefined;
+  /**
+   * Origins allowed to call the REST/WS API cross-origin — `true` (the default) reflects
+   * whatever origin sent the request, fine for a demo/dev server behind auth on every
+   * meaningful route. Pass an explicit allow-list in a real deployment.
+   */
+  corsOrigin?: boolean | string | string[] | undefined;
 }
 
 declare module 'fastify' {
@@ -41,6 +48,7 @@ declare module 'fastify' {
  */
 export function buildApp(options: AppOptions): FastifyInstance {
   const app = Fastify({ logger: options.logger ?? false });
+  app.register(fastifyCors, { origin: options.corsOrigin ?? true });
   app.register(fastifyJwt, { secret: options.jwtSecret });
   app.register(fastifyWebsocket);
   registerAuthRoutes(app, options.userStore);

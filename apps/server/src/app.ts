@@ -104,6 +104,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     const gameSocket = registerGameSocket(app, {
       gameStore: options.gameStore,
+      userStore: options.userStore,
       queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
       queueBotEnabled: options.queueBotEnabled ?? true,
       queueBotTier: options.queueBotTier ?? 'steady',

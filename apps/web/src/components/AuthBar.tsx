@@ -50,7 +50,10 @@ export function AuthBar({ user, onSignIn, onSignOut }: AuthBarProps) {
       >
         {user.displayName.charAt(0).toUpperCase()}
       </span>
-      <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>{user.displayName}</span>
+      <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+        {user.displayName}
+        <span style={{ color: 'var(--text-muted)' }}> · {user.rating}</span>
+      </span>
       <button
         type="button"
         onClick={onSignOut}

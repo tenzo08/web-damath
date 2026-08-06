@@ -5,9 +5,12 @@ import type { Position, VariantId } from '@damath/engine';
 import type { PublicGameView, TournamentMatchRef } from './room.js';
 import { RoomManager } from './rooms.js';
 import type { GameStore } from './store.js';
+import type { UserStore } from '../auth/store.js';
 
 export interface GameSocketOptions {
   gameStore: GameStore;
+  /** Forwarded straight into `RoomManager`'s option of the same name — see rooms.ts. */
+  userStore: UserStore;
   queueBotTimeoutMs: number;
   queueBotEnabled: boolean;
   queueBotTier: DifficultyTier;
@@ -106,6 +109,7 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
 
   const roomManager = new RoomManager({
     gameStore: options.gameStore,
+    userStore: options.userStore,
     queueBotTimeoutMs: options.queueBotTimeoutMs,
     queueBotEnabled: options.queueBotEnabled,
     queueBotTier: options.queueBotTier,

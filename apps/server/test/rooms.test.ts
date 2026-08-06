@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PublicGameView } from '../src/game/room.js';
 import { RoomManager } from '../src/game/rooms.js';
 import { FileGameStore, type GameStore } from '../src/game/store.js';
+import { FileUserStore, type User, type UserStore } from '../src/auth/store.js';
+import { STARTING_RATING } from '../src/rating/elo.js';
 
 /**
  * Real timers, not fake ones: `vi.advanceTimersByTimeAsync` doesn't reliably flush the
@@ -21,12 +23,14 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000, intervalMs = 
 
 let dir: string;
 let gameStore: GameStore;
+let userStore: UserStore;
 let updates: PublicGameView[];
 let matched: { userId: string; color: string; view: PublicGameView }[];
 
 function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEnabled: boolean }> = {}) {
   return new RoomManager({
     gameStore,
+    userStore,
     queueBotTimeoutMs: overrides.queueBotTimeoutMs ?? 24 * 60 * 60 * 1000,
     queueBotEnabled: overrides.queueBotEnabled ?? true,
     queueBotTier: 'learner',
@@ -35,9 +39,16 @@ function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEna
   });
 }
 
+async function makeUser(id: string, rating = STARTING_RATING): Promise<User> {
+  const user: User = { id, email: `${id}@example.com`, passwordHash: 'x', displayName: id, rating, createdAt: new Date().toISOString() };
+  await userStore.create(user);
+  return user;
+}
+
 beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'damath-server-rooms-'));
   gameStore = new FileGameStore(path.join(dir, 'games.json'));
+  userStore = new FileUserStore(path.join(dir, 'users.json'));
   updates = [];
   matched = [];
 });
@@ -260,5 +271,54 @@ describe('the bot opponent', () => {
     expect(updates).toHaveLength(0);
     await waitFor(() => updates.length > 0, 5000);
     expect(updates.at(-1)?.moveCount).toBe(2);
+  });
+});
+
+describe('rating updates on a finished game', () => {
+  it('a human-vs-human resignation raises the winner\'s rating and lowers the loser\'s by the same amount', async () => {
+    await makeUser('white-user', 1200);
+    await makeUser('black-user', 1200);
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    const outcome = await manager.resign(room.id, 'white-user');
+    expect(outcome.ok).toBe(true);
+
+    const white = await userStore.findById('white-user');
+    const black = await userStore.findById('black-user');
+    expect(white?.rating).toBeLessThan(1200); // resigned -> loss
+    expect(black?.rating).toBeGreaterThan(1200); // opponent resigned -> win
+    // Equal starting ratings -> zero-sum: exactly symmetric.
+    expect(1200 - (white?.rating ?? 0)).toBe((black?.rating ?? 0) - 1200);
+  });
+
+  it('never updates the rating of a player not yet seated (still waiting for an opponent)', async () => {
+    await makeUser('solo-user', 1200);
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'solo-user');
+    // No one has joined the black seat — resigning here would be nonsensical, and
+    // isn't reachable through the real client anyway (no Resign button pre-opponent),
+    // but this documents that updateRatingsIfFinished never throws or half-updates.
+    await manager.resign(room.id, 'solo-user');
+    const solo = await userStore.findById('solo-user');
+    expect(solo?.rating).toBe(1200);
+  });
+
+  it('a human-vs-bot resignation updates the human\'s rating against the bot tier\'s notional rating', async () => {
+    await makeUser('human-user', 1200);
+    const manager = makeManager({ queueBotTimeoutMs: 20 });
+    await manager.enqueue('human-user', 'integer');
+    await waitFor(() => matched.length === 1);
+    const roomId = matched[0]?.view.roomId;
+    expect(roomId).toBeDefined();
+
+    // makeManager's queueBotTier is 'learner' (BOT_TIER_RATING.learner = 800) -- a human
+    // starting at 1200 resigning to an 800-rated opponent is a real upset loss, so their
+    // rating should drop by more than a routine loss to an equally-rated human would.
+    await manager.resign(roomId!, 'human-user');
+    const human = await userStore.findById('human-user');
+    expect(human?.rating).toBeLessThan(1200);
+    expect(1200 - (human?.rating ?? 0)).toBeGreaterThan(15); // a real drop, not a rounding artifact
   });
 });

@@ -69,5 +69,22 @@ export function useAuth() {
     setUser(null);
   }, []);
 
-  return { token, user, status, signup, login, logout };
+  /**
+   * Re-fetches `/auth/me` without touching `status`/`token` — for anything that changes
+   * server-side outside a request this hook itself made, most notably the Elo rating
+   * (rating/elo.ts) updating after an online game finishes. Nothing here calls this
+   * automatically; found missing by actually playing a game and watching the displayed
+   * rating stay stale (KNOWLEDGE.md) — a caller (OnlineGameScreen) has to ask for it.
+   */
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    try {
+      setUser(await authClient.me(token));
+    } catch {
+      // Best-effort — a transient failure here shouldn't sign the user out; the
+      // token-driven effect above already handles a genuinely invalid/expired token.
+    }
+  }, [token]);
+
+  return { token, user, status, signup, login, logout, refreshUser };
 }

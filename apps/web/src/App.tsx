@@ -396,6 +396,7 @@ function AppShell() {
         <OnlineGameScreen
           token={auth.token}
           initialRoomId={tournamentContext?.roomId ?? undefined}
+          onGameFinished={auth.refreshUser}
           onBackToLobby={() => {
             setScreen(tournamentContext ? 'tournaments' : 'lobby');
             setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));

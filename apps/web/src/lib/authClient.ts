@@ -4,6 +4,8 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
+  /** Elo rating (apps/server/src/rating/elo.ts) — starts at 1200, moves after every online game (human or bot) that finishes with a winner or a draw. Local hot-seat play never touches it. */
+  rating: number;
   createdAt: string;
 }
 

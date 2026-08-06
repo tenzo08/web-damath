@@ -16,6 +16,15 @@ interface OnlineGameScreenProps {
   onOpenLogin: () => void;
   /** Set when arriving via TournamentScreen's "Play this match" — joins that room directly instead of showing the variant picker/matchmaking flow. */
   initialRoomId?: string | undefined;
+  /**
+   * Fires once when a game reaches `status: 'finished'` (win, loss, or draw) — App.tsx
+   * wires this to `useAuth`'s `refreshUser`, since the server updates the player's Elo
+   * rating (rating/elo.ts) the instant the game ends, but nothing re-fetches `/auth/me`
+   * on its own. Found missing by actually playing a game end-to-end and watching the
+   * displayed rating stay stale (KNOWLEDGE.md) — the server-side calculation was
+   * correct the whole time, the client just never asked for the new value.
+   */
+  onGameFinished?: (() => void) | undefined;
 }
 
 /**
@@ -86,7 +95,7 @@ const secondaryButton = {
  * gracefully degraded when the server isn't reachable rather than erroring out, per
  * the request to showcase the flow even where it can't run in this environment.
  */
-export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId }: OnlineGameScreenProps) {
+export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId, onGameFinished }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
@@ -142,9 +151,13 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
         // hot-seat's single game-over sound, just silence instead here.
       } else if (online.view.winner === online.color) playWinSound(effectiveVolume);
       else playLossSound(effectiveVolume);
+      // The server already updated this player's Elo rating by now (rooms.ts awaits it
+      // before the "finished" state ever reaches a client) — ask App.tsx to re-fetch
+      // /auth/me so the displayed rating actually catches up, win/loss/draw alike.
+      onGameFinished?.();
     }
     previousStatus.current = online.view?.status;
-  }, [online.view?.status, online.view?.winner, online.color, effectiveVolume]);
+  }, [online.view?.status, online.view?.winner, online.color, effectiveVolume, onGameFinished]);
 
   const previousError = useRef(online.error);
   useEffect(() => {

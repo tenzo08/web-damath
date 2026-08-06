@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
+import { STARTING_RATING } from '../rating/elo.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,7 +29,7 @@ const loginBodySchema = {
 
 /** Never sends `passwordHash` back over the wire. */
 function publicUser(user: User) {
-  return { id: user.id, email: user.email, displayName: user.displayName, createdAt: user.createdAt };
+  return { id: user.id, email: user.email, displayName: user.displayName, rating: user.rating, createdAt: user.createdAt };
 }
 
 export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): void {
@@ -53,6 +54,7 @@ export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): 
         email,
         passwordHash: await hashPassword(request.body.password),
         displayName,
+        rating: STARTING_RATING,
         createdAt: new Date().toISOString(),
       };
       await userStore.create(user);

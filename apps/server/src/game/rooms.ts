@@ -5,11 +5,15 @@ import { botThinkDelayMs, computeBotMove } from './bot.js';
 import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandle, type TournamentMatchRef } from './room.js';
 import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
 import { findIntegerVariant, findVariant } from './variants.js';
+import type { UserStore } from '../auth/store.js';
+import { BOT_TIER_RATING, nextRating, nextRatings } from '../rating/elo.js';
 
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
 
 export interface RoomManagerOptions {
   gameStore: GameStore;
+  /** Read/write per-account Elo ratings (rating/elo.ts) once a room finishes — see `updateRatingsIfFinished`. */
+  userStore: UserStore;
   /** docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants. */
   queueBotTimeoutMs: number;
   queueBotEnabled: boolean;
@@ -159,6 +163,7 @@ export class RoomManager {
     const outcome = await room.applyPlayerMove(from, to, userId);
     if (outcome.ok) {
       await this.reportTournamentResultIfFinished(room, outcome.view);
+      await this.updateRatingsIfFinished(room, outcome.view);
       this.scheduleBotReplyIfNeeded(room);
     }
     return outcome;
@@ -168,8 +173,54 @@ export class RoomManager {
     const room = await this.getRoom(roomId);
     if (!room) return { ok: false, error: 'room not found' };
     const outcome = await room.resign(userId);
-    if (outcome.ok) await this.reportTournamentResultIfFinished(room, outcome.view);
+    if (outcome.ok) {
+      await this.reportTournamentResultIfFinished(room, outcome.view);
+      await this.updateRatingsIfFinished(room, outcome.view);
+    }
     return outcome;
+  }
+
+  /**
+   * Updates Elo ratings (rating/elo.ts) the instant a room finishes — human vs human
+   * updates both accounts, human vs bot updates the human's rating against that tier's
+   * fixed notional rating, and unlike tournament auto-report, a draw (`view.winner ===
+   * null`) still counts: Elo has a well-defined draw outcome, there's no "needs a clear
+   * winner to advance a bracket" constraint here. Fires exactly once per game, same
+   * "further moves are rejected once the room is over" guarantee `reportTournamentResult
+   * IfFinished` relies on.
+   */
+  private async updateRatingsIfFinished(room: RoomHandle, view: PublicGameView): Promise<void> {
+    if (view.status !== 'finished') return;
+    try {
+      if (room.opponentType === 'bot') {
+        const botIsBlack = view.players.black === BOT_PLAYER_ID;
+        const humanId = botIsBlack ? view.players.white : view.players.black;
+        const humanColor: Player = botIsBlack ? 'white' : 'black';
+        if (!humanId) return;
+        const human = await this.options.userStore.findById(humanId);
+        if (!human) return;
+        const botRating = BOT_TIER_RATING[(room.botTier as DifficultyTier | null) ?? 'steady'];
+        const outcome = view.winner === null ? 'draw' : view.winner === humanColor ? 'win' : 'loss';
+        await this.options.userStore.update({ ...human, rating: nextRating(human.rating, botRating, outcome) });
+      } else {
+        const { white, black } = view.players;
+        if (!white || !black) return; // shouldn't happen once finished, but never guess at a missing seat
+        const [whiteUser, blackUser] = await Promise.all([this.options.userStore.findById(white), this.options.userStore.findById(black)]);
+        if (!whiteUser || !blackUser) return;
+        const next = nextRatings(whiteUser.rating, blackUser.rating, view.winner);
+        // Sequential, not `Promise.all` — `FileUserStore.update` is a whole-file
+        // read-modify-write; two concurrent updates would both read the same stale file
+        // and the second write would silently clobber the first (caught by a real test:
+        // both ratings claimed to update, but the file only ever showed one change).
+        // `PrismaUserStore` updates different rows and wouldn't care either way, so this
+        // costs nothing there.
+        await this.options.userStore.update({ ...whiteUser, rating: next.white });
+        await this.options.userStore.update({ ...blackUser, rating: next.black });
+      }
+    } catch {
+      // Best-effort, same reasoning as reportTournamentResultIfFinished — a rating
+      // update failing should never break the room's own move/resign response.
+    }
   }
 
   /** Reports a tournament-linked room's result the moment it finishes with a clear winner — a draw (no resignation, tied score) is left for the existing manual "X won" report, since Damath's rules don't define an automatic tiebreak (docs/DAMATH_RULES.md). */

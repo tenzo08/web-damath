@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { AuthUser } from '../lib/authClient';
 import { useLocale, type Locale } from '../lib/i18n';
 import { ProfileButton } from './ProfileButton';
+import { useMediaQuery, NARROW_QUERY } from '../hooks/useMediaQuery';
 
 interface LobbyScreenProps {
   user: AuthUser | null;
@@ -92,6 +93,13 @@ export function LobbyScreen({
   onOpenSettings,
 }: LobbyScreenProps) {
   const { t } = useLocale();
+  // Signed in, the profile button (avatar + name + rating + a "Provisional" badge)
+  // is wide enough that on a phone-width screen it and the "Damath" title alone can
+  // eat the full row, pushing the online count and locale switcher off-screen with no
+  // way to reach them (a real horizontal-scroll bug, found by actually rendering this
+  // at a real mobile viewport, not just reasoning about the CSS). Below NARROW_QUERY,
+  // the header stacks into two rows instead of trying to fit everything on one.
+  const narrow = useMediaQuery(NARROW_QUERY);
   return (
     // `<main>` is a column: the header stays pinned at the top (natural for a
     // persistent nav element), and the tagline+card cluster below it centers in
@@ -103,12 +111,22 @@ export function LobbyScreen({
       {/* A generous soft ceiling (`min()`), not a fixed cap — fills the available viewport
           on any realistic screen instead of leaving large dead margins at 100% zoom, while
           still stopping short of absurd line lengths on an ultrawide monitor. */}
-      <header style={{ width: '100%', maxWidth: 'min(1600px, 96vw)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+      <header
+        style={{
+          width: '100%',
+          maxWidth: 'min(1600px, 96vw)',
+          display: 'flex',
+          flexDirection: narrow ? 'column' : 'row',
+          alignItems: narrow ? 'stretch' : 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--gap-md)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', minWidth: 0 }}>
           <ProfileButton user={user} onOpenSettings={onOpenSettings} onSignIn={onSignIn} />
           <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', justifyContent: narrow ? 'space-between' : 'flex-start' }}>
           {onlineCount !== null && (
             <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />

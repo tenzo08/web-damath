@@ -1,15 +1,22 @@
-import { useState, type ReactNode } from 'react';
-import { ALL_VARIANTS } from '@damath/engine';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ALL_VARIANTS, legalMoves } from '@damath/engine';
 import type { AnyVariant, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
 import { useGame } from './hooks/useGame';
 import { useComputerOpponent } from './hooks/useComputerOpponent';
+import { useGameClock } from './hooks/useGameClock';
+import { useAuth } from './hooks/useAuth';
 import { Board } from './components/Board';
 import { Rail } from './components/Rail';
 import { ScorePanel } from './components/ScorePanel';
+import { ClockPanel } from './components/ClockPanel';
 import { MoveLedger } from './components/MoveLedger';
 import { OpponentPanel } from './components/OpponentPanel';
 import { GameControls } from './components/GameControls';
+import { TutorialModal } from './components/TutorialModal';
+import { LoginModal } from './components/LoginModal';
+import { LobbyScreen } from './components/LobbyScreen';
+import { OnlineGameScreen } from './components/OnlineGameScreen';
 import { playerLabel } from './lib/notation';
 import { asIntegerVariant } from './lib/integer-variant';
 
@@ -19,8 +26,8 @@ type ValueOf<T> = T extends Variant<infer V> ? V : never;
 /**
  * The board + score/ledger/opponent column, generic over the chip value type `V`.
  * Everything hook-derived (`useGame`'s return value) arrives as a prop here — this
- * component itself calls no hooks of its own, so it's safe to render conditionally
- * from `App` without violating the rules of hooks.
+ * component itself calls no hooks of its own beyond the clock, so it's safe to render
+ * conditionally from `App` without violating the rules of hooks.
  */
 function GameShellView<V>({
   variant,
@@ -56,10 +63,12 @@ function GameShellView<V>({
     moveCursor,
     activateCursor,
     clearSelection,
+    playMove,
     undo,
     canUndo,
     resign,
     canResign,
+    expireGame,
     viewIndex,
     isViewingHistory,
     goToMove,
@@ -67,6 +76,22 @@ function GameShellView<V>({
     stepForward,
     exitReplay,
   } = gameApi;
+
+  const allLegalMoves = useMemo(() => legalMoves(game), [game]);
+  // docs/DAMATH_RULES.md §7.1: "the limit does not apply when a capture is mandatory" —
+  // the engine already filters legalMoves() down to captures-only whenever any capture
+  // exists, so "some move has a capture" and "every move is a capture" are the same check.
+  const moveClockWaived = allLegalMoves.some((m) => m.captures.length > 0);
+  const clock = useGameClock({
+    moveKey: game.moveHistory.length,
+    paused: gameOver || isViewingHistory || blockInteraction,
+    moveClockWaived,
+    onMoveTimeout: () => {
+      const pick = allLegalMoves[Math.floor(Math.random() * allLegalMoves.length)];
+      if (pick) playMove(pick);
+    },
+    onGameTimeout: expireGame,
+  });
 
   const lastMove = (viewIndex !== null ? (ledger[viewIndex - 1] ?? null) : (ledger.at(-1) ?? null))?.move ?? null;
   const statusLine = gameOver ? announcement : blockInteraction ? 'Computer is thinking…' : `${playerLabel(game.turn)} to move`;
@@ -77,9 +102,7 @@ function GameShellView<V>({
         flex: 1,
         padding: 'var(--pad-xl)',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        overflow: 'auto',
       }}
     >
       <div style={{ width: '100%', maxWidth: 1240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
@@ -124,6 +147,7 @@ function GameShellView<V>({
             }}
           >
             <ScorePanel game={game} finalScores={finalScores} format={format} labelOverrides={scoreLabelOverrides} />
+            <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
             <GameControls
               canUndo={canUndo}
               canResign={canResign && !blockInteraction}
@@ -149,9 +173,19 @@ function GameShellView<V>({
 }
 
 /** The three integer variants (docs/AI_OPPONENT.md §4) get practice mode; this is the only place `useComputerOpponent` is called, so it's always called with a concrete `GameState<number>`. */
-function IntegerGameShell({ variant, flipped, onFlip }: { variant: Variant<number>; flipped: boolean; onFlip: () => void }) {
+function IntegerGameShell({
+  variant,
+  flipped,
+  onFlip,
+  autoStartComputer,
+}: {
+  variant: Variant<number>;
+  flipped: boolean;
+  onFlip: () => void;
+  autoStartComputer: boolean;
+}) {
   const gameApi = useGame(variant);
-  const [tier, setTier] = useState<DifficultyTier | null>(null);
+  const [tier, setTier] = useState<DifficultyTier | null>(autoStartComputer ? 'steady' : null);
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
   useComputerOpponent(gameApi.game, tier, 'black', gameApi.playMove);
 
@@ -201,6 +235,8 @@ function GenericGameShell<V>({ variant, flipped, onFlip }: { variant: Variant<V>
   );
 }
 
+type Screen = 'lobby' | 'game' | 'online';
+
 export function App() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
   if (!defaultVariant) {
@@ -209,31 +245,68 @@ export function App() {
   const [variant, setVariant] = useState<AnyVariant>(defaultVariant);
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [screen, setScreen] = useState<Screen>('lobby');
+  const [autoStartComputer, setAutoStartComputer] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const auth = useAuth();
   const integerVariant = asIntegerVariant(variant);
 
+  function enterGame(mode: 'friend' | 'computer') {
+    setAutoStartComputer(mode === 'computer');
+    setMatchNonce((n) => n + 1);
+    setScreen('game');
+  }
+
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <Rail
-        variants={ALL_VARIANTS}
-        current={variant}
-        onSelectVariant={setVariant}
-        onNewGame={() => setMatchNonce((n) => n + 1)}
-      />
-      {integerVariant ? (
-        <IntegerGameShell
-          key={`${variant.id}-${String(matchNonce)}`}
-          variant={integerVariant}
-          flipped={flipped}
-          onFlip={() => setFlipped((f) => !f)}
-        />
-      ) : (
-        <GenericGameShell<ValueOf<AnyVariant>>
-          key={`${variant.id}-${String(matchNonce)}`}
-          variant={variant}
-          flipped={flipped}
-          onFlip={() => setFlipped((f) => !f)}
+    <div style={{ display: 'flex', flex: 1 }}>
+      {screen === 'lobby' && (
+        <LobbyScreen
+          user={auth.user}
+          onSignIn={() => setLoginOpen(true)}
+          onSignOut={auth.logout}
+          onPlayFriend={() => enterGame('friend')}
+          onPlayComputer={() => enterGame('computer')}
+          onPlayOnline={() => setScreen('online')}
+          onLearn={() => setTutorialOpen(true)}
         />
       )}
+
+      {screen === 'online' && (
+        <OnlineGameScreen token={auth.token} onBackToLobby={() => setScreen('lobby')} onOpenLogin={() => setLoginOpen(true)} />
+      )}
+
+      {screen === 'game' && (
+        <>
+          <Rail
+            variants={ALL_VARIANTS}
+            current={variant}
+            onSelectVariant={setVariant}
+            onNewGame={() => setMatchNonce((n) => n + 1)}
+            onOpenTutorial={() => setTutorialOpen(true)}
+            onBackToLobby={() => setScreen('lobby')}
+          />
+          {integerVariant ? (
+            <IntegerGameShell
+              key={`${variant.id}-${String(matchNonce)}`}
+              variant={integerVariant}
+              flipped={flipped}
+              onFlip={() => setFlipped((f) => !f)}
+              autoStartComputer={autoStartComputer}
+            />
+          ) : (
+            <GenericGameShell<ValueOf<AnyVariant>>
+              key={`${variant.id}-${String(matchNonce)}`}
+              variant={variant}
+              flipped={flipped}
+              onFlip={() => setFlipped((f) => !f)}
+            />
+          )}
+        </>
+      )}
+
+      <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
+      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />
     </div>
   );
 }

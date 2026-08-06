@@ -1,11 +1,60 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { App } from './App';
 
-describe('App', () => {
-  it('renders the board with the opening position and no moves yet', () => {
+/** Every game-behavior test needs to get past the lobby first — App now starts there, chess.com-style. */
+async function enterFriendGame(user: UserEvent) {
+  render(<App />);
+  await user.click(screen.getByRole('button', { name: /^Play a Friend/ }));
+}
+
+async function openVariantMenu(user: UserEvent) {
+  await user.click(screen.getByRole('button', { name: /^Whole Damath/ }));
+}
+
+describe('the lobby', () => {
+  it('is the landing screen, with mode cards and no board', () => {
     render(<App />);
+    expect(screen.getByRole('heading', { name: 'Damath' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Play a Friend/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Play the Computer/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Play Online/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Learn to Play/ })).toBeInTheDocument();
+    expect(screen.queryByRole('grid', { name: 'Damath board' })).not.toBeInTheDocument();
+  });
+
+  it('"Learn to Play" opens the tutorial without leaving the lobby', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /^Learn to Play/ }));
+    expect(screen.getByRole('dialog', { name: 'How to play Damath' })).toBeInTheDocument();
+    expect(screen.getByText('1. The board')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Damath' })).toBeInTheDocument();
+  });
+
+  it('"Play Online" without signing in prompts for sign-in rather than erroring out', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /^Play Online/ }));
+    expect(screen.getByRole('heading', { name: 'Play Online' })).toBeInTheDocument();
+    expect(screen.getByText(/Sign in to find a real opponent/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '← Lobby' }));
+    expect(screen.getByRole('heading', { name: 'Damath' })).toBeInTheDocument();
+  });
+});
+
+describe('local play (Play a Friend)', () => {
+  it('renders the board with the opening position and no moves yet', async () => {
+    const user = userEvent.setup();
+    await enterFriendGame(user);
     expect(screen.getByRole('grid', { name: 'Damath board' })).toBeInTheDocument();
     expect(screen.getByText('Light to move')).toBeInTheDocument();
     expect(screen.getByText('No moves yet.')).toBeInTheDocument();
@@ -13,9 +62,9 @@ describe('App', () => {
 
   it('selecting a piece then clicking a legal destination plays the move and updates the ledger', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
-    // Integer Damath's opening: white has a piece at (2,1) with a legal quiet move to (3,0).
+    // Whole Damath's opening: white has a piece at (2,1) with a legal quiet move to (3,0).
     const origin = screen.getByRole('gridcell', { name: /^b3, /i });
     await user.click(origin);
     expect(origin).toHaveAttribute('aria-selected', 'true');
@@ -28,18 +77,21 @@ describe('App', () => {
     expect(destination).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
-  it('switching variants from the rail starts a fresh game', async () => {
+  it('the hamburger variant menu switches variants and starts a fresh game', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
+    await openVariantMenu(user);
     await user.click(screen.getByRole('button', { name: /^Integer Damath/ }));
     expect(screen.getByRole('heading', { name: 'Integer Damath' })).toBeInTheDocument();
     expect(screen.getByText('No moves yet.')).toBeInTheDocument();
+    // The menu closes itself after a selection.
+    expect(screen.queryByRole('button', { name: /^Fraction Damath/ })).not.toBeInTheDocument();
   });
 
   it('"New match" restarts the same variant with a fresh board', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
     await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
     await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
@@ -53,7 +105,7 @@ describe('App', () => {
 
   it('"Undo move" removes the last move and returns to the previous turn', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
     await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
     await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
@@ -68,7 +120,7 @@ describe('App', () => {
 
   it('"Resign" ends the game in favor of the opponent', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
     await user.click(screen.getByRole('button', { name: 'Resign' }));
 
@@ -79,7 +131,7 @@ describe('App', () => {
 
   it('stepping back through the move ledger browses history without changing the live game', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
     await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
     await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
@@ -96,8 +148,9 @@ describe('App', () => {
 
   it('a non-integer variant renders formatted (non-numeric) chip values and has no computer opponent', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await enterFriendGame(user);
 
+    await openVariantMenu(user);
     await user.click(screen.getByRole('button', { name: /^Fraction Damath/ }));
     expect(screen.getByRole('heading', { name: 'Fraction Damath' })).toBeInTheDocument();
     // Fraction Damath's opening values include "1" (10/10) and fractions like "7/10".
@@ -105,5 +158,22 @@ describe('App', () => {
     // No interactive "play the computer" control for this variant — just the explanatory note.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.getByText(/computer opponent plays Whole, Counting, and Integer Damath only/i)).toBeInTheDocument();
+  });
+
+  it('the clock panel shows the 20-minute game clock and the 60-second move clock', async () => {
+    const user = userEvent.setup();
+    await enterFriendGame(user);
+
+    expect(screen.getByRole('region', { name: 'Clock' })).toBeInTheDocument();
+    expect(screen.getByText('20:00')).toBeInTheDocument();
+    expect(screen.getByText('1:00')).toBeInTheDocument();
+  });
+
+  it('"Play the Computer" from the lobby starts the game with the opponent already enabled', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: /^Play the Computer/ }));
+
+    expect(screen.getByRole('checkbox', { name: /play the computer/i })).toBeChecked();
   });
 });

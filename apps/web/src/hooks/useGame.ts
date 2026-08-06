@@ -13,6 +13,8 @@ interface State<V> {
   announcement: string;
   /** Set the instant a player resigns; overrides `game.status` for "is this game over" purposes — see KNOWLEDGE.md. */
   resignedBy: Player | null;
+  /** Set when the 20-minute game clock (docs/DAMATH_RULES.md §7.1) runs out — a second, independent way the game can end without the engine's own `status` changing, same reasoning as `resignedBy`. */
+  timeExpired: boolean;
   /** How many played moves the *board* currently shows — `null` means "the live position" (`game.moveHistory.length` moves in). Browsing history never touches `game` itself. */
   viewIndex: number | null;
 }
@@ -25,6 +27,7 @@ type Action<V> =
   | { type: 'SET_CURSOR'; pos: Position }
   | { type: 'UNDO' }
   | { type: 'RESIGN' }
+  | { type: 'EXPIRE_GAME' }
   | { type: 'VIEW_MOVE'; index: number | null };
 
 function firstPlayableSquare(): Position {
@@ -63,11 +66,11 @@ function describeMove<V>(entry: LedgerEntry<V>, mover: NonNullable<ReturnType<ty
   return `${who} ${format(mover.value)} captures ${String(entry.steps.length)} chips. Score ${format(entry.runningTotal)}.`;
 }
 
-function endOfGameMessage<V>(game: GameState<V>, variant: Variant<V>): string {
+function endOfGameMessage<V>(game: GameState<V>, variant: Variant<V>, reasonOverride?: string): string {
   const arithmetic = variant.arithmetic;
   const scores = finalScores(game, arithmetic);
   const stillHasMoves = legalMoves(game).length > 0;
-  const reason = stillHasMoves ? 'Position repeated three times' : 'No legal moves';
+  const reason = reasonOverride ?? (stillHasMoves ? 'Position repeated three times' : 'No legal moves');
   const order = arithmetic.compare(scores.white, scores.black);
   if (order === 0) {
     return `${reason}. Draw at ${arithmetic.format(scores.white)} each.`;
@@ -89,12 +92,13 @@ function makeReducer<V>(variant: Variant<V>) {
           cursor: firstPlayableSquare(),
           ledger: [],
           resignedBy: null,
+          timeExpired: false,
           viewIndex: null,
           announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
         };
       }
       case 'SELECT': {
-        if (state.game.status === 'finished' || state.resignedBy || state.viewIndex !== null) return state;
+        if (state.game.status === 'finished' || state.resignedBy || state.timeExpired || state.viewIndex !== null) return state;
         const piece = pieceAt(state.game.board, action.pos);
         if (!piece || piece.owner !== state.game.turn) return state;
         const hasLegalMove = legalMoves(state.game).some((m) => samePosition(m.from, action.pos));
@@ -106,7 +110,7 @@ function makeReducer<V>(variant: Variant<V>) {
       case 'SET_CURSOR':
         return { ...state, cursor: action.pos };
       case 'MOVE': {
-        if (state.game.status === 'finished' || state.resignedBy || state.viewIndex !== null) return state;
+        if (state.game.status === 'finished' || state.resignedBy || state.timeExpired || state.viewIndex !== null) return state;
         const mover = pieceAt(state.game.board, action.move.from);
         if (!mover) return state;
         const next = applyMove(state.game, action.move, variant);
@@ -134,12 +138,13 @@ function makeReducer<V>(variant: Variant<V>) {
           cursor: firstPlayableSquare(),
           ledger: state.ledger.slice(0, -1),
           resignedBy: null,
+          timeExpired: false,
           viewIndex: null,
           announcement: `Move undone. ${playerLabel(game.turn)} to move.`,
         };
       }
       case 'RESIGN': {
-        if (state.game.status === 'finished' || state.resignedBy) return state;
+        if (state.game.status === 'finished' || state.resignedBy || state.timeExpired) return state;
         const resigner = state.game.turn;
         return {
           ...state,
@@ -147,6 +152,16 @@ function makeReducer<V>(variant: Variant<V>) {
           resignedBy: resigner,
           viewIndex: null,
           announcement: `${playerLabel(resigner)} resigns. ${playerLabel(opponentOf(resigner))} wins.`,
+        };
+      }
+      case 'EXPIRE_GAME': {
+        if (state.game.status === 'finished' || state.resignedBy || state.timeExpired) return state;
+        return {
+          ...state,
+          selected: null,
+          timeExpired: true,
+          viewIndex: null,
+          announcement: endOfGameMessage(state.game, variant, "Time's up — the 20-minute clock ran out"),
         };
       }
       case 'VIEW_MOVE':
@@ -165,6 +180,7 @@ function init<V>(variant: Variant<V>): State<V> {
     cursor: firstPlayableSquare(),
     ledger: [],
     resignedBy: null,
+    timeExpired: false,
     viewIndex: null,
     announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
   };
@@ -256,6 +272,7 @@ export function useGame<V>(variant: Variant<V>) {
 
   const undo = useCallback(() => dispatch({ type: 'UNDO' }), []);
   const resign = useCallback(() => dispatch({ type: 'RESIGN' }), []);
+  const expireGame = useCallback(() => dispatch({ type: 'EXPIRE_GAME' }), []);
 
   const historyLength = state.game.moveHistory.length;
   const goToMove = useCallback(
@@ -269,7 +286,7 @@ export function useGame<V>(variant: Variant<V>) {
   const stepForward = useCallback(() => goToMove((state.viewIndex ?? historyLength) + 1), [goToMove, state.viewIndex, historyLength]);
   const exitReplay = useCallback(() => dispatch({ type: 'VIEW_MOVE', index: null }), []);
 
-  const gameOver = state.game.status === 'finished' || state.resignedBy !== null;
+  const gameOver = state.game.status === 'finished' || state.resignedBy !== null || state.timeExpired;
 
   return {
     game: state.game,
@@ -283,6 +300,7 @@ export function useGame<V>(variant: Variant<V>) {
     destinations: isViewingHistory ? [] : destinations,
     gameOver,
     resignedBy: state.resignedBy,
+    timeExpired: state.timeExpired,
     finalScores: gameOver ? finalScores(state.game, variant.arithmetic) : null,
     activateSquare,
     moveCursor,
@@ -294,6 +312,7 @@ export function useGame<V>(variant: Variant<V>) {
     canUndo: historyLength > 0,
     resign,
     canResign: !gameOver,
+    expireGame,
     viewIndex: state.viewIndex,
     isViewingHistory,
     goToMove,

@@ -27,13 +27,14 @@ function ControlButton({
       onClick={onClick}
       disabled={disabled}
       style={{
-        flex: '1 1 auto',
+        width: '100%',
         background: 'transparent',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         color: disabled ? 'var(--text-disabled)' : danger ? 'var(--danger, #e35b5b)' : 'var(--text-secondary)',
         fontSize: 'var(--fs-meta)',
         padding: 'var(--pad-sm) var(--pad-md)',
+        textAlign: 'center',
         cursor: disabled ? 'default' : 'pointer',
       }}
     >
@@ -74,11 +75,14 @@ export function GameControls({
         gap: 'var(--gap-sm)',
       }}
     >
-      <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+      {/* A CSS grid, not flex — guarantees the two columns stay exactly equal width no
+          matter how the label text lengths differ ("◂ Back" vs "Forward ▸"), which a
+          flex row with a content-based basis didn't reliably do. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
         <ControlButton label="◂ Back" onClick={onStepBack} disabled={!canUndo} />
         <ControlButton label="Forward ▸" onClick={onStepForward} disabled={!isViewingHistory} />
       </div>
-      <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
         <ControlButton label="Undo move" onClick={onUndo} disabled={!canUndo} />
         <ControlButton label="Flip board" onClick={onFlip} disabled={false} />
       </div>

@@ -8,6 +8,15 @@ services:
     startCommand: pnpm -F @damath/server start
     healthCheckPath: /health
     envVars:
+      # Real Postgres persistence (Prisma — apps/server/prisma/schema.prisma), e.g. a
+      # Neon connection string. Set this to enable it; left unset, the server falls back
+      # to the JSON file stores, which do NOT survive a redeploy on Render (see
+      # DEPLOYMENT.md's honest caveats). `prisma generate` runs automatically via
+      # apps/server's own postinstall script, so no extra buildCommand step is needed —
+      # just `prisma migrate deploy` once, manually, the first time (Render's Shell tab),
+      # to actually create the tables against a fresh database.
+      - key: DATABASE_URL
+        sync: false
       # Works around a real Render build failure: `corepack enable` fails with "Cannot
       # find matching keyid" because the corepack bundled with the pinned Node version
       # (.node-version) has a stale npm-registry signing-key set (nodejs/corepack#625 —

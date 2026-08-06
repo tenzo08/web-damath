@@ -1,12 +1,5 @@
 import type { Move } from '@damath/engine';
 
-/**
- * `packages/ai` plays the three integer variants only (Whole, Counting, Integer) —
- * an evaluation function needs a numeric scale, and Fraction/Radical/Polynomial don't
- * have one yet (docs/AI_OPPONENT.md §4, docs/adr/0002).
- */
-export type SupportedVariantId = 'whole' | 'counting' | 'integer';
-
 export interface SearchOptions {
   readonly maxDepth: number;
   readonly timeBudgetMs: number;
@@ -16,9 +9,9 @@ export interface SearchOptions {
   readonly blunderRate?: number;
 }
 
-export interface SearchResult {
-  readonly move: Move<number>;
-  /** Evaluation from the searching player's perspective. */
+export interface SearchResult<V> {
+  readonly move: Move<V>;
+  /** Evaluation from the searching player's perspective — always a plain number, regardless of the variant's chip-value type (valueScale.ts's `ToNumber<V>` bridge). Never the actual on-board/final score, which stays exact and `V`-typed everywhere else in the engine. */
   readonly score: number;
   /** Depth actually completed within the time budget. */
   readonly depth: number;

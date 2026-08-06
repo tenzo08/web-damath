@@ -5,6 +5,7 @@ import { orderMoves } from './ordering.js';
 import { createRng } from './rng.js';
 import type { Clock, SearchOptions, SearchResult } from './types.js';
 import { resolveVariant } from './variant.js';
+import type { ToNumber } from './valueScale.js';
 
 /**
  * How many extra plies to search past the nominal depth while the position is a
@@ -19,23 +20,24 @@ import { resolveVariant } from './variant.js';
  */
 const QUIESCENCE_BUDGET = 6;
 
-interface SearchContext {
+interface SearchContext<V> {
   readonly weights: EvaluationWeights;
   readonly clock: Clock;
   readonly deadline: number;
   readonly rng: () => number;
-  readonly variant: Variant<number>;
+  readonly variant: Variant<V>;
+  readonly toNumber: ToNumber<V>;
   nodesEvaluated: number;
 }
 
-function isForcedCapture(moves: readonly Move<number>[]): boolean {
+function isForcedCapture<V>(moves: readonly Move<V>[]): boolean {
   const first = moves[0];
   return first !== undefined && first.captures.length > 0;
 }
 
-function leaf(state: GameState<number>, ctx: SearchContext, player: GameState<number>['turn']): number {
+function leaf<V>(state: GameState<V>, ctx: SearchContext<V>, player: GameState<V>['turn']): number {
   ctx.nodesEvaluated++;
-  return evaluate(state, player, ctx.weights);
+  return evaluate(state, player, ctx.variant, ctx.toNumber, ctx.weights);
 }
 
 /**
@@ -44,15 +46,15 @@ function leaf(state: GameState<number>, ctx: SearchContext, player: GameState<nu
  * switches turn exactly once (chain captures are one atomic Move), so ply depth and
  * turn alternation always agree.
  */
-function alphaBeta(
-  state: GameState<number>,
+function alphaBeta<V>(
+  state: GameState<V>,
   depth: number,
   quiescenceBudget: number,
   alpha: number,
   beta: number,
   maximizing: boolean,
-  rootPlayer: GameState<number>['turn'],
-  ctx: SearchContext,
+  rootPlayer: GameState<V>['turn'],
+  ctx: SearchContext<V>,
 ): number {
   if (ctx.clock() > ctx.deadline) {
     return leaf(state, ctx, rootPlayer);
@@ -70,7 +72,7 @@ function alphaBeta(
   const nextDepth = atHorizon ? depth : depth - 1;
   const nextBudget = atHorizon ? quiescenceBudget - 1 : quiescenceBudget;
 
-  const ordered = orderMoves(state, moves, ctx.rng, null);
+  const ordered = orderMoves(state, moves, ctx.variant, ctx.toNumber, ctx.rng, null);
 
   if (maximizing) {
     let best = -Infinity;
@@ -94,8 +96,8 @@ function alphaBeta(
   return best;
 }
 
-interface RankedMove {
-  readonly move: Move<number>;
+interface RankedMove<V> {
+  readonly move: Move<V>;
   readonly value: number;
 }
 
@@ -106,12 +108,12 @@ interface RankedMove {
  * blunder mechanic (§7) possible: it needs a real second-best move, not just a
  * pruned bound.
  */
-function searchRoot(state: GameState<number>, depth: number, pv: Move<number> | null, ctx: SearchContext): RankedMove[] {
+function searchRoot<V>(state: GameState<V>, depth: number, pv: Move<V> | null, ctx: SearchContext<V>): RankedMove<V>[] {
   const moves = legalMoves(state);
-  const ordered = orderMoves(state, moves, ctx.rng, pv);
+  const ordered = orderMoves(state, moves, ctx.variant, ctx.toNumber, ctx.rng, pv);
   const rootPlayer = state.turn;
   let alpha = -Infinity;
-  const ranked: RankedMove[] = [];
+  const ranked: RankedMove<V>[] = [];
   for (const move of ordered) {
     const child = applyMove(state, move, ctx.variant, { checkGameOver: false });
     const value = alphaBeta(child, depth - 1, QUIESCENCE_BUDGET, alpha, Infinity, false, rootPlayer, ctx);
@@ -136,28 +138,36 @@ const defaultClock: Clock = () => Date.now();
  * play still varies game to game — determinism is only guaranteed, and only needed,
  * when the caller supplies a seed (tests always do).
  *
+ * Generic over `V`: every one of the seven official variants (docs/AI_OPPONENT.md §4,
+ * revised) resolves its own `Variant<V>` and numeric-heuristic bridge via
+ * `resolveVariant` — the actual win condition and on-board score stay exact
+ * (`Arithmetic<V>`) throughout; only the internal search heuristic (`evaluate.ts`)
+ * ever touches a plain-number approximation, and only to rank candidate moves.
+ *
  * `weights` defaults to `DEFAULT_WEIGHTS` and isn't part of `SearchOptions` (matching
  * docs/AI_OPPONENT.md's given interface exactly) — it's exposed only so
  * `test/self-play-weights.test.ts` can run the F1 comparison against
  * `MATERIAL_HEAVY_WEIGHTS` without a second copy of the search.
  */
-export function chooseMove(
-  state: GameState<number>,
+export function chooseMove<V>(
+  state: GameState<V>,
   opts: SearchOptions,
   clock: Clock = defaultClock,
   weights: EvaluationWeights = DEFAULT_WEIGHTS,
-): SearchResult {
+): SearchResult<V> {
   const start = clock();
   const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
   const rng = createRng(seed);
   const blunderRate = opts.blunderRate ?? 0;
 
-  const ctx: SearchContext = {
+  const { variant, toNumber } = resolveVariant<V>(state.variant);
+  const ctx: SearchContext<V> = {
     weights,
     clock,
     deadline: start + opts.timeBudgetMs,
     rng,
-    variant: resolveVariant(state.variant),
+    variant,
+    toNumber,
     nodesEvaluated: 0,
   };
 
@@ -167,10 +177,10 @@ export function chooseMove(
     throw new Error('chooseMove: no legal moves in this position');
   }
   if (only) {
-    return { move: only, score: evaluate(state, state.turn, ctx.weights), depth: 0, nodesEvaluated: 0, timeMs: clock() - start };
+    return { move: only, score: evaluate(state, state.turn, variant, toNumber, ctx.weights), depth: 0, nodesEvaluated: 0, timeMs: clock() - start };
   }
 
-  let bestRanked: RankedMove[] = orderMoves(state, rootMoves, rng, null).map((move) => ({ move, value: 0 }));
+  let bestRanked: RankedMove<V>[] = orderMoves(state, rootMoves, variant, toNumber, rng, null).map((move) => ({ move, value: 0 }));
   let completedDepth = 0;
 
   for (let depth = 1; depth <= opts.maxDepth; depth++) {

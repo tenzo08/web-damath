@@ -1,8 +1,9 @@
-import { numberArithmetic, operationAt, pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCapture } from '@damath/engine';
-import type { GameState, Move, Player } from '@damath/engine';
+import { operationAt, pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCapture } from '@damath/engine';
+import type { GameState, Move, Player, Variant } from '@damath/engine';
 import { randomInt } from './rng.js';
+import type { ToNumber } from './valueScale.js';
 
-function isPromotionSquare(move: Move<number>, mover: Player): boolean {
+function isPromotionSquare<V>(move: Move<V>, mover: Player): boolean {
   const squares = mover === 'white' ? PROMOTION_SQUARES_ROW_7 : PROMOTION_SQUARES_ROW_0;
   return squares.some((s) => s.row === move.to.row && s.col === move.to.col);
 }
@@ -13,24 +14,26 @@ function isPromotionSquare(move: Move<number>, mover: Player): boolean {
  * mandatory-maximal-capture (§4.2-4.3), so every move in one call's result already has
  * the same capture count; what's left to rank is the resulting score (§5.1) and
  * whether it promotes (docs/AI_OPPONENT.md §6: "captures first, then higher-scoring
- * captures, then promotions").
+ * captures, then promotions"). `scoreCapture` itself stays exact (`variant.arithmetic`);
+ * only the final ranking number goes through `toNumber` (valueScale.ts), same "exact
+ * until the very last step" pattern `evaluate.ts` uses.
  */
-function orderingScore(state: GameState<number>, move: Move<number>): number {
+function orderingScore<V>(state: GameState<V>, move: Move<V>, variant: Variant<V>, toNumber: ToNumber<V>): number {
   const mover = pieceAt(state.board, move.from);
   if (!mover) return 0;
-  let captureScore = 0;
+  let captureScore = variant.arithmetic.zero;
   for (const step of move.captures) {
-    captureScore += scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), numberArithmetic);
+    captureScore = variant.arithmetic.add(captureScore, scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), variant.arithmetic));
   }
   const promotes = !mover.isDama && isPromotionSquare(move, mover.owner);
-  return captureScore * 10 + (promotes ? 5 : 0);
+  return toNumber(captureScore) * 10 + (promotes ? 5 : 0);
 }
 
 function samePosition(a: { row: number; col: number }, b: { row: number; col: number }): boolean {
   return a.row === b.row && a.col === b.col;
 }
 
-function sameMove(a: Move<number>, b: Move<number>): boolean {
+function sameMove<V>(a: Move<V>, b: Move<V>): boolean {
   return samePosition(a.from, b.from) && samePosition(a.to, b.to) && a.captures.length === b.captures.length;
 }
 
@@ -40,12 +43,14 @@ function sameMove(a: Move<number>, b: Move<number>): boolean {
  * the fix for reference/'s F4 bug, where each depth restarted from an unordered list
  * and threw away the prior depth's work.
  */
-export function orderMoves(
-  state: GameState<number>,
-  moves: readonly Move<number>[],
+export function orderMoves<V>(
+  state: GameState<V>,
+  moves: readonly Move<V>[],
+  variant: Variant<V>,
+  toNumber: ToNumber<V>,
   rng: () => number,
-  pv: Move<number> | null,
-): Move<number>[] {
+  pv: Move<V> | null,
+): Move<V>[] {
   const shuffled = moves.slice();
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = randomInt(rng, i + 1);
@@ -55,7 +60,7 @@ export function orderMoves(
     shuffled[i] = b;
     shuffled[j] = a;
   }
-  shuffled.sort((a, b) => orderingScore(state, b) - orderingScore(state, a));
+  shuffled.sort((a, b) => orderingScore(state, b, variant, toNumber) - orderingScore(state, a, variant, toNumber));
 
   if (pv) {
     const index = shuffled.findIndex((m) => sameMove(m, pv));

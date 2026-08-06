@@ -7,6 +7,6 @@ import { handleAiRequest, type AiWorkerRequest } from './worker-protocol.js';
  * and never leaves the browser, so it works offline (docs/AI_OPPONENT.md §3, §9
  * "Practice mode").
  */
-self.onmessage = (event: MessageEvent<AiWorkerRequest>) => {
+self.onmessage = (event: MessageEvent<AiWorkerRequest<unknown>>) => {
   self.postMessage(handleAiRequest(event.data));
 };

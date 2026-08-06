@@ -11,7 +11,8 @@ describe('public API surface', () => {
 
   it('exports the evaluation and RNG primitives', () => {
     const state = createGame(WHOLE_DAMATH);
-    expect(typeof ai.evaluate(state, 'white')).toBe('number');
+    const { variant, toNumber } = ai.resolveVariant<number>(state.variant);
+    expect(typeof ai.evaluate(state, 'white', variant, toNumber)).toBe('number');
     const rng = ai.createRng(1);
     expect(typeof rng()).toBe('number');
     expect(typeof ai.randomInt(rng, 10)).toBe('number');

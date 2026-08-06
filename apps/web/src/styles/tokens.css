@@ -70,3 +70,47 @@
     --dur-base: 0ms;
   }
 }
+
+/**
+ * Light theme — an actual second palette, not "invert everything." Piece colors
+ * (--piece-light/--piece-dark and their "-on" pairs) are deliberately absent here:
+ * those identify the *player*, not the UI theme, and stay constant in both modes so a
+ * screenshot or a description of "the gold pieces" means the same thing regardless of
+ * which theme took it. The accent gold itself is darkened from the dark theme's
+ * #E3B341 — that value reads fine on a near-black page but loses contrast used as text
+ * on white, so light mode gets a deeper amber instead. Applied via `[data-theme="light"]`
+ * on `<html>`, set by `useTheme.ts` (JS resolves "system" preference itself, so this
+ * file never needs an `@media (prefers-color-scheme)` block of its own).
+ */
+:root[data-theme='light'] {
+  --surface-page: #f5f5f7;
+  --surface-rail: #ebebef;
+  --surface-panel: #ffffff;
+  --surface-raised: #ffffff;
+
+  --border: #dcdce2;
+  --border-strong: #c5c5cf;
+
+  --text-primary: #17171c;
+  --text-secondary: #55555f;
+  --text-muted: #8a8a94;
+  --text-disabled: #b8b8c0;
+
+  --accent: #9c6b0a;
+  --accent-dim: #7a530a;
+  --accent-bg: rgba(156, 107, 10, 0.1);
+  --accent-on: #fffaf0;
+
+  --danger: #c0392b;
+  --danger-bg: rgba(192, 57, 43, 0.08);
+  --success: #2f9e5b;
+  --success-bg: rgba(47, 158, 91, 0.08);
+  --info: #3f6f96;
+  --info-bg: rgba(63, 111, 150, 0.08);
+
+  --square-void: #e6e6ea;
+  --square-play: #fafafc;
+  --square-op: #a8a8b2;
+  --square-legal: rgba(156, 107, 10, 0.14);
+  --square-last: rgba(63, 111, 150, 0.12);
+}

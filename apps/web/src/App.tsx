@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
 import type { AnyVariant, Player, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
@@ -19,12 +19,15 @@ import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal
 import { GameOverModal } from './components/GameOverModal';
 import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
+import { SettingsModal } from './components/SettingsModal';
 import { LobbyScreen } from './components/LobbyScreen';
 import { OnlineGameScreen } from './components/OnlineGameScreen';
 import { TournamentScreen } from './components/TournamentScreen';
 import { playerLabel } from './lib/notation';
 import { asIntegerVariant } from './lib/integer-variant';
 import { LocaleProvider } from './lib/i18n';
+import { SettingsProvider, useSettings } from './lib/settings';
+import { playCaptureSound, playMoveSound, playWinSound } from './lib/sound';
 
 /** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses." */
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -91,6 +94,28 @@ function GameShellView<V>({
   } = gameApi;
 
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
+  const { effectiveVolume } = useSettings();
+
+  // A capture/move sound per new ply actually played — `ledger` only grows on a real
+  // move (never while browsing history via `viewIndex`, and it resets to `[]`, a
+  // decrease, on a fresh game, which the `>` check below correctly ignores).
+  const previousLedgerLength = useRef(ledger.length);
+  useEffect(() => {
+    if (ledger.length > previousLedgerLength.current) {
+      const lastEntry = ledger[ledger.length - 1];
+      if (lastEntry && lastEntry.steps.length > 0) playCaptureSound(effectiveVolume);
+      else playMoveSound(effectiveVolume);
+    }
+    previousLedgerLength.current = ledger.length;
+  }, [ledger, effectiveVolume]);
+
+  // One chime the instant the game ends — hot-seat is two players sharing one screen,
+  // so there's no single "you won" to distinguish, unlike online play.
+  const previousGameOver = useRef(gameOver);
+  useEffect(() => {
+    if (gameOver && !previousGameOver.current) playWinSound(effectiveVolume);
+    previousGameOver.current = gameOver;
+  }, [gameOver, effectiveVolume]);
 
   // A resignation must declare the resigner's opponent the winner even when the score
   // happens to be tied — score comparison alone can't express that (see KNOWLEDGE.md).
@@ -294,6 +319,7 @@ function AppShell() {
   const [tournamentContext, setTournamentContext] = useState<{ tournamentId: string; roomId: string | null } | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupInitial, setSetupInitial] = useState<{ variant: AnyVariant; opponent: OpponentChoice }>({
     variant: defaultVariant,
@@ -362,6 +388,7 @@ function AppShell() {
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => setScreen('tournaments')}
           onlineCount={live.onlineCount}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
 
@@ -425,6 +452,7 @@ function AppShell() {
 
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <GameSetupModal
         open={setupOpen}
         onClose={() => setSetupOpen(false)}
@@ -443,7 +471,9 @@ function AppShell() {
 export function App() {
   return (
     <LocaleProvider>
-      <AppShell />
+      <SettingsProvider>
+        <AppShell />
+      </SettingsProvider>
     </LocaleProvider>
   );
 }

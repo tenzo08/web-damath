@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, applyMove, createGame, pieceAt, replayMoves } from '@damath/engine';
 import type { Move, Position, Variant, VariantId } from '@damath/engine';
 import { useOnlineGame } from '../hooks/useOnlineGame';
@@ -7,6 +7,8 @@ import { MoveLedger } from './MoveLedger';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import type { PublicGameView } from '../lib/onlineProtocol';
+import { useSettings } from '../lib/settings';
+import { playCaptureSound, playErrorSound, playLossSound, playMoveSound, playWinSound } from '../lib/sound';
 
 interface OnlineGameScreenProps {
   token: string | null;
@@ -119,6 +121,36 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
     [online.view?.moveHistory, variant],
   );
   const isViewingHistory = viewIndex !== null;
+
+  const { effectiveVolume } = useSettings();
+  const previousMoveCount = useRef(online.view?.moveCount);
+  useEffect(() => {
+    const count = online.view?.moveCount;
+    if (count !== undefined && previousMoveCount.current !== undefined && count > previousMoveCount.current) {
+      const lastEntry = ledger.at(-1);
+      if (lastEntry && lastEntry.steps.length > 0) playCaptureSound(effectiveVolume);
+      else playMoveSound(effectiveVolume);
+    }
+    previousMoveCount.current = count;
+  }, [online.view?.moveCount, ledger, effectiveVolume]);
+
+  const previousStatus = useRef(online.view?.status);
+  useEffect(() => {
+    if (online.view?.status === 'finished' && previousStatus.current !== 'finished') {
+      if (online.view.winner === null) {
+        // A draw — no clear win/loss chime, same "nothing to distinguish" reasoning as
+        // hot-seat's single game-over sound, just silence instead here.
+      } else if (online.view.winner === online.color) playWinSound(effectiveVolume);
+      else playLossSound(effectiveVolume);
+    }
+    previousStatus.current = online.view?.status;
+  }, [online.view?.status, online.view?.winner, online.color, effectiveVolume]);
+
+  const previousError = useRef(online.error);
+  useEffect(() => {
+    if (online.error && online.error !== previousError.current) playErrorSound(effectiveVolume);
+    previousError.current = online.error;
+  }, [online.error, effectiveVolume]);
   const displayBoard =
     online.view && variant && viewIndex !== null ? replayedWireBoard(variant, online.view.moveHistory, viewIndex) : online.view?.board;
 

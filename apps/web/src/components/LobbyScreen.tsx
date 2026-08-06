@@ -14,6 +14,7 @@ interface LobbyScreenProps {
   onTournaments: () => void;
   /** How many users are currently connected — `null` while signed out or still connecting (App.tsx's `useLiveUpdates`). */
   onlineCount: number | null;
+  onOpenSettings: () => void;
 }
 
 function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; title: string; description: string; onClick: () => void }) {
@@ -80,6 +81,7 @@ export function LobbyScreen({
   onLearn,
   onTournaments,
   onlineCount,
+  onOpenSettings,
 }: LobbyScreenProps) {
   const { t } = useLocale();
   return (
@@ -98,6 +100,23 @@ export function LobbyScreen({
               </span>
             )}
             <LocaleSwitcher />
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              aria-label="Settings"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                color: 'var(--text-secondary)',
+                fontSize: 'var(--fs-body)',
+                padding: '4px 8px',
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              <span aria-hidden="true">⚙️</span>
+            </button>
             <AuthBar user={user} onSignIn={onSignIn} onSignOut={onSignOut} />
           </div>
         </header>

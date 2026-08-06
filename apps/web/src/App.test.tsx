@@ -263,3 +263,39 @@ describe('playing the computer', () => {
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 });
+
+describe('settings', () => {
+  it('opens from the lobby, and switching to Light actually applies the theme to <html> and persists it', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(document.documentElement.dataset.theme).toBeUndefined(); // dark is the default, no attribute needed
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(within(dialog).getByRole('button', { name: /Dark/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /System/ })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /Light/ }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('damath.theme')).toBe('light');
+
+    await user.click(within(dialog).getByRole('button', { name: /Dark/ }));
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(localStorage.getItem('damath.theme')).toBe('dark');
+  });
+
+  it('toggling sound effects off persists the preference', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    const soundToggle = within(dialog).getByRole('checkbox');
+    expect(soundToggle).toBeChecked(); // on by default
+
+    await user.click(soundToggle);
+    expect(soundToggle).not.toBeChecked();
+    expect(localStorage.getItem('damath.sound.enabled')).toBe('false');
+  });
+});

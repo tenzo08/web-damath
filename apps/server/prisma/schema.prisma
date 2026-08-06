@@ -47,6 +47,12 @@ model User {
   resetTokenExpiresAt  DateTime?
   verifyTokenHash      String?
   verifyTokenExpiresAt DateTime?
+  /// Google's stable per-account `sub` claim, set the first time this account signs in
+  /// with Google (auth/routes.ts's /auth/google) -- null for an account that's only
+  /// ever used email/password. Nullable + @unique, not @unique alone: Postgres treats
+  /// every NULL as distinct under a unique constraint, so any number of non-Google
+  /// accounts can coexist with this column unset.
+  googleId     String?  @unique
   createdAt    DateTime @default(now())
 
   @@index([resetTokenHash])

@@ -4,7 +4,7 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
-import { registerAuthRoutes, type ActionLinkNotifier } from './auth/routes.js';
+import { registerAuthRoutes, type ActionLinkNotifier, type GoogleIdTokenVerifier } from './auth/routes.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
@@ -48,6 +48,10 @@ export interface AppOptions {
   webOrigin?: string | undefined;
   /** Overrides how a password-reset/verify-email link is delivered — defaults to a log line (auth/routes.ts). Tests inject a capturing implementation instead, since the token is one-way-hashed before storage and can't be recovered any other way. */
   notifyActionLink?: ActionLinkNotifier | undefined;
+  /** Google OAuth Client ID, used server-side to verify a Google ID token's `aud` claim (auth/routes.ts's /auth/google). Unset means Google sign-in isn't offered on this deployment — it's a per-deployer setup step (a real Google Cloud project), not something this codebase can supply a default for. */
+  googleClientId?: string | undefined;
+  /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers when `googleClientId` is set (auth/routes.ts). Tests inject a stub instead, so the suite never makes a real network call to a third party. */
+  googleVerifier?: GoogleIdTokenVerifier | undefined;
 }
 
 declare module 'fastify' {
@@ -112,7 +116,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // ...)` above silently attaches no rate limiting at all — caught by a real request
   // test asserting a 429 actually shows up, not just that the config object looks right.
   app.after(() => {
-    registerAuthRoutes(app, options.userStore, options.webOrigin ?? 'http://localhost:5173', options.notifyActionLink);
+    registerAuthRoutes(
+      app,
+      options.userStore,
+      options.webOrigin ?? 'http://localhost:5173',
+      options.notifyActionLink,
+      options.googleClientId,
+      options.googleVerifier,
+    );
     registerGameHistoryRoutes(app, options.gameStore, options.userStore);
     registerSpectateRoutes(app, options.gameStore, options.userStore);
     registerModerationRoutes(app, options.moderationStore, options.userStore);

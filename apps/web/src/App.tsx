@@ -510,7 +510,14 @@ function AppShell() {
       {resetToken && <ResetPasswordModal token={resetToken} onClose={() => setResetToken(null)} />}
 
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={auth.login}
+        onSignup={auth.signup}
+        onGoogleAuth={auth.googleAuth}
+        onCompleteGoogleSignup={auth.completeGoogleSignup}
+      />
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

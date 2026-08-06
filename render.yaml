@@ -47,3 +47,9 @@ services:
         value: steady
       - key: QUEUE_BOT_TIMEOUT_MS
         value: '45000'
+      # A Google Cloud OAuth Client ID (not a secret -- it's meant to be public). Must
+      # match the value baked into the deployed web app's VITE_GOOGLE_CLIENT_ID exactly.
+      # Verifies a Google ID token's `aud` claim server-side (auth/routes.ts's
+      # /auth/google). Left unset here, Google sign-in just isn't offered.
+      - key: GOOGLE_CLIENT_ID
+        sync: false

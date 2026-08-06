@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as authClient from '../lib/authClient';
-import type { AuthSession, AuthUser } from '../lib/authClient';
+import type { AuthSession, AuthUser, GooglePendingSignup } from '../lib/authClient';
 
 const STORAGE_KEY = 'damath.auth.token';
 
@@ -69,6 +69,24 @@ export function useAuth() {
     setUser(null);
   }, []);
 
+  /** Signs in immediately if `idToken` matches an existing account; otherwise returns the pending-signup details so the caller (LoginModal) can collect a nickname and password via `completeGoogleSignup`. */
+  const googleAuth = useCallback(
+    async (idToken: string): Promise<GooglePendingSignup | null> => {
+      const result = await authClient.googleAuth(idToken);
+      if ('pending' in result) return result;
+      applySession(result);
+      return null;
+    },
+    [applySession],
+  );
+
+  const completeGoogleSignup = useCallback(
+    async (pendingToken: string, displayName: string, password: string) => {
+      applySession(await authClient.completeGoogleSignup(pendingToken, displayName, password));
+    },
+    [applySession],
+  );
+
   /**
    * Re-fetches `/auth/me` without touching `status`/`token` — for anything that changes
    * server-side outside a request this hook itself made, most notably the Elo rating
@@ -99,5 +117,5 @@ export function useAuth() {
     [token],
   );
 
-  return { token, user, status, signup, login, logout, refreshUser, updateProfile };
+  return { token, user, status, signup, login, logout, refreshUser, updateProfile, googleAuth, completeGoogleSignup };
 }

@@ -19,6 +19,8 @@ export interface User {
   readonly resetTokenExpiresAt: string | null;
   readonly verifyTokenHash: string | null;
   readonly verifyTokenExpiresAt: string | null;
+  /** Google's stable per-account `sub` claim, once this account has signed in with Google at least once — null for an account that's only ever used email/password. Every account still has a real `passwordHash` either way (auth/routes.ts's Google-signup completion step collects one same as ordinary signup), so Google is a second way to prove identity, not a replacement for one. */
+  readonly googleId: string | null;
   readonly createdAt: string;
 }
 
@@ -27,6 +29,8 @@ export interface UserStore {
   findById(id: string): Promise<User | null>;
   /** Case-insensitive -- nicknames must be unique regardless of case (auth/routes.ts). */
   findByDisplayName(displayName: string): Promise<User | null>;
+  /** Finds the account already linked to this Google account, if any (auth/routes.ts's /auth/google). */
+  findByGoogleId(googleId: string): Promise<User | null>;
   create(user: User): Promise<void>;
   /** Whole-record replace, same convention as GameStore/TournamentStore's `update` — currently only used to persist a changed `rating`. */
   update(user: User): Promise<void>;
@@ -74,6 +78,11 @@ export class FileUserStore implements UserStore {
     const users = await this.readAll();
     const needle = displayName.toLowerCase();
     return users.find((u) => u.displayName.toLowerCase() === needle) ?? null;
+  }
+
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    const users = await this.readAll();
+    return users.find((u) => u.googleId === googleId) ?? null;
   }
 
   async create(user: User): Promise<void> {
@@ -126,6 +135,11 @@ export class PrismaUserStore implements UserStore {
     return row ? toUser(row) : null;
   }
 
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    const row = await this.prisma.user.findUnique({ where: { googleId } });
+    return row ? toUser(row) : null;
+  }
+
   async create(user: User): Promise<void> {
     await this.prisma.user.create({
       data: {
@@ -141,6 +155,7 @@ export class PrismaUserStore implements UserStore {
         resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
         verifyTokenHash: user.verifyTokenHash,
         verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
+        googleId: user.googleId,
         createdAt: new Date(user.createdAt),
       },
     });
@@ -161,6 +176,7 @@ export class PrismaUserStore implements UserStore {
         resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
         verifyTokenHash: user.verifyTokenHash,
         verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
+        googleId: user.googleId,
       },
     });
   }
@@ -188,6 +204,7 @@ interface PrismaUserRow {
   resetTokenExpiresAt: Date | null;
   verifyTokenHash: string | null;
   verifyTokenExpiresAt: Date | null;
+  googleId: string | null;
   createdAt: Date;
 }
 
@@ -204,6 +221,7 @@ function toUser(row: PrismaUserRow): User {
     resetTokenExpiresAt: row.resetTokenExpiresAt ? row.resetTokenExpiresAt.toISOString() : null,
     verifyTokenHash: row.verifyTokenHash,
     verifyTokenExpiresAt: row.verifyTokenExpiresAt ? row.verifyTokenExpiresAt.toISOString() : null,
+    googleId: row.googleId,
     createdAt: row.createdAt.toISOString(),
   };
 }

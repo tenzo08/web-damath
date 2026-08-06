@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
+import { GoogleSignInButton, googleSignInConfigured } from './GoogleSignInButton';
 import { SERVER_HTTP_URL } from '../lib/serverConfig';
-import { forgotPassword } from '../lib/authClient';
+import { forgotPassword, type GooglePendingSignup } from '../lib/authClient';
 
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
   onSignup: (email: string, password: string, displayName: string) => Promise<void>;
+  /** Returns pending-signup details when this Google identity has no account yet -- `null` means it signed straight in. */
+  onGoogleAuth: (idToken: string) => Promise<GooglePendingSignup | null>;
+  onCompleteGoogleSignup: (pendingToken: string, displayName: string, password: string) => Promise<void>;
 }
 
 const inputStyle = {
@@ -42,7 +46,7 @@ const linkButtonStyle = {
 
 type Mode = 'login' | 'signup' | 'forgot';
 
-export function LoginModal({ open, onClose, onLogin, onSignup }: LoginModalProps) {
+export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onCompleteGoogleSignup }: LoginModalProps) {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,6 +54,7 @@ export function LoginModal({ open, onClose, onLogin, onSignup }: LoginModalProps
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetRequested, setResetRequested] = useState(false);
+  const [googlePending, setGooglePending] = useState<GooglePendingSignup | null>(null);
 
   function reset() {
     setMode('login');
@@ -59,6 +64,7 @@ export function LoginModal({ open, onClose, onLogin, onSignup }: LoginModalProps
     setError(null);
     setBusy(false);
     setResetRequested(false);
+    setGooglePending(null);
   }
 
   function close() {
@@ -86,11 +92,77 @@ export function LoginModal({ open, onClose, onLogin, onSignup }: LoginModalProps
     }
   }
 
-  const title = mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create an account' : 'Reset your password';
+  async function handleGoogleCredential(idToken: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const pending = await onGoogleAuth(idToken);
+      if (pending) {
+        setGooglePending(pending);
+        setDisplayName(pending.suggestedName);
+        setPassword('');
+      } else {
+        close();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitGoogleCompletion(e: FormEvent) {
+    e.preventDefault();
+    if (!googlePending) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await onCompleteGoogleSignup(googlePending.pendingToken, displayName, password);
+      close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const title = googlePending
+    ? 'Finish creating your account'
+    : mode === 'login'
+      ? 'Sign in'
+      : mode === 'signup'
+        ? 'Create an account'
+        : 'Reset your password';
 
   return (
     <Modal open={open} onClose={close} title={title} width={380}>
-      {mode === 'forgot' && resetRequested ? (
+      {googlePending ? (
+        <form onSubmit={(e) => void submitGoogleCompletion(e)} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+            Continuing as <strong>{googlePending.email}</strong>. Choose a nickname and a password — the password lets you sign in
+            without Google too.
+          </p>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+            Nickname
+            <input style={inputStyle} value={displayName} onChange={(e) => setDisplayName(e.target.value)} required minLength={1} maxLength={60} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+            Password
+            <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+          </label>
+          {error && (
+            <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={busy} style={primaryButtonStyle(busy)}>
+            {busy ? 'Working…' : 'Create account'}
+          </button>
+          <button type="button" onClick={() => setGooglePending(null)} style={linkButtonStyle}>
+            ← Back
+          </button>
+        </form>
+      ) : mode === 'forgot' && resetRequested ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
           <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
             If an account exists for <strong>{email}</strong>, a reset link has been issued. Ask whoever runs the server to check its
@@ -102,6 +174,18 @@ export function LoginModal({ open, onClose, onLogin, onSignup }: LoginModalProps
         </div>
       ) : (
         <form onSubmit={(e) => void submit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          {mode !== 'forgot' && googleSignInConfigured && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <GoogleSignInButton onCredential={(idToken) => void handleGoogleCredential(idToken)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', color: 'var(--text-muted)', fontSize: 'var(--fs-micro)' }}>
+                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                or
+                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            </>
+          )}
           {mode === 'signup' && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
               Display name

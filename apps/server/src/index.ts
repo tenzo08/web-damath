@@ -70,6 +70,7 @@ const app = buildApp({
   corsOrigin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : undefined,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN,
   webOrigin: process.env.WEB_ORIGIN,
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
 });
 const port = Number(process.env.PORT ?? 3001);
 

@@ -6,7 +6,7 @@ export interface AuthUser {
   displayName: string;
   /** Elo rating (apps/server/src/rating/elo.ts) — starts at 1200, moves after every online game (human or bot) that finishes with a winner or a draw. Local hot-seat play never touches it. */
   rating: number;
-  /** One of lib/avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle (AuthBar.tsx). */
+  /** One of lib/avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle (ProfileButton.tsx). */
   avatarEmoji: string | null;
   /** Set once a verify-email link is redeemed. Not currently gating any feature -- just a real, checkable fact about the account. */
   emailVerified: boolean;
@@ -16,6 +16,14 @@ export interface AuthUser {
 export interface AuthSession {
   token: string;
   user: AuthUser;
+}
+
+/** Returned by POST /auth/google when the Google identity doesn't match any existing account yet -- the client still needs to collect a nickname and password (completeGoogleSignup) before the account actually exists. */
+export interface GooglePendingSignup {
+  pending: true;
+  pendingToken: string;
+  email: string;
+  suggestedName: string;
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -40,6 +48,15 @@ export function signup(email: string, password: string, displayName: string): Pr
 
 export function login(email: string, password: string): Promise<AuthSession> {
   return post<AuthSession>('/auth/login', { email, password });
+}
+
+/** `idToken` is the credential Google Identity Services hands back client-side -- the server verifies it independently (auth/routes.ts), this call never trusts it on its own. Either logs straight in (an existing account, matched by Google id or by an already-verified email) or comes back `pending`, needing completeGoogleSignup next. */
+export function googleAuth(idToken: string): Promise<AuthSession | GooglePendingSignup> {
+  return post<AuthSession | GooglePendingSignup>('/auth/google', { idToken });
+}
+
+export function completeGoogleSignup(pendingToken: string, displayName: string, password: string): Promise<AuthSession> {
+  return post<AuthSession>('/auth/google/complete', { pendingToken, displayName, password });
 }
 
 export async function me(token: string): Promise<AuthUser> {

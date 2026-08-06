@@ -13,6 +13,6 @@ ENV VITE_SERVER_URL=$VITE_SERVER_URL
 RUN pnpm -F web build
 
 FROM nginx:alpine AS runtime
-COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

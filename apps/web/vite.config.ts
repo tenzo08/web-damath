@@ -3,6 +3,18 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Repo-root `dist/`, not the Vite default of `apps/web/dist` — Vercel's dashboard
+  // Output Directory setting (auto-filled to a plain "dist" by its Vite framework
+  // preset when the project was first created) overrides vercel.json#outputDirectory
+  // silently, and a real deploy failed twice looking for exactly this path. Matching it
+  // here is more robust than depending on someone finding and clearing a dashboard
+  // toggle on every fresh Vercel project. `emptyOutDir: true` because the target is
+  // outside Vite's own project root (apps/web), which it otherwise refuses to clean
+  // automatically.
+  build: {
+    outDir: '../../dist',
+    emptyOutDir: true,
+  },
   plugins: [
     react(),
     // docs/PLANNING.md: "Connectivity in Philippine schools is uneven; this is a real

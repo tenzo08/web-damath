@@ -1,5 +1,5 @@
 {
   "buildCommand": "pnpm -F web build",
-  "outputDirectory": "apps/web/dist",
+  "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

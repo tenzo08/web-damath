@@ -6,6 +6,7 @@ import type { PublicGameView } from '../src/game/room.js';
 import { RoomManager } from '../src/game/rooms.js';
 import { FileGameStore, type GameStore } from '../src/game/store.js';
 import { FileUserStore, type User, type UserStore } from '../src/auth/store.js';
+import { FileModerationStore, type ModerationStore } from '../src/moderation/store.js';
 import { STARTING_RATING } from '../src/rating/elo.js';
 
 /**
@@ -24,6 +25,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000, intervalMs = 
 let dir: string;
 let gameStore: GameStore;
 let userStore: UserStore;
+let moderationStore: ModerationStore;
 let updates: PublicGameView[];
 let matched: { userId: string; color: string; view: PublicGameView }[];
 
@@ -31,6 +33,7 @@ function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEna
   return new RoomManager({
     gameStore,
     userStore,
+    moderationStore,
     queueBotTimeoutMs: overrides.queueBotTimeoutMs ?? 24 * 60 * 60 * 1000,
     queueBotEnabled: overrides.queueBotEnabled ?? true,
     queueBotTier: 'learner',
@@ -49,6 +52,7 @@ beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'damath-server-rooms-'));
   gameStore = new FileGameStore(path.join(dir, 'games.json'));
   userStore = new FileUserStore(path.join(dir, 'users.json'));
+  moderationStore = new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json'));
   updates = [];
   matched = [];
 });

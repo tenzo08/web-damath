@@ -15,6 +15,8 @@ import type { RoomManager } from './game/rooms.js';
 import { registerTournamentRoutes } from './tournament/routes.js';
 import { TournamentManager } from './tournament/manager.js';
 import type { TournamentStore } from './tournament/store.js';
+import { registerModerationRoutes } from './moderation/routes.js';
+import type { ModerationStore } from './moderation/store.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -28,6 +30,7 @@ export interface AppOptions {
   userStore: UserStore;
   gameStore: GameStore;
   tournamentStore: TournamentStore;
+  moderationStore: ModerationStore;
   /** docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants. Defaults match the doc's table. */
   queueBotTimeoutMs?: number | undefined;
   queueBotEnabled?: boolean | undefined;
@@ -90,6 +93,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     registerAuthRoutes(app, options.userStore);
     registerGameHistoryRoutes(app, options.gameStore, options.userStore);
     registerSpectateRoutes(app, options.gameStore, options.userStore);
+    registerModerationRoutes(app, options.moderationStore, options.userStore);
 
     app.get('/health', async () => ({ status: 'ok' }));
 
@@ -109,6 +113,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     const gameSocket = registerGameSocket(app, {
       gameStore: options.gameStore,
       userStore: options.userStore,
+      moderationStore: options.moderationStore,
       queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
       queueBotEnabled: options.queueBotEnabled ?? true,
       queueBotTier: options.queueBotTier ?? 'steady',

@@ -14,6 +14,8 @@ export interface GameHistoryEntry {
   botTier: string | null;
   /** The human opponent's current display name, or `null` for a bot game or if that account no longer exists. */
   opponentName: string | null;
+  /** The human opponent's user id — `null` for a bot game, or an unseated color. Lets the client offer Report/Block against a real account. */
+  opponentUserId: string | null;
   myColor: Player | null;
   status: 'active' | 'finished';
   /** `null` while the game is still active — otherwise relative to the requesting user, not to `white`/`black`. */
@@ -71,6 +73,7 @@ async function summarize(game: PersistedGame, userId: string, variant: AnyVarian
     opponentType: game.opponentType,
     botTier: game.botTier,
     opponentName: opponent?.displayName ?? null,
+    opponentUserId: game.opponentType === 'human' ? opponentId : null,
     myColor,
     // `game.status` alone only reflects the engine's own game-over check — a
     // resignation never flips it (KNOWLEDGE.md, "Resignation is UI state, not an

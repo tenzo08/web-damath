@@ -4,6 +4,7 @@ import type { Move, Position, Variant, VariantId } from '@damath/engine';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
 import { MoveLedger } from './MoveLedger';
+import { ReportBlockButtons } from './ReportBlockButtons';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import type { PublicGameView } from '../lib/onlineProtocol';
@@ -132,6 +133,10 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
   useEffect(() => setViewIndex(null), [online.view?.roomId]);
 
   const variant = online.view ? findVariant(online.view.variantId) : null;
+  // The other seat's user id, from a real player's own point of view -- `null` for a
+  // spectator (no single "opponent" to name) or an unseated color.
+  const opponentUserId =
+    online.view && online.color ? online.view.players[online.color === 'white' ? 'black' : 'white'] : null;
   const ledger = useMemo(
     () => (online.view && variant ? buildOnlineLedger(variant, online.view.moveHistory) : []),
     [online.view?.moveHistory, variant],
@@ -405,6 +410,12 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                 <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
                   {online.error}
                 </p>
+              )}
+              {/* Only a real player reporting their real opponent -- not a spectator
+                  reporting either player, and never against the computer opponent,
+                  which has no account to report or block. */}
+              {token && online.color !== null && online.view.opponentType === 'human' && opponentUserId && (
+                <ReportBlockButtons token={token} targetUserId={opponentUserId} targetName="your opponent" roomId={online.view.roomId} />
               )}
             </div>
 

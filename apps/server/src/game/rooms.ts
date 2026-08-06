@@ -6,6 +6,7 @@ import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandl
 import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
 import { findIntegerVariant, findVariant } from './variants.js';
 import type { UserStore } from '../auth/store.js';
+import type { ModerationStore } from '../moderation/store.js';
 import { BOT_TIER_RATING, nextRating, nextRatings } from '../rating/elo.js';
 
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -14,6 +15,8 @@ export interface RoomManagerOptions {
   gameStore: GameStore;
   /** Read/write per-account Elo ratings (rating/elo.ts) once a room finishes — see `updateRatingsIfFinished`. */
   userStore: UserStore;
+  /** Checked before pairing two queued players — either having blocked the other skips that pairing entirely (moderation/store.ts). */
+  moderationStore: ModerationStore;
   /** docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants. */
   queueBotTimeoutMs: number;
   queueBotEnabled: boolean;
@@ -122,6 +125,7 @@ export class RoomManager {
 
     for (const [otherUserId, entry] of this.queue) {
       if (otherUserId === userId || entry.variantId !== variantId) continue;
+      if (await this.options.moderationStore.isBlockedEitherWay(userId, otherUserId)) continue;
       this.clearTimer(entry);
       this.queue.delete(otherUserId);
       const variant = findVariant(variantId);

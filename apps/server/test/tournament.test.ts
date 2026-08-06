@@ -129,6 +129,75 @@ describe('joining and starting', () => {
   });
 });
 
+describe('removing a participant (teacher moderation)', () => {
+  async function createTournament(token: string, name = 'Cup') {
+    const res = await app.inject({ method: 'POST', url: '/tournaments', headers: auth(token), payload: { name, variantId: 'integer' } });
+    return (res.json() as { tournament: { id: string; joinCode: string } }).tournament;
+  }
+
+  it('lets the creator remove a disruptive participant before the tournament starts', async () => {
+    const creatorToken = await signupToken('mod-creator@example.com');
+    const tournament = await createTournament(creatorToken);
+    const disruptiveToken = await signupToken('mod-disruptive@example.com');
+    const joinRes = await app.inject({ method: 'POST', url: `/tournaments/join/${tournament.joinCode}`, headers: auth(disruptiveToken) });
+    const disruptiveId = (joinRes.json() as { tournament: { participants: string[] } }).tournament.participants[1];
+
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: `/tournaments/${tournament.id}/participants/${disruptiveId}`,
+      headers: auth(creatorToken),
+    });
+    expect(remove.statusCode).toBe(200);
+    expect((remove.json() as { tournament: { participants: string[] } }).tournament.participants).not.toContain(disruptiveId);
+  });
+
+  it('rejects removal by anyone other than the creator', async () => {
+    const creatorToken = await signupToken('mod-creator2@example.com');
+    const tournament = await createTournament(creatorToken);
+    const playerToken = await signupToken('mod-player2@example.com');
+    const joinRes = await app.inject({ method: 'POST', url: `/tournaments/join/${tournament.joinCode}`, headers: auth(playerToken) });
+    const playerId = (joinRes.json() as { tournament: { participants: string[] } }).tournament.participants[1];
+
+    const otherToken = await signupToken('mod-other2@example.com');
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: `/tournaments/${tournament.id}/participants/${playerId}`,
+      headers: auth(otherToken),
+    });
+    expect(remove.statusCode).toBe(400);
+  });
+
+  it('rejects removal once the tournament has started', async () => {
+    const creatorToken = await signupToken('mod-creator3@example.com');
+    const tournament = await createTournament(creatorToken);
+    const playerToken = await signupToken('mod-player3@example.com');
+    const joinRes = await app.inject({ method: 'POST', url: `/tournaments/join/${tournament.joinCode}`, headers: auth(playerToken) });
+    const playerId = (joinRes.json() as { tournament: { participants: string[] } }).tournament.participants[1];
+    await app.inject({ method: 'POST', url: `/tournaments/${tournament.id}/start`, headers: auth(creatorToken) });
+
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: `/tournaments/${tournament.id}/participants/${playerId}`,
+      headers: auth(creatorToken),
+    });
+    expect(remove.statusCode).toBe(400);
+  });
+
+  it('rejects the creator removing themselves', async () => {
+    const creatorToken = await signupToken('mod-creator4@example.com');
+    const tournament = await createTournament(creatorToken);
+    const meRes = await app.inject({ method: 'GET', url: '/auth/me', headers: auth(creatorToken) });
+    const creatorId = (meRes.json() as { user: { id: string } }).user.id;
+
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: `/tournaments/${tournament.id}/participants/${creatorId}`,
+      headers: auth(creatorToken),
+    });
+    expect(remove.statusCode).toBe(400);
+  });
+});
+
 describe('reporting results and standings', () => {
   it('runs a full 4-player bracket to a champion and exposes standings', async () => {
     const creatorToken = await signupToken('c3@example.com');

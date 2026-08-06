@@ -15,6 +15,7 @@ function randomJoinCode(): string {
 }
 
 export type JoinResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
+export type RemoveParticipantResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
 export type StartResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
 export type ReportResult = { ok: true; tournament: PersistedTournament } | { ok: false; error: string };
 
@@ -79,6 +80,31 @@ export class TournamentManager {
     const updated: PersistedTournament = {
       ...tournament,
       participants: [...tournament.participants, userId],
+      updatedAt: new Date().toISOString(),
+    };
+    await this.store.update(updated);
+    this.notify(updated);
+    return { ok: true, tournament: updated };
+  }
+
+  /**
+   * The "teacher moderation" floor for tournaments (chess.com-inspired suggestion #7,
+   * TASK.md): the creator can remove a disruptive participant before the bracket is
+   * generated. Scoped to the lobby phase only — once `start()` has built a bracket,
+   * removing a seated player would need to forfeit or reshuffle their matches, a much
+   * bigger decision `docs/DAMATH_RULES.md` doesn't define an answer for.
+   */
+  async removeParticipant(id: string, targetUserId: string, byUserId: string): Promise<RemoveParticipantResult> {
+    const tournament = await this.store.findById(id);
+    if (!tournament) return { ok: false, error: 'tournament not found' };
+    if (tournament.creatorUserId !== byUserId) return { ok: false, error: 'only the tournament creator can remove a participant' };
+    if (tournament.status !== 'lobby') return { ok: false, error: 'cannot remove a participant once the tournament has started' };
+    if (targetUserId === tournament.creatorUserId) return { ok: false, error: 'the tournament creator cannot remove themselves' };
+    if (!tournament.participants.includes(targetUserId)) return { ok: false, error: 'that user is not a participant' };
+
+    const updated: PersistedTournament = {
+      ...tournament,
+      participants: tournament.participants.filter((p) => p !== targetUserId),
       updatedAt: new Date().toISOString(),
     };
     await this.store.update(updated);

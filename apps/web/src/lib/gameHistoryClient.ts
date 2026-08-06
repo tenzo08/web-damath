@@ -8,6 +8,7 @@ export interface GameHistoryEntry {
   opponentType: 'human' | 'bot';
   botTier: string | null;
   opponentName: string | null;
+  opponentUserId: string | null;
   myColor: Player | null;
   status: 'active' | 'finished';
   result: 'win' | 'loss' | 'draw' | null;

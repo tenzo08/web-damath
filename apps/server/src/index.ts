@@ -8,6 +8,8 @@ import { FileGameStore, PrismaGameStore } from './game/store.js';
 import type { GameStore } from './game/store.js';
 import { FileTournamentStore, PrismaTournamentStore } from './tournament/store.js';
 import type { TournamentStore } from './tournament/store.js';
+import { FileModerationStore, PrismaModerationStore } from './moderation/store.js';
+import type { ModerationStore } from './moderation/store.js';
 import { createPrismaClient } from './db/prisma.js';
 
 // Node's native env-file loader (available unconditionally on this project's minimum
@@ -33,17 +35,20 @@ if (!jwtSecret) {
 let userStore: UserStore;
 let gameStore: GameStore;
 let tournamentStore: TournamentStore;
+let moderationStore: ModerationStore;
 
 if (process.env.DATABASE_URL) {
   const prisma = createPrismaClient(process.env.DATABASE_URL);
   userStore = new PrismaUserStore(prisma);
   gameStore = new PrismaGameStore(prisma);
   tournamentStore = new PrismaTournamentStore(prisma);
+  moderationStore = new PrismaModerationStore(prisma);
 } else {
   const dataDir = process.env.DATA_DIR ?? fileURLToPath(new URL('../data', import.meta.url));
   userStore = new FileUserStore(path.join(dataDir, 'users.json'));
   gameStore = new FileGameStore(path.join(dataDir, 'games.json'));
   tournamentStore = new FileTournamentStore(path.join(dataDir, 'tournaments.json'));
+  moderationStore = new FileModerationStore(path.join(dataDir, 'reports.json'), path.join(dataDir, 'blocks.json'));
 }
 
 const TIERS: readonly DifficultyTier[] = ['learner', 'steady', 'sharp', 'tournament'];
@@ -56,6 +61,7 @@ const app = buildApp({
   userStore,
   gameStore,
   tournamentStore,
+  moderationStore,
   logger: true,
   // docs/AI_OPPONENT.md §9 — environment variables, never hard-coded constants.
   queueBotTimeoutMs: process.env.QUEUE_BOT_TIMEOUT_MS ? Number(process.env.QUEUE_BOT_TIMEOUT_MS) : undefined,

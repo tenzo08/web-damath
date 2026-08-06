@@ -82,6 +82,11 @@ export function startTournament(token: string, id: string): Promise<{ tournament
   return call(`/tournaments/${id}/start`, token, { method: 'POST' });
 }
 
+/** Creator-only, lobby-phase-only — the teacher-moderation floor for tournaments (chess.com-inspired suggestion #7, TASK.md). */
+export function removeParticipant(token: string, id: string, userId: string): Promise<{ tournament: Tournament }> {
+  return call(`/tournaments/${id}/participants/${userId}`, token, { method: 'DELETE' });
+}
+
 export function reportResult(token: string, id: string, round: number, index: number, winnerId: string): Promise<{ tournament: Tournament }> {
   return call(`/tournaments/${id}/matches/${String(round)}/${String(index)}/result`, token, {
     method: 'POST',

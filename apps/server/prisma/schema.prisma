@@ -77,3 +77,34 @@ model Tournament {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
+
+/// A user reporting another user for abuse -- moderation/reporting floor, no review UI
+/// yet (this app has no admin/role concept to gate one behind); stored durably so a
+/// real admin can query it directly. See game/moderation.ts.
+model Report {
+  id               String   @id @default(uuid())
+  reporterUserId   String
+  reportedUserId   String
+  reason           String
+  /// A room id, if the report was filed from a specific game -- null for a report filed
+  /// from match history against a game that's since had its own row deleted, or any
+  /// other context-free report.
+  roomId           String?
+  createdAt        DateTime @default(now())
+
+  @@index([reportedUserId])
+}
+
+/// A one-directional block: `blockerUserId` doesn't want to be matched with
+/// `blockedUserId` again. Checked both directions when pairing two users for
+/// matchmaking (rooms.ts) -- either party having blocked the other is enough to skip
+/// the pairing.
+model Block {
+  id             String   @id @default(uuid())
+  blockerUserId  String
+  blockedUserId  String
+  createdAt      DateTime @default(now())
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+}

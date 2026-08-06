@@ -7,6 +7,7 @@ import { buildApp, type AppOptions } from '../src/app.js';
 import { FileUserStore } from '../src/auth/store.js';
 import { FileGameStore } from '../src/game/store.js';
 import { FileTournamentStore } from '../src/tournament/store.js';
+import { FileModerationStore } from '../src/moderation/store.js';
 
 export interface TestApp {
   app: FastifyInstance;
@@ -14,13 +15,16 @@ export interface TestApp {
   cleanup: () => Promise<void>;
 }
 
-export function makeTestApp(overrides: Partial<Omit<AppOptions, 'userStore' | 'gameStore' | 'tournamentStore'>> = {}): TestApp {
+export function makeTestApp(
+  overrides: Partial<Omit<AppOptions, 'userStore' | 'gameStore' | 'tournamentStore' | 'moderationStore'>> = {},
+): TestApp {
   const dir = mkdtempSync(path.join(tmpdir(), 'damath-server-test-'));
   const app = buildApp({
     jwtSecret: 'test-secret',
     userStore: new FileUserStore(path.join(dir, 'users.json')),
     gameStore: new FileGameStore(path.join(dir, 'games.json')),
     tournamentStore: new FileTournamentStore(path.join(dir, 'tournaments.json')),
+    moderationStore: new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json')),
     // Tests that don't care about matchmaking timing get an effectively-never-fires
     // default so they aren't flaky; tests that exercise bot fallback override this.
     queueBotTimeoutMs: 24 * 60 * 60 * 1000,

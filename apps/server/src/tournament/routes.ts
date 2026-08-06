@@ -59,6 +59,14 @@ export function registerTournamentRoutes(app: FastifyInstance, manager: Tourname
     return reply.send({ tournament: result.tournament });
   });
 
+  app.delete<{ Params: { id: string; userId: string } }>('/tournaments/:id/participants/:userId', async (request, reply) => {
+    const userId = await requireUserId(request, reply);
+    if (!userId) return;
+    const result = await manager.removeParticipant(request.params.id, request.params.userId, userId);
+    if (!result.ok) return reply.code(400).send({ error: result.error });
+    return reply.send({ tournament: result.tournament });
+  });
+
   app.post<{ Params: { id: string } }>('/tournaments/:id/start', async (request, reply) => {
     const userId = await requireUserId(request, reply);
     if (!userId) return;

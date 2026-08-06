@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ALL_VARIANTS } from '@damath/engine';
 import { myGameHistory, type GameHistoryEntry } from '../lib/gameHistoryClient';
+import { ReportBlockButtons } from './ReportBlockButtons';
 
 interface MatchHistoryScreenProps {
   token: string | null;
@@ -132,6 +133,9 @@ export function MatchHistoryScreen({ token, onBackToLobby, onViewGame }: MatchHi
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
                   <span style={{ fontWeight: 700, color }}>{label}</span>
+                  {token && entry.opponentUserId && (
+                    <ReportBlockButtons token={token} targetUserId={entry.opponentUserId} targetName={entry.opponentName ?? 'this player'} />
+                  )}
                   <button type="button" onClick={() => onViewGame(entry.id)} style={secondaryButton}>
                     {entry.status === 'active' ? 'Resume' : 'Replay'}
                   </button>

@@ -4,6 +4,7 @@ import { useSettings, type ThemePreference } from '../lib/settings';
 import { playMoveSound } from '../lib/sound';
 import { AVATAR_OPTIONS } from '../lib/avatars';
 import type { AuthUser } from '../lib/authClient';
+import { myBlocks, unblockUser, type BlockedEntry } from '../lib/moderationClient';
 
 const cardButton = (active: boolean) =>
   ({
@@ -35,6 +36,66 @@ interface SettingsModalProps {
   /** `null` while signed out — the Profile section only makes sense for a real account, so it's omitted entirely rather than shown disabled. */
   user: AuthUser | null;
   onUpdateProfile: (patch: { displayName?: string; avatarEmoji?: string | null }) => Promise<void>;
+  token: string | null;
+}
+
+/** Everyone a signed-in user has blocked, with an unblock action — the other half of `ReportBlockButtons`' "Block" button, which has no other visible place to reverse itself from. */
+function BlockedPlayersSection({ token }: { token: string }) {
+  const [blocked, setBlocked] = useState<BlockedEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    myBlocks(token)
+      .then((b) => {
+        if (!cancelled) setBlocked(b);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load blocked players.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  async function unblock(userId: string) {
+    setBlocked((current) => current?.filter((b) => b.userId !== userId) ?? current);
+    try {
+      await unblockUser(token, userId);
+    } catch {
+      // Best-effort -- if it silently failed server-side, the next open of Settings
+      // will show the entry again since the fetch above always reflects real state.
+    }
+  }
+
+  if (error) return <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>{error}</p>;
+  if (blocked === null) return <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>Loading…</p>;
+  if (blocked.length === 0) return <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>You haven't blocked anyone.</p>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+      {blocked.map((entry) => (
+        <div key={entry.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-sm)' }}>
+          <span style={{ fontSize: 'var(--fs-meta)' }}>{entry.displayName ?? 'A former player'}</span>
+          <button
+            type="button"
+            onClick={() => void unblock(entry.userId)}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              color: 'var(--text-secondary)',
+              fontSize: 'var(--fs-micro)',
+              padding: '4px 8px',
+              cursor: 'pointer',
+            }}
+          >
+            Unblock
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Avatar + display name, editable in place. Split out so ProfileSection's own `useState` (the draft name, save-in-flight state) resets cleanly whenever a different `user` is passed in, rather than being hand-rolled inside SettingsModal itself. */
@@ -188,13 +249,20 @@ function ProfileSection({ user, onUpdateProfile }: { user: AuthUser; onUpdatePro
 }
 
 /** Personalization, per browser: theme (dark/light/system) and sound effect volume — plus, when signed in, the account's own profile (avatar, display name). Reachable from the lobby header. Music isn't offered here — no audio asset pipeline exists in this codebase, and a toggle with nothing to toggle would just be a broken control (see TASK.md). */
-export function SettingsModal({ open, onClose, user, onUpdateProfile }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, user, onUpdateProfile, token }: SettingsModalProps) {
   const { theme, setTheme, soundEnabled, setSoundEnabled, soundVolume, setSoundVolume } = useSettings();
 
   return (
     <Modal open={open} onClose={onClose} title="Settings" width={480}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
         {user && <ProfileSection user={user} onUpdateProfile={onUpdateProfile} />}
+
+        {token && (
+          <div>
+            <h3 style={sectionHeading}>Blocked players</h3>
+            <BlockedPlayersSection token={token} />
+          </div>
+        )}
 
         <div>
           <h3 style={sectionHeading}>Theme</h3>

@@ -208,6 +208,18 @@ export function TournamentScreen({
     }
   }
 
+  /** Teacher moderation (chess.com-inspired suggestion #7, TASK.md) -- creator-only, lobby-phase-only, enforced server-side regardless of what this button does. */
+  async function handleRemoveParticipant(userId: string) {
+    if (!token || !selectedId) return;
+    setError(null);
+    try {
+      await tournamentClient.removeParticipant(token, selectedId, userId);
+      refreshDetail(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleReport(match: Match, winnerId: string) {
     if (!token || !selectedId) return;
     setError(null);
@@ -357,14 +369,34 @@ export function TournamentScreen({
                 )}
               </p>
               {token && detail.tournament.status === 'lobby' && detail.tournament.creatorUserId === user?.id && (
-                <button
-                  type="button"
-                  onClick={() => void handleStart()}
-                  disabled={detail.tournament.participants.length < 2}
-                  style={{ ...primaryButton, marginTop: 'var(--pad-md)' }}
-                >
-                  Start tournament
-                </button>
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-xs, 6px)', marginTop: 'var(--pad-md)' }}>
+                    {detail.tournament.participants.map((participantId) => (
+                      <div key={participantId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-sm)' }}>
+                        <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                          {participantId === detail.tournament.creatorUserId ? `${shortId(participantId)} (you)` : shortId(participantId)}
+                        </span>
+                        {participantId !== detail.tournament.creatorUserId && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveParticipant(participantId)}
+                            style={{ ...secondaryButton, padding: '2px 8px', fontSize: 'var(--fs-micro)', color: 'var(--danger)' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleStart()}
+                    disabled={detail.tournament.participants.length < 2}
+                    style={{ ...primaryButton, marginTop: 'var(--pad-md)' }}
+                  >
+                    Start tournament
+                  </button>
+                </>
               )}
             </div>
 

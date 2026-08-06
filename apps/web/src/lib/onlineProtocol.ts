@@ -19,11 +19,13 @@ export interface PublicGameView {
   scores: { white: string; black: string };
   status: 'active' | 'finished';
   finalScores: { white: string; black: string } | null;
+  winner: Player | null;
   moveCount: number;
   players: { white: string | null; black: string | null };
   opponentType: 'human' | 'bot';
   botTier: string | null;
   resignedBy: Player | null;
+  tournamentMatch: { tournamentId: string; round: number; index: number } | null;
 }
 
 export type ServerMessage =

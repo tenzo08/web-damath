@@ -285,6 +285,12 @@ function AppShell() {
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [screen, setScreen] = useState<Screen>('lobby');
+  // Carries a tournament id + the room created for one of its matches across the
+  // TournamentScreen → OnlineGameScreen → TournamentScreen round trip. Both screens are
+  // conditionally rendered (unmounted while off-screen), so their own local state
+  // (selected tournament, room id) can't survive the trip on its own — this is the one
+  // piece of state that needs to.
+  const [tournamentContext, setTournamentContext] = useState<{ tournamentId: string; roomId: string | null } | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -338,14 +344,30 @@ function AppShell() {
       )}
 
       {screen === 'online' && (
-        <OnlineGameScreen token={auth.token} onBackToLobby={() => setScreen('lobby')} onOpenLogin={() => setLoginOpen(true)} />
+        <OnlineGameScreen
+          token={auth.token}
+          initialRoomId={tournamentContext?.roomId ?? undefined}
+          onBackToLobby={() => {
+            setScreen(tournamentContext ? 'tournaments' : 'lobby');
+            setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));
+          }}
+          onOpenLogin={() => setLoginOpen(true)}
+        />
       )}
 
       {screen === 'tournaments' && (
         <TournamentScreen
           token={auth.token}
           user={auth.user}
-          onBackToLobby={() => setScreen('lobby')}
+          initialSelectedId={tournamentContext?.tournamentId ?? null}
+          onPlayMatch={(tournamentId, roomId) => {
+            setTournamentContext({ tournamentId, roomId });
+            setScreen('online');
+          }}
+          onBackToLobby={() => {
+            setTournamentContext(null);
+            setScreen('lobby');
+          }}
           onOpenLogin={() => setLoginOpen(true)}
         />
       )}

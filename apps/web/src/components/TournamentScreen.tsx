@@ -10,6 +10,10 @@ interface TournamentScreenProps {
   user: AuthUser | null;
   onBackToLobby: () => void;
   onOpenLogin: () => void;
+  /** Re-opens the same tournament's detail view after a "Play this match" round trip through OnlineGameScreen — see App.tsx's `tournamentContext`. */
+  initialSelectedId?: string | null;
+  /** Fires once the match's room has been created — App.tsx switches to OnlineGameScreen with it. */
+  onPlayMatch: (tournamentId: string, roomId: string) => void;
 }
 
 const cardStyle = {
@@ -58,10 +62,12 @@ function playerLabel(id: string | null, user: AuthUser | null): string {
 }
 
 /**
- * Milestone 5 (scoped MVP, docs TASK.md): bracket generation, join codes, and standings
- * are real and tested (apps/server/src/tournament). Reporting a match's result is a
- * manual action here, not auto-triggered by an online room finishing — that
- * integration is a documented gap, see KNOWLEDGE.md.
+ * "Play this match" creates a room seated for that exact bracket match and hands off to
+ * OnlineGameScreen; once it finishes with a clear winner, apps/server auto-reports the
+ * result (RoomManager's `onTournamentMatchFinished`, wired in app.ts) and this screen
+ * picks up the change on the next `refreshDetail`. These buttons stay as a manual
+ * fallback — a drawn match (no automatic tiebreak, docs/DAMATH_RULES.md) or one played
+ * outside the app still needs someone to declare a winner by hand.
  */
 function ReportButtons({
   match,
@@ -92,9 +98,9 @@ function ReportButtons({
   );
 }
 
-export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin }: TournamentScreenProps) {
+export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, initialSelectedId, onPlayMatch }: TournamentScreenProps) {
   const [list, setList] = useState<Tournament[] | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [detail, setDetail] = useState<{ tournament: Tournament; standings: Standing[] } | null>(null);
   const [name, setName] = useState('');
   const [variantId, setVariantId] = useState<VariantId>('integer');
@@ -169,6 +175,17 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin }: To
     try {
       await tournamentClient.reportResult(token, selectedId, match.round, match.index, winnerId);
       refreshDetail(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handlePlayMatch(match: Match) {
+    if (!token || !selectedId) return;
+    setError(null);
+    try {
+      const { roomId } = await tournamentClient.startMatchRoom(token, selectedId, match.round, match.index);
+      onPlayMatch(selectedId, roomId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -316,7 +333,22 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin }: To
                             </div>
                           ))}
                           {!match.winner && match.playerA && match.playerB && token && (
-                            <ReportButtons match={{ ...match, playerA: match.playerA, playerB: match.playerB }} user={user} onReport={handleReport} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 'var(--pad-sm)' }}>
+                              {(user?.id === match.playerA || user?.id === match.playerB) && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handlePlayMatch(match)}
+                                  style={{ ...primaryButton, padding: '2px 6px', fontSize: 'var(--fs-micro)' }}
+                                >
+                                  Play this match
+                                </button>
+                              )}
+                              <ReportButtons
+                                match={{ ...match, playerA: match.playerA, playerB: match.playerB }}
+                                user={user}
+                                onReport={handleReport}
+                              />
+                            </div>
                           )}
                         </div>
                       ))}

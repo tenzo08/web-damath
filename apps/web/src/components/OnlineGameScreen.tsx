@@ -9,6 +9,8 @@ interface OnlineGameScreenProps {
   token: string | null;
   onBackToLobby: () => void;
   onOpenLogin: () => void;
+  /** Set when arriving via TournamentScreen's "Play this match" — joins that room directly instead of showing the variant picker/matchmaking flow. */
+  initialRoomId?: string | undefined;
 }
 
 const cardStyle = {
@@ -42,7 +44,7 @@ const secondaryButton = {
  * gracefully degraded when the server isn't reachable rather than erroring out, per
  * the request to showcase the flow even where it can't run in this environment.
  */
-export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin }: OnlineGameScreenProps) {
+export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
@@ -55,6 +57,13 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin }: OnlineGa
     online.connect();
     return () => online.disconnect();
   }, [token]);
+
+  // `online.joinRoom` is stable (useCallback closing only over the stable `send`), so
+  // this fires exactly once per connection: the instant `status` reaches 'idle' after
+  // `connect()` opens the socket, provided a tournament match handed off a specific room.
+  useEffect(() => {
+    if (initialRoomId && online.status === 'idle') online.joinRoom(initialRoomId);
+  }, [initialRoomId, online.status, online.joinRoom]);
 
   useEffect(() => setSelected(null), [online.view?.moveCount]);
 
@@ -78,9 +87,9 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin }: OnlineGa
       <div style={{ width: '100%', maxWidth: 1000, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
-            ← Lobby
+            ← {initialRoomId ? 'Tournament' : 'Lobby'}
           </button>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Play Online</h1>
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{initialRoomId ? 'Tournament Match' : 'Play Online'}</h1>
         </header>
 
         {!token && (
@@ -123,7 +132,13 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin }: OnlineGa
           </div>
         )}
 
-        {token && online.status === 'idle' && (
+        {token && online.status === 'idle' && initialRoomId && (
+          <div style={cardStyle}>
+            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Joining the match…</p>
+          </div>
+        )}
+
+        {token && online.status === 'idle' && !initialRoomId && (
           <div style={cardStyle}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', maxWidth: 320 }}>
               <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Variant</span>
@@ -175,8 +190,10 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin }: OnlineGa
                 <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
                   {online.view.status === 'finished'
                     ? online.view.resignedBy
-                      ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned.`
-                      : 'Game over.'
+                      ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                      : online.view.winner
+                        ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                        : 'Game over — draw.'
                     : `${online.view.turn === 'white' ? 'Light' : 'Dark'} to move`}
                 </p>
               </div>

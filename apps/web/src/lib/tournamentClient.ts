@@ -80,3 +80,8 @@ export function reportResult(token: string, id: string, round: number, index: nu
     body: JSON.stringify({ winnerId }),
   });
 }
+
+/** Creates (or, on a repeat call, returns) the game room for a specific bracket match — playing it through to completion auto-reports the result, no manual "X won" click needed. */
+export function startMatchRoom(token: string, id: string, round: number, index: number): Promise<{ roomId: string }> {
+  return call(`/tournaments/${id}/matches/${String(round)}/${String(index)}/room`, token, { method: 'POST' });
+}

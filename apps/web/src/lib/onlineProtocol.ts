@@ -21,6 +21,8 @@ export interface PublicGameView {
   finalScores: { white: string; black: string } | null;
   winner: Player | null;
   moveCount: number;
+  /** Genuine `Move<V>` values, untyped here for the same reason the server's own `PublicGameView` leaves it `unknown` — see room.ts. Cast to `Move<V>[]` once `variantId` identifies the concrete `V`, same JSON-boundary pattern used everywhere else this data crosses a process boundary. */
+  moveHistory: readonly unknown[];
   players: { white: string | null; black: string | null };
   opponentType: 'human' | 'bot';
   botTier: string | null;

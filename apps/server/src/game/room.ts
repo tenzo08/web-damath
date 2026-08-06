@@ -21,6 +21,19 @@ export interface PublicGameView {
   /** Resignation overrides score comparison, same rule apps/web's App.tsx uses for local play. `null` while active, or on an unresigned tie. */
   readonly winner: Player | null;
   readonly moveCount: number;
+  /**
+   * The raw, typed move list — unlike `board`/`scores` (pre-formatted strings, the
+   * usual "online play sends a formatted view, not typed state" simplification), these
+   * are genuine `Move<V>` values, just untyped here (`unknown`) for the same reason
+   * `store.ts`'s `PersistedGame.moveHistory` is: `PublicGameView` stays non-generic so
+   * `RoomHandle` can be held in a plain `Map` across rooms of different variants. A
+   * completed move is inert historical data with no validation concerns, so the client
+   * can safely re-attach a concrete `V` (once it knows `variantId`) and replay it
+   * locally with the same `applyMove`/`replayMoves` local play already uses, to build a
+   * moves list and browse earlier board positions — the identical JSON-boundary cast
+   * `rooms.ts` already relies on to persist and rehydrate this exact array server-side.
+   */
+  readonly moveHistory: readonly unknown[];
   readonly players: { readonly white: string | null; readonly black: string | null };
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
@@ -133,6 +146,7 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
       finalScores: finals ? { white: arithmetic.format(finals.white), black: arithmetic.format(finals.black) } : null,
       winner: computeWinner(over, finals),
       moveCount: game.moveHistory.length,
+      moveHistory: game.moveHistory,
       players,
       opponentType: params.opponentType,
       botTier: params.botTier,

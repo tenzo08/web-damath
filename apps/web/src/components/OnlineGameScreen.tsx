@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
-import { ALL_VARIANTS } from '@damath/engine';
-import type { Position, VariantId } from '@damath/engine';
+import { useEffect, useMemo, useState } from 'react';
+import { ALL_VARIANTS, applyMove, createGame, pieceAt, replayMoves } from '@damath/engine';
+import type { Move, Position, Variant, VariantId } from '@damath/engine';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
+import { MoveLedger } from './MoveLedger';
+import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { SERVER_HTTP_URL } from '../lib/serverConfig';
+import type { PublicGameView } from '../lib/onlineProtocol';
 
 interface OnlineGameScreenProps {
   token: string | null;
@@ -11,6 +14,43 @@ interface OnlineGameScreenProps {
   onOpenLogin: () => void;
   /** Set when arriving via TournamentScreen's "Play this match" — joins that room directly instead of showing the variant picker/matchmaking flow. */
   initialRoomId?: string | undefined;
+}
+
+/**
+ * `PublicGameView.moveHistory` is untyped (`unknown[]`) at the wire boundary — the same
+ * generic-erasure reason `room.ts`'s own type is. Once `variantId` is known, this is the
+ * client-side half of the same JSON-boundary cast `rooms.ts` already relies on
+ * server-side, so a completed move (inert historical data, no validation concerns) can
+ * be replayed locally with the exact same `applyMove`/`replayMoves` local play uses —
+ * to build a moves list and browse earlier positions without the server needing to send
+ * a full board snapshot per historical ply.
+ */
+type ValueOf<T> = T extends Variant<infer V> ? V : never;
+type AnyValue = ValueOf<(typeof ALL_VARIANTS)[number]>;
+
+function findVariant(variantId: VariantId): Variant<AnyValue> | null {
+  return (ALL_VARIANTS.find((v) => v.id === variantId) as Variant<AnyValue> | undefined) ?? null;
+}
+
+function buildOnlineLedger(variant: Variant<AnyValue>, moveHistory: readonly unknown[]): LedgerEntry<AnyValue>[] {
+  let before = createGame(variant);
+  const entries: LedgerEntry<AnyValue>[] = [];
+  for (const move of moveHistory as Move<AnyValue>[]) {
+    const mover = pieceAt(before.board, move.from);
+    if (!mover) break; // defensive — a move history from the server is always valid, but never throw rendering a moves list
+    const after = applyMove(before, move, variant);
+    entries.push(buildLedgerEntry(before, mover, move, after, variant));
+    before = after;
+  }
+  return entries;
+}
+
+/** The board as it looked after `upTo` played moves — same `{owner, isDama, value}` shape `room.ts`'s own `getView()` sends, so `OnlineBoard` needs no changes to render either a live or a replayed position. */
+function replayedWireBoard(variant: Variant<AnyValue>, moveHistory: readonly unknown[], upTo: number): PublicGameView['board'] {
+  const replayed = replayMoves(variant, (moveHistory as Move<AnyValue>[]).slice(0, upTo));
+  return replayed.board.map((row) =>
+    row.map((piece) => (piece ? { owner: piece.owner, isDama: piece.isDama, value: variant.arithmetic.format(piece.value) } : null)),
+  );
 }
 
 const cardStyle = {
@@ -48,6 +88,10 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
+  // `null` means "viewing the live position" — same convention `useGame`'s `viewIndex`
+  // uses for local play. Browsing history is read-only: it moves the *board* shown, not
+  // the live game, so a move made elsewhere while browsing never gets lost or reverted.
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
 
   // Deliberately keyed on `token` alone, not `online.connect`/`online.disconnect` — both
   // are re-created every render (they close over `token` themselves), and including them
@@ -66,9 +110,30 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
   }, [initialRoomId, online.status, online.joinRoom]);
 
   useEffect(() => setSelected(null), [online.view?.moveCount]);
+  // A genuinely new game (a fresh roomId) always starts back at the live position.
+  useEffect(() => setViewIndex(null), [online.view?.roomId]);
+
+  const variant = online.view ? findVariant(online.view.variantId) : null;
+  const ledger = useMemo(
+    () => (online.view && variant ? buildOnlineLedger(variant, online.view.moveHistory) : []),
+    [online.view?.moveHistory, variant],
+  );
+  const isViewingHistory = viewIndex !== null;
+  const displayBoard =
+    online.view && variant && viewIndex !== null ? replayedWireBoard(variant, online.view.moveHistory, viewIndex) : online.view?.board;
+
+  const historyLength = ledger.length;
+  function goToMove(index: number) {
+    const clamped = Math.max(0, Math.min(index, historyLength));
+    setViewIndex(clamped === historyLength ? null : clamped);
+  }
+  const stepBack = () => goToMove((viewIndex ?? historyLength) - 1);
+  const stepForward = () => goToMove((viewIndex ?? historyLength) + 1);
 
   function activateSquare(pos: Position) {
-    if (!online.view || online.color === null) return;
+    // Board clicks only ever act on the live position — browsing history is view-only,
+    // same rule local play's `useGame` enforces (jump back to Live first to move again).
+    if (!online.view || online.color === null || isViewingHistory) return;
     const piece = online.view.board[pos.row]?.[pos.col] ?? null;
     if (selected) {
       if (piece && piece.owner === online.color) {
@@ -174,11 +239,16 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
         )}
 
         {online.status === 'in_game' && online.view && (
-          <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <div style={{ flex: '3 1 480px', maxWidth: 760 }}>
-              <OnlineBoard view={online.view} selected={selected} myColor={online.color} onActivateSquare={activateSquare} />
+          <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
+            <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%' }}>
+              <OnlineBoard
+                view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
+                selected={selected}
+                myColor={online.color}
+                onActivateSquare={activateSquare}
+              />
             </div>
-            <div style={{ flex: '1 1 280px', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+            <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
               <div style={cardStyle}>
                 <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
                   You're {online.color === 'white' ? 'Light' : 'Dark'} ·{' '}
@@ -197,8 +267,19 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                     : `${online.view.turn === 'white' ? 'Light' : 'Dark'} to move`}
                 </p>
               </div>
+              {/* Back/forward history browsing — deliberately not an undo control. Online
+                  games are server-authoritative; a player can look at any earlier position
+                  but can't retract a move that's already landed. */}
+              <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                <button type="button" onClick={stepBack} disabled={(viewIndex ?? historyLength) <= 0} style={secondaryButton}>
+                  ◂ Back
+                </button>
+                <button type="button" onClick={stepForward} disabled={!isViewingHistory} style={secondaryButton}>
+                  Forward ▸
+                </button>
+              </div>
               {online.view.status !== 'finished' && (
-                <button type="button" onClick={online.resign} style={{ ...secondaryButton, color: 'var(--danger)' }}>
+                <button type="button" onClick={online.resign} disabled={isViewingHistory} style={{ ...secondaryButton, color: 'var(--danger)' }}>
                   Resign
                 </button>
               )}
@@ -207,6 +288,10 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
                   {online.error}
                 </p>
               )}
+            </div>
+
+            <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
+              <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
             </div>
           </div>
         )}

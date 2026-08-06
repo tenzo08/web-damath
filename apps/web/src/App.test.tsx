@@ -232,14 +232,15 @@ describe('local play (Play a Friend)', () => {
     expect(screen.getByRole('gridcell', { name: /^a4, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
-  it('a non-integer variant renders formatted (non-numeric) chip values and has no computer opponent', async () => {
+  it('a non-integer variant renders formatted (non-numeric) chip values', async () => {
     const user = userEvent.setup();
     await enterFriendGame(user, /^Fraction Damath/);
 
     expect(screen.getByRole('heading', { name: 'Fraction Damath' })).toBeInTheDocument();
     // Fraction Damath's opening values include "1" (10/10) and fractions like "7/10".
     expect(screen.getByRole('gridcell', { name: /light 7\/10/i })).toBeInTheDocument();
-    expect(screen.getByText(/computer opponent plays Whole, Counting, and Integer Damath only/i)).toBeInTheDocument();
+    // This particular game was set up via "Play a Friend" (hot-seat), not the computer.
+    expect(screen.getByText('Local player — pass and play.')).toBeInTheDocument();
   });
 
   it('the clock panel shows the 20-minute game clock and the 60-second move clock', async () => {

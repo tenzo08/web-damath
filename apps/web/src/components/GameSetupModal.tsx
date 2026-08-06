@@ -4,7 +4,6 @@ import type { AnyVariant } from '@damath/engine';
 import { TIERS } from '@damath/ai';
 import type { DifficultyTier } from '@damath/ai';
 import { Modal } from './Modal';
-import { asIntegerVariant } from '../lib/integer-variant';
 
 export type OpponentChoice = { kind: 'friend' } | { kind: 'computer'; tier: DifficultyTier };
 
@@ -34,7 +33,6 @@ const TIER_DESCRIPTION: Record<DifficultyTier, string> = {
 };
 
 const ELEMENTARY_IDS = new Set(['counting', 'whole', 'fraction']);
-const AI_SUPPORTED_IDS = new Set(['whole', 'counting', 'integer']);
 
 const cardButton = (active: boolean) =>
   ({
@@ -66,16 +64,8 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
     setVariant(initialVariant);
   }, [open, initialOpponent, initialVariant, fixedOpponentKind]);
 
-  useEffect(() => {
-    if (opponentKind === 'computer' && !asIntegerVariant(variant)) {
-      const fallback = ALL_VARIANTS.find((v) => v.id === 'integer');
-      if (fallback) setVariant(fallback);
-    }
-  }, [opponentKind, variant]);
-
-  const availableVariants = opponentKind === 'computer' ? ALL_VARIANTS.filter((v) => AI_SUPPORTED_IDS.has(v.id)) : ALL_VARIANTS;
-  const elementary = availableVariants.filter((v) => ELEMENTARY_IDS.has(v.id));
-  const secondary = availableVariants.filter((v) => !ELEMENTARY_IDS.has(v.id));
+  const elementary = ALL_VARIANTS.filter((v) => ELEMENTARY_IDS.has(v.id));
+  const secondary = ALL_VARIANTS.filter((v) => !ELEMENTARY_IDS.has(v.id));
 
   function confirm() {
     onConfirm(variant, opponentKind === 'friend' ? { kind: 'friend' } : { kind: 'computer', tier });
@@ -117,11 +107,6 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
 
         <div>
           <h3 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>Variant</h3>
-          {opponentKind === 'computer' && (
-            <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>
-              The computer plays Whole, Counting, and Integer Damath only (docs/AI_OPPONENT.md §4).
-            </p>
-          )}
           <div className="scroll-hidden" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)', maxHeight: 220, overflowY: 'auto' }}>
             {elementary.length > 0 && (
               <div>

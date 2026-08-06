@@ -29,7 +29,6 @@ import { SpectateScreen } from './components/SpectateScreen';
 import { PuzzleScreen } from './components/PuzzleScreen';
 import { playerLabel } from './lib/notation';
 import { verifyEmail } from './lib/authClient';
-import { asIntegerVariant } from './lib/integer-variant';
 import { LocaleProvider } from './lib/i18n';
 import { SettingsProvider, useSettings } from './lib/settings';
 import { playCaptureSound, playMoveSound, playWinSound } from './lib/sound';
@@ -238,15 +237,15 @@ function GameShellView<V>({
   );
 }
 
-/** The three integer variants (docs/AI_OPPONENT.md §4) get practice mode; this is the only place `useComputerOpponent` is called, so it's always called with a concrete `GameState<number>`. `tier` is fixed for this match's whole lifetime — chosen up front via `GameSetupModal`, never adjustable once playing. */
-function IntegerGameShell({
+/** Every variant gets practice mode (valueScale.ts's `ToNumber<V>` bridge, docs/AI_OPPONENT.md §4, revised) — this is the only place `useComputerOpponent` is called, generic over the chip value type `V`. `tier` is fixed for this match's whole lifetime — chosen up front via `GameSetupModal`, never adjustable once playing. */
+function GameShell<V>({
   variant,
   tier,
   flipped,
   onFlip,
   nav,
 }: {
-  variant: Variant<number>;
+  variant: Variant<V>;
   tier: DifficultyTier | null;
   flipped: boolean;
   onFlip: () => void;
@@ -269,37 +268,6 @@ function IntegerGameShell({
       onFlip={onFlip}
       nav={nav}
       opponentPanel={<OpponentStatus tier={tier} thinking={computersTurn} />}
-    />
-  );
-}
-
-function GenericGameShell<V>({ variant, flipped, onFlip, nav }: { variant: Variant<V>; flipped: boolean; onFlip: () => void; nav: GameNavigation }) {
-  const gameApi = useGame(variant);
-  return (
-    <GameShellView
-      variant={variant}
-      gameApi={gameApi}
-      format={variant.arithmetic.format}
-      blockInteraction={false}
-      flipped={flipped}
-      onFlip={onFlip}
-      nav={nav}
-      opponentPanel={
-        <section
-          aria-label="Opponent"
-          style={{
-            background: 'var(--surface-panel)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)',
-            padding: 'var(--pad-lg)',
-            fontSize: 'var(--fs-meta)',
-            color: 'var(--text-muted)',
-          }}
-        >
-          The computer opponent plays Whole, Counting, and Integer Damath only — an evaluation function needs a
-          numeric scale (docs/AI_OPPONENT.md §4). Hot-seat two-player only for this variant.
-        </section>
-      }
     />
   );
 }
@@ -371,7 +339,6 @@ function AppShell() {
   // so the online count and "a tournament changed" signal are available on the lobby and
   // tournaments screen without needing to be inside a game.
   const live = useLiveUpdates(auth.token);
-  const integerVariant = asIntegerVariant(variant);
 
   function enterGame(newVariant: AnyVariant, opponent: OpponentChoice) {
     setVariant(newVariant);
@@ -381,8 +348,7 @@ function AppShell() {
   }
 
   function openSetupForComputer() {
-    const startingVariant = asIntegerVariant(variant) ? variant : (ALL_VARIANTS.find((v) => v.id === 'integer') ?? variant);
-    setSetupInitial({ variant: startingVariant, opponent: { kind: 'computer', tier: tier ?? 'steady' } });
+    setSetupInitial({ variant, opponent: { kind: 'computer', tier: tier ?? 'steady' } });
     setSetupFixedKind('computer');
     setSetupOpen(true);
   }
@@ -502,24 +468,14 @@ function AppShell() {
             onOpenTutorial={() => setTutorialOpen(true)}
             menuButton={<GameMenu onRematch={nav.onRematch} onNewGame={nav.onNewGame} onBackToLobby={nav.onBackToLobby} />}
           />
-          {integerVariant ? (
-            <IntegerGameShell
-              key={`${variant.id}-${String(matchNonce)}`}
-              variant={integerVariant}
-              tier={tier}
-              flipped={flipped}
-              onFlip={() => setFlipped((f) => !f)}
-              nav={nav}
-            />
-          ) : (
-            <GenericGameShell<ValueOf<AnyVariant>>
-              key={`${variant.id}-${String(matchNonce)}`}
-              variant={variant}
-              flipped={flipped}
-              onFlip={() => setFlipped((f) => !f)}
-              nav={nav}
-            />
-          )}
+          <GameShell<ValueOf<AnyVariant>>
+            key={`${variant.id}-${String(matchNonce)}`}
+            variant={variant}
+            tier={tier}
+            flipped={flipped}
+            onFlip={() => setFlipped((f) => !f)}
+            nav={nav}
+          />
         </>
       )}
 

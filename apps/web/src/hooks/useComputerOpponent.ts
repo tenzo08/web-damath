@@ -9,11 +9,11 @@ import type { AiWorkerRequest, AiWorkerResponse, DifficultyTier } from '@damath/
  * changed `game` (new move played, or a new match started) just tears the old worker
  * down in the effect's cleanup before a new one spins up.
  */
-export function useComputerOpponent(
-  game: GameState<number>,
+export function useComputerOpponent<V>(
+  game: GameState<V>,
   tier: DifficultyTier | null,
   computerPlayer: Player,
-  onMove: (move: Move<number>) => void,
+  onMove: (move: Move<V>) => void,
 ) {
   const onMoveRef = useRef(onMove);
   onMoveRef.current = onMove;
@@ -26,12 +26,12 @@ export function useComputerOpponent(
     const worker = new Worker(new URL('../ai-worker-entry.ts', import.meta.url), { type: 'module' });
     const id = `${Date.now()}-${String(Math.random())}`;
 
-    worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
+    worker.onmessage = (event: MessageEvent<AiWorkerResponse<V>>) => {
       if (event.data.id !== id) return;
       onMoveRef.current(event.data.result.move);
     };
 
-    const request: AiWorkerRequest = { id, state: game, tier };
+    const request: AiWorkerRequest<V> = { id, state: game, tier };
     worker.postMessage(request);
 
     return () => worker.terminate();

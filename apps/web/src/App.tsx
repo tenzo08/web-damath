@@ -19,6 +19,7 @@ import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal
 import { GameOverModal } from './components/GameOverModal';
 import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
+import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { SettingsModal } from './components/SettingsModal';
 import { LobbyScreen } from './components/LobbyScreen';
 import { OnlineGameScreen } from './components/OnlineGameScreen';
@@ -26,6 +27,7 @@ import { TournamentScreen } from './components/TournamentScreen';
 import { MatchHistoryScreen } from './components/MatchHistoryScreen';
 import { SpectateScreen } from './components/SpectateScreen';
 import { playerLabel } from './lib/notation';
+import { verifyEmail } from './lib/authClient';
 import { asIntegerVariant } from './lib/integer-variant';
 import { LocaleProvider } from './lib/i18n';
 import { SettingsProvider, useSettings } from './lib/settings';
@@ -341,6 +343,27 @@ function AppShell() {
   // dedicated Play a Friend button, and vice versa). Cleared for Menu > New game, which
   // still needs to offer both.
   const [setupFixedKind, setSetupFixedKind] = useState<'friend' | 'computer' | undefined>(undefined);
+  // Populated once, on mount, from `?resetToken=`/`?verifyToken=` in the URL -- the
+  // "link" a real email would have delivered (apps/server's auth/routes.ts logs it
+  // instead, per the no-email-provider decision). There's no client router here, so
+  // both land on the root path and are told apart by which query param is present.
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [verifyBanner, setVerifyBanner] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const incomingReset = params.get('resetToken');
+    const incomingVerify = params.get('verifyToken');
+    if (!incomingReset && !incomingVerify) return;
+    // Clear the token from the address bar immediately -- it's a one-time-use secret,
+    // it shouldn't linger somewhere a browser history entry or a screenshot could leak it.
+    window.history.replaceState(null, '', window.location.pathname);
+    if (incomingReset) setResetToken(incomingReset);
+    if (incomingVerify) {
+      verifyEmail(incomingVerify)
+        .then(() => setVerifyBanner('Your email is now verified.'))
+        .catch((err: unknown) => setVerifyBanner(err instanceof Error ? err.message : 'Could not verify this link.'));
+    }
+  }, []);
   const auth = useAuth();
   // A second, independent /ws connection from the one useOnlineGame opens while
   // actually playing — active whenever signed in, regardless of which screen is showing,
@@ -495,6 +518,37 @@ function AppShell() {
           )}
         </>
       )}
+
+      {verifyBanner && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            top: 'var(--pad-md)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 200,
+            background: 'var(--surface-panel)',
+            border: '1px solid var(--accent)',
+            borderRadius: 'var(--radius-card)',
+            padding: 'var(--pad-sm) var(--pad-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--gap-md)',
+          }}
+        >
+          <span style={{ fontSize: 'var(--fs-meta)' }}>{verifyBanner}</span>
+          <button
+            type="button"
+            onClick={() => setVerifyBanner(null)}
+            aria-label="Dismiss"
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 'var(--fs-body)' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {resetToken && <ResetPasswordModal token={resetToken} onClose={() => setResetToken(null)} />}
 
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />

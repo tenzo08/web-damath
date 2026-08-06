@@ -8,6 +8,8 @@ export interface AuthUser {
   rating: number;
   /** One of lib/avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle (AuthBar.tsx). */
   avatarEmoji: string | null;
+  /** Set once a verify-email link is redeemed. Not currently gating any feature -- just a real, checkable fact about the account. */
+  emailVerified: boolean;
   createdAt: string;
 }
 
@@ -66,4 +68,29 @@ export async function updateProfile(token: string, patch: { displayName?: string
   const data = (await res.json().catch(() => ({}))) as { user?: AuthUser; error?: string };
   if (!res.ok || !data.user) throw new Error(data.error ?? `Request failed (${String(res.status)}).`);
   return data.user;
+}
+
+/** Always resolves — the server returns the same generic response whether or not the email is registered, so a caller can't enumerate accounts by watching for an error here. */
+export async function forgotPassword(email: string): Promise<void> {
+  await post<{ ok: true }>('/auth/forgot-password', { email });
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await post<{ ok: true }>('/auth/reset-password', { token, newPassword });
+}
+
+export async function sendVerification(token: string): Promise<{ alreadyVerified?: boolean }> {
+  let res: Response;
+  try {
+    res = await fetch(`${SERVER_HTTP_URL}/auth/send-verification`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new Error(`Can't reach the server at ${SERVER_HTTP_URL}.`);
+  }
+  const data = (await res.json().catch(() => ({}))) as { alreadyVerified?: boolean; error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Request failed (${String(res.status)}).`);
+  return data;
+}
+
+export function verifyEmail(token: string): Promise<AuthUser> {
+  return post<{ user: AuthUser }>('/auth/verify-email', { token }).then((r) => r.user);
 }

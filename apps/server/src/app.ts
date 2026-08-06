@@ -4,7 +4,7 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
-import { registerAuthRoutes } from './auth/routes.js';
+import { registerAuthRoutes, type ActionLinkNotifier } from './auth/routes.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
@@ -44,6 +44,10 @@ export interface AppOptions {
    * meaningful route. Pass an explicit allow-list in a real deployment.
    */
   corsOrigin?: boolean | string | string[] | undefined;
+  /** Used only to build the human-facing link in the logged password-reset/verify-email message (auth/routes.ts) — no email provider is wired up. Defaults to the local web dev server's origin. */
+  webOrigin?: string | undefined;
+  /** Overrides how a password-reset/verify-email link is delivered — defaults to a log line (auth/routes.ts). Tests inject a capturing implementation instead, since the token is one-way-hashed before storage and can't be recovered any other way. */
+  notifyActionLink?: ActionLinkNotifier | undefined;
 }
 
 declare module 'fastify' {
@@ -90,7 +94,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // ...)` above silently attaches no rate limiting at all — caught by a real request
   // test asserting a 429 actually shows up, not just that the config object looks right.
   app.after(() => {
-    registerAuthRoutes(app, options.userStore);
+    registerAuthRoutes(app, options.userStore, options.webOrigin ?? 'http://localhost:5173', options.notifyActionLink);
     registerGameHistoryRoutes(app, options.gameStore, options.userStore);
     registerSpectateRoutes(app, options.gameStore, options.userStore);
     registerModerationRoutes(app, options.moderationStore, options.userStore);

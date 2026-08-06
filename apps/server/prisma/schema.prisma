@@ -33,7 +33,18 @@ model User {
   /// circle (AuthBar.tsx). Validated server-side against that same list on PATCH
   /// /auth/me — never an arbitrary client-supplied string.
   avatarEmoji  String?
+  /// Set once a verify-email token is successfully redeemed. Not currently enforced
+  /// anywhere -- see auth/store.ts.
+  emailVerified        Boolean   @default(false)
+  /// SHA-256 of the live token, never the raw token -- see auth/actionTokens.ts.
+  resetTokenHash       String?
+  resetTokenExpiresAt  DateTime?
+  verifyTokenHash      String?
+  verifyTokenExpiresAt DateTime?
   createdAt    DateTime @default(now())
+
+  @@index([resetTokenHash])
+  @@index([verifyTokenHash])
 }
 
 model Game {

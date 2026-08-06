@@ -69,6 +69,7 @@ const app = buildApp({
   queueBotTier: readTier(process.env.QUEUE_BOT_TIER, 'steady'),
   corsOrigin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : undefined,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN,
+  webOrigin: process.env.WEB_ORIGIN,
 });
 const port = Number(process.env.PORT ?? 3001);
 

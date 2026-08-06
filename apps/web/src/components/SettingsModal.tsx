@@ -5,6 +5,7 @@ import { playMoveSound } from '../lib/sound';
 import { AVATAR_OPTIONS } from '../lib/avatars';
 import type { AuthUser } from '../lib/authClient';
 import { myBlocks, unblockUser, type BlockedEntry } from '../lib/moderationClient';
+import { sendVerification } from '../lib/authClient';
 
 const cardButton = (active: boolean) =>
   ({
@@ -99,11 +100,25 @@ function BlockedPlayersSection({ token }: { token: string }) {
 }
 
 /** Avatar + display name, editable in place. Split out so ProfileSection's own `useState` (the draft name, save-in-flight state) resets cleanly whenever a different `user` is passed in, rather than being hand-rolled inside SettingsModal itself. */
-function ProfileSection({ user, onUpdateProfile }: { user: AuthUser; onUpdateProfile: SettingsModalProps['onUpdateProfile'] }) {
+function ProfileSection({ user, onUpdateProfile, token }: { user: AuthUser; onUpdateProfile: SettingsModalProps['onUpdateProfile']; token: string }) {
   const [name, setName] = useState(user.displayName);
   const [savingName, setSavingName] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
+
+  async function resendVerification() {
+    setSendingVerification(true);
+    try {
+      await sendVerification(token);
+      setVerificationSent(true);
+    } catch {
+      // Best-effort -- a failed resend isn't worth interrupting Settings over.
+    } finally {
+      setSendingVerification(false);
+    }
+  }
 
   // The draft field should always reflect *this* account's current name — if the modal
   // stays open across a sign-out/sign-in (unlikely but not impossible) or `user` changes
@@ -166,6 +181,24 @@ function ProfileSection({ user, onUpdateProfile }: { user: AuthUser; onUpdatePro
           <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>Rating {user.rating}</span>
         </div>
       </div>
+
+      {!user.emailVerified && (
+        <p style={{ margin: '0 0 var(--pad-md) 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+          Email not verified.{' '}
+          {verificationSent ? (
+            'A new verification link was issued.'
+          ) : (
+            <button
+              type="button"
+              onClick={() => void resendVerification()}
+              disabled={sendingVerification}
+              style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, font: 'inherit' }}
+            >
+              Resend verification email
+            </button>
+          )}
+        </p>
+      )}
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)', marginBottom: 'var(--pad-md)' }}>
         Display name
@@ -255,7 +288,7 @@ export function SettingsModal({ open, onClose, user, onUpdateProfile, token }: S
   return (
     <Modal open={open} onClose={onClose} title="Settings" width={480}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
-        {user && <ProfileSection user={user} onUpdateProfile={onUpdateProfile} />}
+        {user && token && <ProfileSection user={user} onUpdateProfile={onUpdateProfile} token={token} />}
 
         {token && (
           <div>

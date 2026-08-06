@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { makeTestApp, type TestApp } from './helpers.js';
@@ -190,6 +192,116 @@ describe('PATCH /auth/me', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().user.avatarEmoji).toBe('🐯');
     expect(res.json().user.displayName).toBe('Still Has Avatar');
+  });
+});
+
+describe('password reset', () => {
+  it('logs a reset link for a real email, and returns the same generic response for an unknown one (no account enumeration)', async () => {
+    await signup();
+    const known = await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
+    const unknown = await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: 'nobody@example.com' } });
+    expect(known.statusCode).toBe(200);
+    expect(unknown.statusCode).toBe(200);
+    expect(known.json()).toEqual(unknown.json());
+
+    // Signup itself already issued a 'verify' link -- only one 'reset' link should
+    // have been added on top of that.
+    const resetLinks = testApp.actionLinks.filter((l) => l.kind === 'reset');
+    expect(resetLinks).toHaveLength(1);
+    expect(resetLinks[0]).toMatchObject({ kind: 'reset', email: 'teacher@example.com' });
+  });
+
+  it('resets the password end to end: old password stops working, new one works', async () => {
+    await signup();
+    await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
+    const link = testApp.actionLinks.find((l) => l.kind === 'reset')?.link;
+    if (!link) throw new Error('expected a reset link to have been issued');
+    const token = new URL(link).searchParams.get('resetToken');
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/auth/reset-password',
+      payload: { token, newPassword: 'a-brand-new-password' },
+    });
+    expect(reset.statusCode).toBe(200);
+
+    const oldLogin = await app.inject({ method: 'POST', url: '/auth/login', payload: { email: CREDENTIALS.email, password: CREDENTIALS.password } });
+    expect(oldLogin.statusCode).toBe(401);
+
+    const newLogin = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: CREDENTIALS.email, password: 'a-brand-new-password' },
+    });
+    expect(newLogin.statusCode).toBe(200);
+  });
+
+  it('rejects a garbage or already-used token', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/reset-password', payload: { token: 'not-a-real-token', newPassword: 'whatever123' } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects an expired token', async () => {
+    await signup();
+    await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
+    const link = testApp.actionLinks.find((l) => l.kind === 'reset')?.link;
+    if (!link) throw new Error('expected a reset link to have been issued');
+    const token = new URL(link).searchParams.get('resetToken');
+
+    // Directly back-date the stored expiry -- the only way to exercise real expiry
+    // without the test itself waiting an hour.
+    const usersPath = path.join(testApp.dir, 'users.json');
+    const users = JSON.parse(await readFile(usersPath, 'utf-8')) as { resetTokenExpiresAt: string | null }[];
+    users[0]!.resetTokenExpiresAt = new Date(Date.now() - 1000).toISOString();
+    await writeFile(usersPath, JSON.stringify(users, null, 2), 'utf-8');
+
+    const reset = await app.inject({ method: 'POST', url: '/auth/reset-password', payload: { token, newPassword: 'whatever123' } });
+    expect(reset.statusCode).toBe(400);
+  });
+});
+
+describe('email verification', () => {
+  it('starts unverified and auto-sends a verify link at signup', async () => {
+    const res = await signup();
+    expect(res.json().user.emailVerified).toBe(false);
+    expect(testApp.actionLinks).toHaveLength(1);
+    expect(testApp.actionLinks[0]).toMatchObject({ kind: 'verify', email: 'teacher@example.com' });
+  });
+
+  it('verifies the account end to end', async () => {
+    await signup();
+    const link = testApp.actionLinks[0]?.link;
+    if (!link) throw new Error('expected a verify link to have been issued at signup');
+    const token = new URL(link).searchParams.get('verifyToken');
+
+    const verify = await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token } });
+    expect(verify.statusCode).toBe(200);
+    expect(verify.json().user.emailVerified).toBe(true);
+  });
+
+  it('rejects a garbage token', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token: 'not-a-real-token' } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('requires authentication to request a new verification link', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/send-verification' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('reports alreadyVerified instead of re-sending once the account is verified', async () => {
+    const signupRes = await signup();
+    const { token: authToken } = signupRes.json() as { token: string };
+    const link = testApp.actionLinks[0]?.link;
+    if (!link) throw new Error('expected a verify link to have been issued at signup');
+    const verifyToken = new URL(link).searchParams.get('verifyToken');
+    await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token: verifyToken } });
+
+    const resend = await app.inject({ method: 'POST', url: '/auth/send-verification', headers: { authorization: `Bearer ${authToken}` } });
+    expect(resend.statusCode).toBe(200);
+    expect(resend.json()).toMatchObject({ alreadyVerified: true });
+    // Only the original signup link, no second one sent for an already-verified account.
+    expect(testApp.actionLinks).toHaveLength(1);
   });
 });
 

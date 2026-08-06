@@ -12,6 +12,13 @@ export interface User {
   readonly rating: number;
   /** One of avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle. */
   readonly avatarEmoji: string | null;
+  /** Set once a verify-email token is successfully redeemed. Not currently enforced anywhere (no feature is gated behind it) — just a real, checkable fact about the account. */
+  readonly emailVerified: boolean;
+  /** SHA-256 of the live token, never the raw token itself (same "never store the redeemable secret" reasoning as a password hash) — see auth/actionTokens.ts. Null when no reset is pending. */
+  readonly resetTokenHash: string | null;
+  readonly resetTokenExpiresAt: string | null;
+  readonly verifyTokenHash: string | null;
+  readonly verifyTokenExpiresAt: string | null;
   readonly createdAt: string;
 }
 
@@ -21,6 +28,10 @@ export interface UserStore {
   create(user: User): Promise<void>;
   /** Whole-record replace, same convention as GameStore/TournamentStore's `update` — currently only used to persist a changed `rating`. */
   update(user: User): Promise<void>;
+  /** Finds the one user (if any) whose `resetTokenHash` matches — see auth/actionTokens.ts. */
+  findByResetTokenHash(hash: string): Promise<User | null>;
+  /** Finds the one user (if any) whose `verifyTokenHash` matches — see auth/actionTokens.ts. */
+  findByVerifyTokenHash(hash: string): Promise<User | null>;
 }
 
 /**
@@ -70,6 +81,16 @@ export class FileUserStore implements UserStore {
     users[index] = user;
     await this.writeAll(users);
   }
+
+  async findByResetTokenHash(hash: string): Promise<User | null> {
+    const users = await this.readAll();
+    return users.find((u) => u.resetTokenHash === hash) ?? null;
+  }
+
+  async findByVerifyTokenHash(hash: string): Promise<User | null> {
+    const users = await this.readAll();
+    return users.find((u) => u.verifyTokenHash === hash) ?? null;
+  }
 }
 
 /**
@@ -101,6 +122,11 @@ export class PrismaUserStore implements UserStore {
         displayName: user.displayName,
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
+        emailVerified: user.emailVerified,
+        resetTokenHash: user.resetTokenHash,
+        resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
+        verifyTokenHash: user.verifyTokenHash,
+        verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
         createdAt: new Date(user.createdAt),
       },
     });
@@ -115,8 +141,23 @@ export class PrismaUserStore implements UserStore {
         displayName: user.displayName,
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
+        emailVerified: user.emailVerified,
+        resetTokenHash: user.resetTokenHash,
+        resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
+        verifyTokenHash: user.verifyTokenHash,
+        verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
       },
     });
+  }
+
+  async findByResetTokenHash(hash: string): Promise<User | null> {
+    const row = await this.prisma.user.findFirst({ where: { resetTokenHash: hash } });
+    return row ? toUser(row) : null;
+  }
+
+  async findByVerifyTokenHash(hash: string): Promise<User | null> {
+    const row = await this.prisma.user.findFirst({ where: { verifyTokenHash: hash } });
+    return row ? toUser(row) : null;
   }
 }
 
@@ -127,6 +168,11 @@ interface PrismaUserRow {
   displayName: string;
   rating: number;
   avatarEmoji: string | null;
+  emailVerified: boolean;
+  resetTokenHash: string | null;
+  resetTokenExpiresAt: Date | null;
+  verifyTokenHash: string | null;
+  verifyTokenExpiresAt: Date | null;
   createdAt: Date;
 }
 
@@ -138,6 +184,11 @@ function toUser(row: PrismaUserRow): User {
     displayName: row.displayName,
     rating: row.rating,
     avatarEmoji: row.avatarEmoji,
+    emailVerified: row.emailVerified,
+    resetTokenHash: row.resetTokenHash,
+    resetTokenExpiresAt: row.resetTokenExpiresAt ? row.resetTokenExpiresAt.toISOString() : null,
+    verifyTokenHash: row.verifyTokenHash,
+    verifyTokenExpiresAt: row.verifyTokenExpiresAt ? row.verifyTokenExpiresAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };
 }

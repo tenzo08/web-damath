@@ -37,6 +37,12 @@ services:
       # apps/server/src/app.ts's corsOrigin option.
       - key: CORS_ORIGIN
         sync: false
+      # The deployed web app's real origin (e.g. https://web-damath.vercel.app, same
+      # value as CORS_ORIGIN above) -- only used to build the link in a logged
+      # password-reset/verify-email message (auth/routes.ts). Left unset, those links
+      # would point at localhost:5173 in production logs, which is useless there.
+      - key: WEB_ORIGIN
+        sync: false
       - key: QUEUE_BOT_TIER
         value: steady
       - key: QUEUE_BOT_TIMEOUT_MS

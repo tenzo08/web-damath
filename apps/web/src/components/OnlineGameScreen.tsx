@@ -84,7 +84,7 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 1000, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
             ← {initialRoomId ? 'Tournament' : 'Lobby'}

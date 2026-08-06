@@ -81,7 +81,10 @@ export function LobbyScreen({
   const { t } = useLocale();
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
+      {/* A generous soft ceiling (`min()`), not a fixed cap — fills the available viewport
+          on any realistic screen instead of leaving large dead margins at 100% zoom, while
+          still stopping short of absurd line lengths on an ultrawide monitor. */}
+      <div style={{ width: '100%', maxWidth: 'min(1600px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>

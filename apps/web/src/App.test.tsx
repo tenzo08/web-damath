@@ -4,10 +4,20 @@ import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { App } from './App';
 
-/** Every game-behavior test needs to get past the lobby first — App now starts there, chess.com-style. */
-async function enterFriendGame(user: UserEvent) {
+/**
+ * Every game-behavior test needs to get past the lobby first — App now starts there,
+ * chess.com-style. "Play a Friend" now opens the same setup step "Play the Computer"
+ * already used, instead of starting immediately with whatever variant was selected
+ * last — the chip type is chosen up front and locked for the match.
+ */
+async function enterFriendGame(user: UserEvent, variantName?: RegExp) {
   render(<App />);
   await user.click(screen.getByRole('button', { name: /^Play a Friend/ }));
+  const dialog = screen.getByRole('dialog', { name: 'New game' });
+  if (variantName) {
+    await user.click(within(dialog).getByRole('button', { name: variantName }));
+  }
+  await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
 }
 
 /** "Play the Computer" now opens the setup modal — the player must choose a tier before the game exists at all. */
@@ -17,10 +27,6 @@ async function enterComputerGame(user: UserEvent, tier: 'Learner' | 'Steady' | '
   const dialog = screen.getByRole('dialog', { name: 'New game' });
   await user.click(within(dialog).getByRole('button', { name: new RegExp(`^${tier}`, 'i') }));
   await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
-}
-
-async function openVariantMenu(user: UserEvent) {
-  await user.click(screen.getByRole('button', { name: /^Whole Damath/ }));
 }
 
 describe('the lobby', () => {
@@ -82,6 +88,10 @@ describe('the lobby', () => {
     const dialog = screen.getByRole('dialog', { name: 'New game' });
     expect(within(dialog).getByRole('button', { name: /^learner/i })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /^tournament/i })).toBeInTheDocument();
+    // Reached via the dedicated "Play the Computer" card — the redundant "friend" choice
+    // (there's already a separate button for that) isn't offered here.
+    expect(within(dialog).queryByRole('button', { name: /Friend \(pass and play\)/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '🤖 Computer' })).not.toBeInTheDocument();
     // Not in a game yet — no board until "Start game" is pressed.
     expect(screen.queryByRole('grid', { name: 'Damath board' })).not.toBeInTheDocument();
 
@@ -93,6 +103,26 @@ describe('the lobby', () => {
     expect(screen.getAllByText(/Computer \(sharp/).length).toBeGreaterThan(0);
     // The choice is now locked in — no control anywhere lets it change mid-game.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('"Play a Friend" also opens a setup step — the player chooses the chip type before the game starts', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: /^Play a Friend/ }));
+
+    const dialog = screen.getByRole('dialog', { name: 'New game' });
+    // Reached via the dedicated "Play a Friend" card — the redundant "computer" choice
+    // (there's already a separate button for that) isn't offered here either.
+    expect(within(dialog).queryByRole('button', { name: /Friend \(pass and play\)/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '🤖 Computer' })).not.toBeInTheDocument();
+    // Not in a game yet — no board until "Start game" is pressed.
+    expect(screen.queryByRole('grid', { name: 'Damath board' })).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^Integer Damath/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
+
+    expect(screen.getByRole('heading', { name: 'Integer Damath' })).toBeInTheDocument();
+    expect(screen.getByRole('grid', { name: 'Damath board' })).toBeInTheDocument();
   });
 });
 
@@ -120,18 +150,6 @@ describe('local play (Play a Friend)', () => {
     expect(screen.queryByText('No moves yet.')).not.toBeInTheDocument();
     expect(screen.getByText('Dark to move')).toBeInTheDocument();
     expect(destination).toHaveAttribute('aria-label', expect.stringContaining('light'));
-  });
-
-  it('the hamburger variant menu switches variants and starts a fresh game', async () => {
-    const user = userEvent.setup();
-    await enterFriendGame(user);
-
-    await openVariantMenu(user);
-    await user.click(screen.getByRole('button', { name: /^Integer Damath/ }));
-    expect(screen.getByRole('heading', { name: 'Integer Damath' })).toBeInTheDocument();
-    expect(screen.getByText('No moves yet.')).toBeInTheDocument();
-    // The menu closes itself after a selection.
-    expect(screen.queryByRole('button', { name: /^Fraction Damath/ })).not.toBeInTheDocument();
   });
 
   it('the Menu button offers Rematch, New game, and Back to lobby', async () => {
@@ -216,10 +234,8 @@ describe('local play (Play a Friend)', () => {
 
   it('a non-integer variant renders formatted (non-numeric) chip values and has no computer opponent', async () => {
     const user = userEvent.setup();
-    await enterFriendGame(user);
+    await enterFriendGame(user, /^Fraction Damath/);
 
-    await openVariantMenu(user);
-    await user.click(screen.getByRole('button', { name: /^Fraction Damath/ }));
     expect(screen.getByRole('heading', { name: 'Fraction Damath' })).toBeInTheDocument();
     // Fraction Damath's opening values include "1" (10/10) and fractions like "7/10".
     expect(screen.getByRole('gridcell', { name: /light 7\/10/i })).toBeInTheDocument();

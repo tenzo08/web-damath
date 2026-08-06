@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEscapeToClose } from '../hooks/useEscapeToClose';
+import { useMediaQuery, NARROW_QUERY } from '../hooks/useMediaQuery';
 
 interface GameMenuProps {
   onRematch: () => void;
@@ -16,6 +17,10 @@ interface GameMenuProps {
 export function GameMenu({ onRematch, onNewGame, onBackToLobby }: GameMenuProps) {
   const [open, setOpen] = useState(false);
   useEscapeToClose(open, () => setOpen(false));
+  // Full width in the wide sidebar (matches Rail's "How to play" button below it, instead
+  // of a small pill sitting flush left against a full-width neighbor); auto-width in the
+  // narrow top bar, where it sits inline with other controls.
+  const narrow = useMediaQuery(NARROW_QUERY);
 
   const item = (label: string, onClick: () => void) => (
     <button
@@ -47,6 +52,7 @@ export function GameMenu({ onRematch, onNewGame, onBackToLobby }: GameMenuProps)
         aria-expanded={open}
         aria-haspopup="true"
         style={{
+          width: narrow ? undefined : '100%',
           background: 'var(--accent)',
           color: 'var(--accent-on)',
           border: 'none',

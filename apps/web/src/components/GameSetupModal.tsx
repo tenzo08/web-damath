@@ -14,6 +14,15 @@ interface GameSetupModalProps {
   onConfirm: (variant: AnyVariant, opponent: OpponentChoice) => void;
   initialVariant: AnyVariant;
   initialOpponent: OpponentChoice;
+  /**
+   * Set when the modal was reached through a lobby card that already implies the
+   * opponent kind ("Play a Friend" / "Play the Computer") — the redundant "friend"
+   * choice inside the *computer* setup (and vice versa) was confusing when there's
+   * already a dedicated button for the other mode. Hides the Opponent toggle entirely
+   * and locks to this kind. Omitted for the in-game menu's "New game", which still
+   * needs to offer both.
+   */
+  fixedOpponentKind?: 'friend' | 'computer' | undefined;
 }
 
 const TIER_ORDER: readonly DifficultyTier[] = ['learner', 'steady', 'sharp', 'tournament'];
@@ -45,17 +54,17 @@ const cardButton = (active: boolean) =>
  * "New game" action; never surfaced mid-game, which is what makes the choice durable
  * for that match (see OpponentStatus, the read-only display shown once playing).
  */
-export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initialOpponent }: GameSetupModalProps) {
-  const [opponentKind, setOpponentKind] = useState<'friend' | 'computer'>(initialOpponent.kind);
+export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initialOpponent, fixedOpponentKind }: GameSetupModalProps) {
+  const [opponentKind, setOpponentKind] = useState<'friend' | 'computer'>(fixedOpponentKind ?? initialOpponent.kind);
   const [tier, setTier] = useState<DifficultyTier>(initialOpponent.kind === 'computer' ? initialOpponent.tier : 'steady');
   const [variant, setVariant] = useState<AnyVariant>(initialVariant);
 
   useEffect(() => {
     if (!open) return;
-    setOpponentKind(initialOpponent.kind);
+    setOpponentKind(fixedOpponentKind ?? initialOpponent.kind);
     setTier(initialOpponent.kind === 'computer' ? initialOpponent.tier : 'steady');
     setVariant(initialVariant);
-  }, [open, initialOpponent, initialVariant]);
+  }, [open, initialOpponent, initialVariant, fixedOpponentKind]);
 
   useEffect(() => {
     if (opponentKind === 'computer' && !asIntegerVariant(variant)) {
@@ -75,17 +84,19 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
   return (
     <Modal open={open} onClose={onClose} title="New game" width={520}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <div>
-          <h3 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>Opponent</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
-            <button type="button" style={cardButton(opponentKind === 'friend')} onClick={() => setOpponentKind('friend')}>
-              👥 Friend (pass and play)
-            </button>
-            <button type="button" style={cardButton(opponentKind === 'computer')} onClick={() => setOpponentKind('computer')}>
-              🤖 Computer
-            </button>
+        {!fixedOpponentKind && (
+          <div>
+            <h3 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>Opponent</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+              <button type="button" style={cardButton(opponentKind === 'friend')} onClick={() => setOpponentKind('friend')}>
+                👥 Friend (pass and play)
+              </button>
+              <button type="button" style={cardButton(opponentKind === 'computer')} onClick={() => setOpponentKind('computer')}>
+                🤖 Computer
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {opponentKind === 'computer' && (
           <div>
@@ -111,7 +122,7 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
               The computer plays Whole, Counting, and Integer Damath only (docs/AI_OPPONENT.md §4).
             </p>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)', maxHeight: 220, overflowY: 'auto' }}>
+          <div className="scroll-hidden" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)', maxHeight: 220, overflowY: 'auto' }}>
             {elementary.length > 0 && (
               <div>
                 <div style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Elementary</div>

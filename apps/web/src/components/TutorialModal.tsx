@@ -123,13 +123,15 @@ export function TutorialModal({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <Modal open={open} onClose={close} title="How to play Damath" width={640}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+          {/* Always centered, board stacked above the explanation — not side-by-side, which
+              left the board flush against the left edge instead of centered. */}
           {step.board && (
-            <div style={{ flex: '0 0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
               <MiniBoard rows={step.board} size={200} label={step.boardLabel} />
             </div>
           )}
-          <div style={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
             <h3 style={{ margin: 0, fontSize: 'var(--fs-label)', color: 'var(--accent)' }}>{step.title}</h3>
             {step.body.map((p, i) => (
               <p key={i} style={{ margin: 0, fontSize: 'var(--fs-body)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>

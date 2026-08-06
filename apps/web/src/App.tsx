@@ -133,7 +133,7 @@ function GameShellView<V>({
         justifyContent: 'center',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 1240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <div style={{ width: '100%', maxWidth: 'min(1800px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)', fontWeight: 700 }}>{variant.name}</h1>
           <p style={{ margin: 0, fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>{statusLine}</p>
@@ -298,6 +298,12 @@ function AppShell() {
     variant: defaultVariant,
     opponent: { kind: 'friend' },
   });
+  // Set only when the setup modal was opened from a lobby card that already implies the
+  // opponent kind — hides GameSetupModal's redundant Opponent toggle in that case (a
+  // "friend" choice inside "Play the Computer" doesn't make sense when there's already a
+  // dedicated Play a Friend button, and vice versa). Cleared for Menu > New game, which
+  // still needs to offer both.
+  const [setupFixedKind, setSetupFixedKind] = useState<'friend' | 'computer' | undefined>(undefined);
   const auth = useAuth();
   const integerVariant = asIntegerVariant(variant);
 
@@ -311,11 +317,20 @@ function AppShell() {
   function openSetupForComputer() {
     const startingVariant = asIntegerVariant(variant) ? variant : (ALL_VARIANTS.find((v) => v.id === 'integer') ?? variant);
     setSetupInitial({ variant: startingVariant, opponent: { kind: 'computer', tier: tier ?? 'steady' } });
+    setSetupFixedKind('computer');
+    setSetupOpen(true);
+  }
+
+  /** "Play a Friend" now opens the same setup step Play the Computer already used, instead of starting immediately with whatever variant happened to be selected last — the chip type is chosen up front and locked for the match, same rule as the AI tier. */
+  function openSetupForFriend() {
+    setSetupInitial({ variant, opponent: { kind: 'friend' } });
+    setSetupFixedKind('friend');
     setSetupOpen(true);
   }
 
   function openSetupForNewGame() {
     setSetupInitial({ variant, opponent: tier !== null ? { kind: 'computer', tier } : { kind: 'friend' } });
+    setSetupFixedKind(undefined);
     setSetupOpen(true);
   }
 
@@ -335,7 +350,7 @@ function AppShell() {
           user={auth.user}
           onSignIn={() => setLoginOpen(true)}
           onSignOut={auth.logout}
-          onPlayFriend={() => enterGame(variant, { kind: 'friend' })}
+          onPlayFriend={openSetupForFriend}
           onPlayComputer={openSetupForComputer}
           onPlayOnline={() => setScreen('online')}
           onLearn={() => setTutorialOpen(true)}
@@ -375,9 +390,6 @@ function AppShell() {
       {screen === 'game' && (
         <>
           <Rail
-            variants={ALL_VARIANTS}
-            current={variant}
-            onSelectVariant={(v) => enterGame(v, tier !== null ? { kind: 'computer', tier } : { kind: 'friend' })}
             onOpenTutorial={() => setTutorialOpen(true)}
             menuButton={<GameMenu onRematch={nav.onRematch} onNewGame={nav.onNewGame} onBackToLobby={nav.onBackToLobby} />}
           />
@@ -413,6 +425,7 @@ function AppShell() {
         }}
         initialVariant={setupInitial.variant}
         initialOpponent={setupInitial.opponent}
+        fixedOpponentKind={setupFixedKind}
       />
     </div>
   );

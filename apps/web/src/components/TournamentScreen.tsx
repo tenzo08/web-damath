@@ -193,7 +193,7 @@ export function TournamentScreen({ token, user, onBackToLobby, onOpenLogin, init
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button
             type="button"

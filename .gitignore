@@ -34,3 +34,7 @@ pnpm-debug.log*
 /docs/
 /*.md
 !/README.md
+
+# deployment walkthrough — personal notes, may reference real hosting URLs; already
+# covered by /*.md above, called out explicitly here per direct instruction: never push
+/DEPLOYMENT.md

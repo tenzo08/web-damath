@@ -106,12 +106,10 @@ function ProfileSection({
   user,
   onUpdateProfile,
   token,
-  onSignOut,
 }: {
   user: AuthUser;
   onUpdateProfile: SettingsModalProps['onUpdateProfile'];
   token: string;
-  onSignOut: () => void;
 }) {
   const [name, setName] = useState(user.displayName);
   const [savingName, setSavingName] = useState(false);
@@ -294,45 +292,18 @@ function ProfileSection({
           {error}
         </p>
       )}
-
-      <button
-        type="button"
-        onClick={onSignOut}
-        style={{
-          marginTop: 'var(--pad-lg)',
-          background: 'transparent',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          color: 'var(--danger)',
-          fontSize: 'var(--fs-meta)',
-          padding: 'var(--pad-sm) var(--pad-md)',
-          cursor: 'pointer',
-        }}
-      >
-        Sign out
-      </button>
     </div>
   );
 }
 
-/** Personalization, per browser: theme (dark/light/system) and sound effect volume — plus, when signed in, the account's own profile (avatar, display name). Reachable from the lobby header. Music isn't offered here — no audio asset pipeline exists in this codebase, and a toggle with nothing to toggle would just be a broken control (see TASK.md). */
+/** The account's own profile (avatar, display name) plus per-browser personalization: theme (dark/light/system) and sound effect volume. Sign-in-gated — the top-left profile button (ProfileButton.tsx) is the only way in, no separate settings icon. Sign out is pinned at the very bottom, the last action on the account. Music isn't offered here — no audio asset pipeline exists in this codebase, and a toggle with nothing to toggle would just be a broken control (see TASK.md). */
 export function SettingsModal({ open, onClose, user, onUpdateProfile, token, onSignOut }: SettingsModalProps) {
   const { theme, setTheme, soundEnabled, setSoundEnabled, soundVolume, setSoundVolume } = useSettings();
 
   return (
-    <Modal open={open} onClose={onClose} title="Settings" width={480}>
+    <Modal open={open} onClose={onClose} title="Profile" width={480}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
-        {user && token && (
-          <ProfileSection
-            user={user}
-            onUpdateProfile={onUpdateProfile}
-            token={token}
-            onSignOut={() => {
-              onSignOut();
-              onClose();
-            }}
-          />
-        )}
+        {user && token && <ProfileSection user={user} onUpdateProfile={onUpdateProfile} token={token} />}
 
         {token && (
           <div>
@@ -391,6 +362,27 @@ export function SettingsModal({ open, onClose, user, onUpdateProfile, token, onS
         <p style={{ margin: 0, fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>
           Background music isn't available yet — there's no audio track shipped with this build.
         </p>
+
+        {user && (
+          <button
+            type="button"
+            onClick={() => {
+              onSignOut();
+              onClose();
+            }}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              color: 'var(--danger)',
+              fontSize: 'var(--fs-meta)',
+              padding: 'var(--pad-sm) var(--pad-md)',
+              cursor: 'pointer',
+            }}
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </Modal>
   );

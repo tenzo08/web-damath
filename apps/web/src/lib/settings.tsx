@@ -16,7 +16,14 @@ function readStoredSoundEnabled(): boolean {
 }
 
 function readStoredSoundVolume(): number {
-  const stored = Number(localStorage.getItem(SOUND_VOLUME_KEY));
+  // `localStorage.getItem` returns `null` when nothing's been saved yet, and
+  // `Number(null) === 0` -- checking `Number.isFinite` on the *raw* conversion can't
+  // tell "nothing persisted" apart from "explicitly saved 0", so a fresh browser with
+  // no stored value silently got volume 0 instead of the intended 0.4 default (found
+  // by a real test asserting the documented default, lib/settings.test.tsx).
+  const raw = localStorage.getItem(SOUND_VOLUME_KEY);
+  if (raw === null) return 0.4;
+  const stored = Number(raw);
   return Number.isFinite(stored) && stored >= 0 && stored <= 1 ? stored : 0.4;
 }
 

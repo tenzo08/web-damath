@@ -8,52 +8,32 @@ interface ProfileButtonProps {
 }
 
 /**
- * The account entry point, always top-left. Signed in, clicking the avatar opens
- * Settings directly (which owns nickname/avatar editing and sign-out) rather than a
- * second, separate gear icon. Signed out there's no avatar yet, so theme/sound
- * settings still need their own small gear next to the Sign In CTA — otherwise a
- * signed-out visitor would have no way to reach them at all.
+ * The account entry point, always top-left — no separate gear/Settings button
+ * anywhere: signed in, clicking the avatar opens the Profile modal directly (which
+ * owns nickname/avatar editing, theme, sound, and sign-out, the last one pinned at the
+ * very bottom); signed out, it's just the Sign In CTA.
  */
 export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonProps) {
   const { t } = useLocale();
 
   if (!user) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          aria-label="Settings"
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            color: 'var(--text-secondary)',
-            fontSize: 'var(--fs-body)',
-            padding: '4px 8px',
-            cursor: 'pointer',
-            lineHeight: 1,
-          }}
-        >
-          <span aria-hidden="true">⚙️</span>
-        </button>
-        <button
-          type="button"
-          onClick={onSignIn}
-          style={{
-            background: 'var(--accent)',
-            color: 'var(--accent-on)',
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            padding: 'var(--pad-sm) var(--pad-md)',
-            fontSize: 'var(--fs-meta)',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {t('auth.signIn')}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onSignIn}
+        style={{
+          background: 'var(--accent)',
+          color: 'var(--accent-on)',
+          border: 'none',
+          borderRadius: 'var(--radius)',
+          padding: 'var(--pad-sm) var(--pad-md)',
+          fontSize: 'var(--fs-meta)',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {t('auth.signIn')}
+      </button>
     );
   }
 
@@ -61,7 +41,7 @@ export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonP
     <button
       type="button"
       onClick={onOpenSettings}
-      aria-label={`Open settings for ${user.displayName}`}
+      aria-label={`Open profile for ${user.displayName}`}
       style={{
         display: 'flex',
         alignItems: 'center',

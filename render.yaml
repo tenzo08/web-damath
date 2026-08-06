@@ -4,17 +4,26 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    # `prisma generate` used to only run via apps/server's own postinstall script, on
+    # the assumption that `pnpm install` always re-triggers it. It doesn't reliably:
+    # Render can restore a cached node_modules across deploys and skip re-running
+    # lifecycle scripts, and prisma/schema.prisma isn't part of the lockfile hash that
+    # cache is keyed on -- a schema-only change (no new dependency) could deploy with a
+    # stale generated Prisma Client that doesn't know about the new columns, causing a
+    # real 500 the instant a route tries to write one (confirmed live: /auth/signup and
+    # /auth/google/complete both failed this way against the deployed server directly).
+    # An explicit generate step here can't be skipped by that cache.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @damath/server exec prisma generate
     startCommand: pnpm -F @damath/server start
     healthCheckPath: /health
     envVars:
       # Real Postgres persistence (Prisma — apps/server/prisma/schema.prisma), e.g. a
       # Neon connection string. Set this to enable it; left unset, the server falls back
       # to the JSON file stores, which do NOT survive a redeploy on Render (see
-      # DEPLOYMENT.md's honest caveats). `prisma generate` runs automatically via
-      # apps/server's own postinstall script, so no extra buildCommand step is needed —
-      # just `prisma migrate deploy` once, manually, the first time (Render's Shell tab),
-      # to actually create the tables against a fresh database.
+      # DEPLOYMENT.md's honest caveats). Required for the explicit `prisma generate`
+      # buildCommand step above to succeed -- just `prisma migrate deploy` once,
+      # manually, the first time (Render's Shell tab), to actually create the tables
+      # against a fresh database.
       - key: DATABASE_URL
         sync: false
       # Works around a real Render build failure: `corepack enable` fails with "Cannot

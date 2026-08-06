@@ -78,6 +78,24 @@ export function buildApp(options: AppOptions): FastifyInstance {
         }
       : false,
   });
+  // A route handler that throws (a DB connection failure, an unexpected bug) would
+  // otherwise reach Fastify's own default error handler, which echoes the thrown
+  // error's `.message` straight into the JSON response -- for something like a Prisma
+  // connection error, that message routinely contains the database host and other
+  // connection-string details, and for an arbitrary bug it can contain a stack trace.
+  // Never acceptable to send to a client. Fastify's own errors (schema validation,
+  // rate-limiting) already carry a safe, client-meaningful message and a real
+  // `statusCode` below 500 -- those pass through unchanged; anything else is logged
+  // in full server-side and replaced with a flat, generic message.
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    if (statusCode < 500) {
+      return reply.code(statusCode).send({ error: error.message });
+    }
+    request.log.error(error);
+    return reply.code(500).send({ error: 'internal server error' });
+  });
+
   app.register(fastifyCors, { origin: options.corsOrigin ?? true });
   app.register(fastifyJwt, { secret: options.jwtSecret, sign: { expiresIn: options.jwtExpiresIn ?? '30d' } });
   // A generous global default (gameplay/tournament routes shouldn't ever feel it) plus a

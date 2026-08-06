@@ -34,7 +34,7 @@ function publicUser(user: User) {
 export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): void {
   app.post<{ Body: { email: string; password: string; displayName: string } }>(
     '/auth/signup',
-    { schema: { body: signupBodySchema } },
+    { schema: { body: signupBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
       const email = request.body.email.trim().toLowerCase();
       const displayName = request.body.displayName.trim();
@@ -64,7 +64,7 @@ export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): 
 
   app.post<{ Body: { email: string; password: string } }>(
     '/auth/login',
-    { schema: { body: loginBodySchema } },
+    { schema: { body: loginBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
       const email = request.body.email.trim().toLowerCase();
       const user = await userStore.findByEmail(email);

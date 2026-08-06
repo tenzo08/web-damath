@@ -98,3 +98,52 @@ describe('GET /auth/me', () => {
     expect(res.json().user.email).toBe('teacher@example.com');
   });
 });
+
+describe('JWT expiration', () => {
+  it('issues a token with an exp claim by default, bounding how long a leaked token stays useful', async () => {
+    const res = await signup();
+    const { token } = res.json() as { token: string };
+    const payloadJson = Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf-8');
+    const payload = JSON.parse(payloadJson) as { exp?: number; iat?: number };
+    expect(typeof payload.exp).toBe('number');
+    expect(payload.exp).toBeGreaterThan(payload.iat ?? 0);
+  });
+
+  it('rejects a token once it actually expires, not just a token with no exp claim at all', async () => {
+    const shortLived = makeTestApp({ jwtExpiresIn: '1s' });
+    try {
+      const signupRes = await shortLived.app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: CREDENTIALS,
+      });
+      const { token } = signupRes.json() as { token: string };
+
+      const beforeExpiry = await shortLived.app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+      expect(beforeExpiry.statusCode).toBe(200);
+
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      const afterExpiry = await shortLived.app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+      expect(afterExpiry.statusCode).toBe(401);
+    } finally {
+      await shortLived.cleanup();
+    }
+  });
+});
+
+describe('rate limiting on /auth routes', () => {
+  it('throttles repeated signup attempts from the same caller', async () => {
+    // Sequential, not `Promise.all` — the point is simulating a caller hammering the
+    // route, and the in-memory rate-limit store needs each request's count actually
+    // committed before the next is checked (a burst of concurrent `.inject()` calls can
+    // race the same counter and undercount).
+    const statusCodes: number[] = [];
+    for (let i = 0; i < 11; i++) {
+      const res = await signup({ email: `rate-limit-${String(i)}@example.com` });
+      statusCodes.push(res.statusCode);
+    }
+    expect(statusCodes.filter((code) => code === 429).length).toBeGreaterThan(0);
+    expect(statusCodes.filter((code) => code === 201).length).toBeLessThanOrEqual(10);
+  });
+});

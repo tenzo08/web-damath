@@ -1,12 +1,14 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
 import { registerAuthRoutes } from './auth/routes.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import type { GameStore } from './game/store.js';
+import { redactTokenFromUrl } from './log.js';
 import type { RoomManager } from './game/rooms.js';
 import { registerTournamentRoutes } from './tournament/routes.js';
 import { TournamentManager } from './tournament/manager.js';
@@ -29,6 +31,8 @@ export interface AppOptions {
   queueBotEnabled?: boolean | undefined;
   queueBotTier?: DifficultyTier | undefined;
   logger?: boolean | undefined;
+  /** How long an issued login token stays valid, in `@fastify/jwt`'s `sign.expiresIn` format (e.g. `'30d'`). A token has no way to be individually revoked short of rotating `JWT_SECRET` (which logs out everyone at once) — an expiry bounds how long a leaked token stays useful without that. */
+  jwtExpiresIn?: string | undefined;
   /**
    * Origins allowed to call the REST/WS API cross-origin — `true` (the default) reflects
    * whatever origin sent the request, fine for a demo/dev server behind auth on every
@@ -51,34 +55,61 @@ declare module 'fastify' {
  * it directly, alongside the WS protocol most clients will actually use.
  */
 export function buildApp(options: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: options.logger ?? false });
-  app.register(fastifyCors, { origin: options.corsOrigin ?? true });
-  app.register(fastifyJwt, { secret: options.jwtSecret });
-  app.register(fastifyWebsocket);
-  registerAuthRoutes(app, options.userStore);
-
-  app.get('/health', async () => ({ status: 'ok' }));
-
-  const tournamentManager = new TournamentManager(options.tournamentStore);
-
-  const roomManager = registerGameSocket(app, {
-    gameStore: options.gameStore,
-    queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
-    queueBotEnabled: options.queueBotEnabled ?? true,
-    queueBotTier: options.queueBotTier ?? 'steady',
-    // A drawn match (no clear winner) is left for the manual report route — Damath has
-    // no automatic tiebreak (docs/DAMATH_RULES.md). Awaited by `RoomManager` before its
-    // own move/resign response resolves, so the tournament store is durably updated
-    // before the room's "finished" state ever reaches a client (rooms.ts). A
-    // late/duplicate report (e.g. a rare double-fire) is rejected by `reportResult`
-    // itself and swallowed here rather than crashing the room's move-handling path.
-    onTournamentMatchFinished: async (ref, winnerUserId) => {
-      await tournamentManager.reportResult(ref.tournamentId, ref.round, ref.index, winnerUserId, winnerUserId).catch(() => {});
-    },
+  const app = Fastify({
+    // A custom `req` serializer, not the bare `logger: true` this used to be — the
+    // default one logs the full request URL including its query string, and `/ws`'s
+    // handshake carries a live JWT there (`game/ws.ts`, `?token=...`). See log.ts.
+    logger: options.logger
+      ? {
+          serializers: {
+            req(request: { method: string; url: string; hostname: string; ip: string }) {
+              return { method: request.method, url: redactTokenFromUrl(request.url), hostname: request.hostname, remoteAddress: request.ip };
+            },
+          },
+        }
+      : false,
   });
-  app.decorate('roomManager', roomManager);
+  app.register(fastifyCors, { origin: options.corsOrigin ?? true });
+  app.register(fastifyJwt, { secret: options.jwtSecret, sign: { expiresIn: options.jwtExpiresIn ?? '30d' } });
+  // A generous global default (gameplay/tournament routes shouldn't ever feel it) plus a
+  // tight per-route override on signup/login below, where it actually matters — open
+  // endpoints with no auth in front of them, the natural target for credential stuffing
+  // or signup spam.
+  app.register(fastifyRateLimit, { max: 300, timeWindow: '1 minute' });
+  app.register(fastifyWebsocket);
 
-  registerTournamentRoutes(app, tournamentManager, roomManager);
+  // `app.after`, not a bare synchronous call: `@fastify/rate-limit`'s per-route
+  // `config.rateLimit` override (and even its own global default) only actually takes
+  // effect for routes declared once the plugin's own registration has resolved.
+  // Registering routes synchronously in the same tick as `app.register(fastifyRateLimit,
+  // ...)` above silently attaches no rate limiting at all — caught by a real request
+  // test asserting a 429 actually shows up, not just that the config object looks right.
+  app.after(() => {
+    registerAuthRoutes(app, options.userStore);
+
+    app.get('/health', async () => ({ status: 'ok' }));
+
+    const tournamentManager = new TournamentManager(options.tournamentStore);
+
+    const roomManager = registerGameSocket(app, {
+      gameStore: options.gameStore,
+      queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
+      queueBotEnabled: options.queueBotEnabled ?? true,
+      queueBotTier: options.queueBotTier ?? 'steady',
+      // A drawn match (no clear winner) is left for the manual report route — Damath has
+      // no automatic tiebreak (docs/DAMATH_RULES.md). Awaited by `RoomManager` before its
+      // own move/resign response resolves, so the tournament store is durably updated
+      // before the room's "finished" state ever reaches a client (rooms.ts). A
+      // late/duplicate report (e.g. a rare double-fire) is rejected by `reportResult`
+      // itself and swallowed here rather than crashing the room's move-handling path.
+      onTournamentMatchFinished: async (ref, winnerUserId) => {
+        await tournamentManager.reportResult(ref.tournamentId, ref.round, ref.index, winnerUserId, winnerUserId).catch(() => {});
+      },
+    });
+    app.decorate('roomManager', roomManager);
+
+    registerTournamentRoutes(app, tournamentManager, roomManager);
+  });
 
   return app;
 }

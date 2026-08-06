@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
-import type { AnyVariant, Variant } from '@damath/engine';
+import type { AnyVariant, Player, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
 import { useGame } from './hooks/useGame';
 import { useComputerOpponent } from './hooks/useComputerOpponent';
@@ -11,8 +11,11 @@ import { Rail } from './components/Rail';
 import { ScorePanel } from './components/ScorePanel';
 import { ClockPanel } from './components/ClockPanel';
 import { MoveLedger } from './components/MoveLedger';
-import { OpponentPanel } from './components/OpponentPanel';
+import { OpponentStatus } from './components/OpponentStatus';
 import { GameControls } from './components/GameControls';
+import { GameMenu } from './components/GameMenu';
+import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal';
+import { GameOverModal } from './components/GameOverModal';
 import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -24,11 +27,15 @@ import { asIntegerVariant } from './lib/integer-variant';
 /** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses." */
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
 
+interface GameNavigation {
+  onRematch: () => void;
+  onNewGame: () => void;
+  onBackToLobby: () => void;
+}
+
 /**
- * The board + score/ledger/opponent column, generic over the chip value type `V`.
- * Everything hook-derived (`useGame`'s return value) arrives as a prop here — this
- * component itself calls no hooks of its own beyond the clock, so it's safe to render
- * conditionally from `App` without violating the rules of hooks.
+ * The board + score/clock/controls/opponent/moves columns, generic over the chip value
+ * type `V`. Everything hook-derived (`useGame`'s return value) arrives as a prop here.
  */
 function GameShellView<V>({
   variant,
@@ -39,6 +46,7 @@ function GameShellView<V>({
   scoreLabelOverrides,
   flipped,
   onFlip,
+  nav,
 }: {
   variant: Variant<V>;
   gameApi: ReturnType<typeof useGame<V>>;
@@ -48,6 +56,7 @@ function GameShellView<V>({
   scoreLabelOverrides?: Partial<Record<'white' | 'black', string>> | undefined;
   flipped: boolean;
   onFlip: () => void;
+  nav: GameNavigation;
 }) {
   const {
     game,
@@ -60,6 +69,7 @@ function GameShellView<V>({
     destinations,
     gameOver,
     finalScores,
+    resignedBy,
     activateSquare,
     moveCursor,
     activateCursor,
@@ -77,6 +87,21 @@ function GameShellView<V>({
     stepForward,
     exitReplay,
   } = gameApi;
+
+  const [gameOverDismissed, setGameOverDismissed] = useState(false);
+
+  // A resignation must declare the resigner's opponent the winner even when the score
+  // happens to be tied — score comparison alone can't express that (see KNOWLEDGE.md).
+  const winner: Player | null = resignedBy
+    ? resignedBy === 'white'
+      ? 'black'
+      : 'white'
+    : finalScores
+      ? (() => {
+          const order = variant.arithmetic.compare(finalScores.white, finalScores.black);
+          return order > 0 ? 'white' : order < 0 ? 'black' : null;
+        })()
+      : null;
 
   const allLegalMoves = useMemo(() => legalMoves(game), [game]);
   // docs/DAMATH_RULES.md §7.1: "the limit does not apply when a capture is mandatory" —
@@ -100,20 +125,21 @@ function GameShellView<V>({
   return (
     <main
       style={{
-        flex: 1,
+        flex: '1 1 auto',
+        minWidth: 0,
         padding: 'var(--pad-xl)',
         display: 'flex',
         justifyContent: 'center',
       }}
     >
       <div style={{ width: '100%', maxWidth: 1240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)', fontWeight: 700 }}>{variant.name}</h1>
           <p style={{ margin: 0, fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>{statusLine}</p>
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
-          <div style={{ flex: '3 1 480px', maxWidth: 760 }}>
+          <div style={{ flex: '3 1 420px', maxWidth: 760, minWidth: 280, width: '100%' }}>
             <Board
               game={boardGame}
               format={format}
@@ -136,17 +162,7 @@ function GameShellView<V>({
             />
           </div>
 
-          <div
-            style={{
-              flex: '1 1 340px',
-              maxWidth: 380,
-              minWidth: 280,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--gap-lg)',
-              alignSelf: 'stretch',
-            }}
-          >
+          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
             <ScorePanel game={game} finalScores={finalScores} format={format} labelOverrides={scoreLabelOverrides} />
             <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
             <GameControls
@@ -161,6 +177,11 @@ function GameShellView<V>({
               onFlip={onFlip}
             />
             {opponentPanel}
+          </div>
+
+          {/* The one column that's meant to scroll internally, per request — a fixed
+              max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
+          <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
             <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
           </div>
         </div>
@@ -169,24 +190,37 @@ function GameShellView<V>({
       <div aria-live="polite" className="visually-hidden">
         {announcement}
       </div>
+
+      <GameOverModal
+        open={gameOver && !gameOverDismissed}
+        onDismiss={() => setGameOverDismissed(true)}
+        announcement={announcement}
+        variant={variant}
+        finalScores={finalScores}
+        winner={winner}
+        onRematch={nav.onRematch}
+        onNewGame={nav.onNewGame}
+        onBackToLobby={nav.onBackToLobby}
+      />
     </main>
   );
 }
 
-/** The three integer variants (docs/AI_OPPONENT.md §4) get practice mode; this is the only place `useComputerOpponent` is called, so it's always called with a concrete `GameState<number>`. */
+/** The three integer variants (docs/AI_OPPONENT.md §4) get practice mode; this is the only place `useComputerOpponent` is called, so it's always called with a concrete `GameState<number>`. `tier` is fixed for this match's whole lifetime — chosen up front via `GameSetupModal`, never adjustable once playing. */
 function IntegerGameShell({
   variant,
+  tier,
   flipped,
   onFlip,
-  autoStartComputer,
+  nav,
 }: {
   variant: Variant<number>;
+  tier: DifficultyTier | null;
   flipped: boolean;
   onFlip: () => void;
-  autoStartComputer: boolean;
+  nav: GameNavigation;
 }) {
   const gameApi = useGame(variant);
-  const [tier, setTier] = useState<DifficultyTier | null>(autoStartComputer ? 'steady' : null);
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
   useComputerOpponent(gameApi.game, tier, 'black', gameApi.playMove);
 
@@ -201,12 +235,13 @@ function IntegerGameShell({
       scoreLabelOverrides={scoreLabelOverrides}
       flipped={flipped}
       onFlip={onFlip}
-      opponentPanel={<OpponentPanel tier={tier} onChange={setTier} thinking={computersTurn} />}
+      nav={nav}
+      opponentPanel={<OpponentStatus tier={tier} thinking={computersTurn} />}
     />
   );
 }
 
-function GenericGameShell<V>({ variant, flipped, onFlip }: { variant: Variant<V>; flipped: boolean; onFlip: () => void }) {
+function GenericGameShell<V>({ variant, flipped, onFlip, nav }: { variant: Variant<V>; flipped: boolean; onFlip: () => void; nav: GameNavigation }) {
   const gameApi = useGame(variant);
   return (
     <GameShellView
@@ -216,6 +251,7 @@ function GenericGameShell<V>({ variant, flipped, onFlip }: { variant: Variant<V>
       blockInteraction={false}
       flipped={flipped}
       onFlip={onFlip}
+      nav={nav}
       opponentPanel={
         <section
           aria-label="Opponent"
@@ -244,30 +280,56 @@ export function App() {
     throw new Error('unreachable: ALL_VARIANTS always includes Whole Damath');
   }
   const [variant, setVariant] = useState<AnyVariant>(defaultVariant);
+  const [tier, setTier] = useState<DifficultyTier | null>(null);
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [screen, setScreen] = useState<Screen>('lobby');
-  const [autoStartComputer, setAutoStartComputer] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupInitial, setSetupInitial] = useState<{ variant: AnyVariant; opponent: OpponentChoice }>({
+    variant: defaultVariant,
+    opponent: { kind: 'friend' },
+  });
   const auth = useAuth();
   const integerVariant = asIntegerVariant(variant);
 
-  function enterGame(mode: 'friend' | 'computer') {
-    setAutoStartComputer(mode === 'computer');
+  function enterGame(newVariant: AnyVariant, opponent: OpponentChoice) {
+    setVariant(newVariant);
+    setTier(opponent.kind === 'computer' ? opponent.tier : null);
     setMatchNonce((n) => n + 1);
     setScreen('game');
   }
 
+  function openSetupForComputer() {
+    const startingVariant = asIntegerVariant(variant) ? variant : (ALL_VARIANTS.find((v) => v.id === 'integer') ?? variant);
+    setSetupInitial({ variant: startingVariant, opponent: { kind: 'computer', tier: tier ?? 'steady' } });
+    setSetupOpen(true);
+  }
+
+  function openSetupForNewGame() {
+    setSetupInitial({ variant, opponent: tier !== null ? { kind: 'computer', tier } : { kind: 'friend' } });
+    setSetupOpen(true);
+  }
+
+  const nav: GameNavigation = {
+    onRematch: () => setMatchNonce((n) => n + 1),
+    onNewGame: openSetupForNewGame,
+    onBackToLobby: () => setScreen('lobby'),
+  };
+
   return (
-    <div style={{ display: 'flex', flex: 1 }}>
+    // `flexWrap` lets Rail (a normal 232px sidebar on wide screens, but a full-width top
+    // bar on narrow ones — see Rail.tsx's own `useMediaQuery`) push the game shell onto
+    // its own row underneath, purely by CSS reacting to Rail's own returned width.
+    <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
       {screen === 'lobby' && (
         <LobbyScreen
           user={auth.user}
           onSignIn={() => setLoginOpen(true)}
           onSignOut={auth.logout}
-          onPlayFriend={() => enterGame('friend')}
-          onPlayComputer={() => enterGame('computer')}
+          onPlayFriend={() => enterGame(variant, { kind: 'friend' })}
+          onPlayComputer={openSetupForComputer}
           onPlayOnline={() => setScreen('online')}
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => setScreen('tournaments')}
@@ -292,18 +354,18 @@ export function App() {
           <Rail
             variants={ALL_VARIANTS}
             current={variant}
-            onSelectVariant={setVariant}
-            onNewGame={() => setMatchNonce((n) => n + 1)}
+            onSelectVariant={(v) => enterGame(v, tier !== null ? { kind: 'computer', tier } : { kind: 'friend' })}
             onOpenTutorial={() => setTutorialOpen(true)}
-            onBackToLobby={() => setScreen('lobby')}
+            menuButton={<GameMenu onRematch={nav.onRematch} onNewGame={nav.onNewGame} onBackToLobby={nav.onBackToLobby} />}
           />
           {integerVariant ? (
             <IntegerGameShell
               key={`${variant.id}-${String(matchNonce)}`}
               variant={integerVariant}
+              tier={tier}
               flipped={flipped}
               onFlip={() => setFlipped((f) => !f)}
-              autoStartComputer={autoStartComputer}
+              nav={nav}
             />
           ) : (
             <GenericGameShell<ValueOf<AnyVariant>>
@@ -311,6 +373,7 @@ export function App() {
               variant={variant}
               flipped={flipped}
               onFlip={() => setFlipped((f) => !f)}
+              nav={nav}
             />
           )}
         </>
@@ -318,6 +381,16 @@ export function App() {
 
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />
+      <GameSetupModal
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        onConfirm={(v, opponent) => {
+          enterGame(v, opponent);
+          setSetupOpen(false);
+        }}
+        initialVariant={setupInitial.variant}
+        initialOpponent={setupInitial.opponent}
+      />
     </div>
   );
 }

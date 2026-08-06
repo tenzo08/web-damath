@@ -45,6 +45,9 @@ export function MoveLedger<V>({ entries, format, viewIndex, onSelectMove, onExit
         padding: 'var(--pad-lg)',
         flex: 1,
         minHeight: 0,
+        // A bounded height, not "however tall the content is" — this is the one column
+        // that's meant to scroll internally rather than push the page taller.
+        maxHeight: 'min(70vh, 640px)',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -89,11 +92,13 @@ export function MoveLedger<V>({ entries, format, viewIndex, onSelectMove, onExit
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-meta)' }}>No moves yet.</p>
       ) : (
         <ol
+          className="scroll-hidden"
           style={{
             listStyle: 'none',
             margin: 0,
             padding: 0,
             overflowY: 'auto',
+            minHeight: 0,
             fontSize: 'var(--fs-meta)',
           }}
         >

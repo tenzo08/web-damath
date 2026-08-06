@@ -1,7 +1,7 @@
 # Built from the repo root (`docker build -f apps/server/Dockerfile .`) — pnpm
 # workspaces need the whole monorepo context, since @damath/engine and @damath/ai are
 # consumed as workspace: dependencies, not published packages.
-FROM node:20-slim AS base
+FROM node:22-slim AS base
 RUN corepack enable
 WORKDIR /app
 COPY . .

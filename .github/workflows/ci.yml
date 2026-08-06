@@ -19,7 +19,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # pnpm 11.20.0 (pinned via packageManager) uses node:sqlite internally and
+          # requires Node >= 22.13 — the first real CI run failed here too, on the
+          # workspace's old ">=20" engines constraint. Matches package.json's engines.
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies

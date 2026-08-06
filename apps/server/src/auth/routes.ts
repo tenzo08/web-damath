@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { isValidAvatarEmoji } from './avatars.js';
 import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
 import { STARTING_RATING } from '../rating/elo.js';
@@ -29,8 +30,24 @@ const loginBodySchema = {
 
 /** Never sends `passwordHash` back over the wire. */
 function publicUser(user: User) {
-  return { id: user.id, email: user.email, displayName: user.displayName, rating: user.rating, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    rating: user.rating,
+    avatarEmoji: user.avatarEmoji,
+    createdAt: user.createdAt,
+  };
 }
+
+const updateProfileBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    displayName: { type: 'string', minLength: 1, maxLength: 60 },
+    avatarEmoji: { type: ['string', 'null'] },
+  },
+} as const;
 
 export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): void {
   app.post<{ Body: { email: string; password: string; displayName: string } }>(
@@ -55,6 +72,7 @@ export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): 
         passwordHash: await hashPassword(request.body.password),
         displayName,
         rating: STARTING_RATING,
+        avatarEmoji: null,
         createdAt: new Date().toISOString(),
       };
       await userStore.create(user);
@@ -91,4 +109,35 @@ export function registerAuthRoutes(app: FastifyInstance, userStore: UserStore): 
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     return reply.send({ user: publicUser(user) });
   });
+
+  app.patch<{ Body: { displayName?: string; avatarEmoji?: string | null } }>(
+    '/auth/me',
+    { schema: { body: updateProfileBodySchema } },
+    async (request, reply) => {
+      try {
+        await request.jwtVerify();
+      } catch {
+        return reply.code(401).send({ error: 'unauthorized' });
+      }
+      const user = await userStore.findById(request.user.sub);
+      if (!user) return reply.code(401).send({ error: 'unauthorized' });
+
+      const { displayName, avatarEmoji } = request.body;
+      if (avatarEmoji !== undefined && avatarEmoji !== null && !isValidAvatarEmoji(avatarEmoji)) {
+        return reply.code(400).send({ error: 'not a recognised avatar option' });
+      }
+      const trimmedName = displayName !== undefined ? displayName.trim() : undefined;
+      if (trimmedName !== undefined && trimmedName.length === 0) {
+        return reply.code(400).send({ error: 'display name is required' });
+      }
+
+      const updated: User = {
+        ...user,
+        displayName: trimmedName ?? user.displayName,
+        avatarEmoji: avatarEmoji !== undefined ? avatarEmoji : user.avatarEmoji,
+      };
+      await userStore.update(updated);
+      return reply.send({ user: publicUser(updated) });
+    },
+  );
 }

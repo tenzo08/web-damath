@@ -86,5 +86,18 @@ export function useAuth() {
     }
   }, [token]);
 
-  return { token, user, status, signup, login, logout, refreshUser };
+  /**
+   * Unlike `refreshUser` (best-effort, silent), this throws on failure — SettingsModal
+   * needs to show the caller (e.g. an avatar value the server's allow-list rejects)
+   * rather than swallow it.
+   */
+  const updateProfile = useCallback(
+    async (patch: { displayName?: string; avatarEmoji?: string | null }) => {
+      if (!token) throw new Error('not signed in');
+      setUser(await authClient.updateProfile(token, patch));
+    },
+    [token],
+  );
+
+  return { token, user, status, signup, login, logout, refreshUser, updateProfile };
 }

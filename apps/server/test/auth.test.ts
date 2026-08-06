@@ -97,6 +97,100 @@ describe('GET /auth/me', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().user.email).toBe('teacher@example.com');
   });
+
+  it('starts with no avatar — the default initial-letter circle, not a random pick', async () => {
+    const signupRes = await signup();
+    expect(signupRes.json().user.avatarEmoji).toBeNull();
+  });
+});
+
+describe('PATCH /auth/me', () => {
+  async function signupAndGetToken(): Promise<string> {
+    const res = await signup();
+    return (res.json() as { token: string }).token;
+  }
+
+  it('rejects a request with no bearer token', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/auth/me', payload: { displayName: 'New Name' } });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('updates the display name', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { displayName: 'New Name' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.displayName).toBe('New Name');
+
+    // Persisted, not just echoed back — a fresh /auth/me confirms it actually saved.
+    const meRes = await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+    expect(meRes.json().user.displayName).toBe('New Name');
+  });
+
+  it('rejects a blank display name', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { displayName: '   ' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('accepts a recognised avatar emoji and persists it', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarEmoji: '🦁' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.avatarEmoji).toBe('🦁');
+  });
+
+  it("rejects an avatar value that isn't in the fixed allow-list — never an arbitrary client string", async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarEmoji: '<script>alert(1)</script>' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('clears the avatar back to the default when set to null', async () => {
+    const token = await signupAndGetToken();
+    await app.inject({ method: 'PATCH', url: '/auth/me', headers: { authorization: `Bearer ${token}` }, payload: { avatarEmoji: '🦁' } });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarEmoji: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.avatarEmoji).toBeNull();
+  });
+
+  it('leaves fields unset in the request untouched', async () => {
+    const token = await signupAndGetToken();
+    await app.inject({ method: 'PATCH', url: '/auth/me', headers: { authorization: `Bearer ${token}` }, payload: { avatarEmoji: '🐯' } });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { displayName: 'Still Has Avatar' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.avatarEmoji).toBe('🐯');
+    expect(res.json().user.displayName).toBe('Still Has Avatar');
+  });
 });
 
 describe('JWT expiration', () => {

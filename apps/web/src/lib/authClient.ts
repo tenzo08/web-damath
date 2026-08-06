@@ -6,6 +6,8 @@ export interface AuthUser {
   displayName: string;
   /** Elo rating (apps/server/src/rating/elo.ts) — starts at 1200, moves after every online game (human or bot) that finishes with a winner or a draw. Local hot-seat play never touches it. */
   rating: number;
+  /** One of lib/avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle (AuthBar.tsx). */
+  avatarEmoji: string | null;
   createdAt: string;
 }
 
@@ -47,5 +49,21 @@ export async function me(token: string): Promise<AuthUser> {
   }
   if (!res.ok) throw new Error('Session expired — sign in again.');
   const data = (await res.json()) as { user: AuthUser };
+  return data.user;
+}
+
+export async function updateProfile(token: string, patch: { displayName?: string; avatarEmoji?: string | null }): Promise<AuthUser> {
+  let res: Response;
+  try {
+    res = await fetch(`${SERVER_HTTP_URL}/auth/me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
+    });
+  } catch {
+    throw new Error(`Can't reach the server at ${SERVER_HTTP_URL}.`);
+  }
+  const data = (await res.json().catch(() => ({}))) as { user?: AuthUser; error?: string };
+  if (!res.ok || !data.user) throw new Error(data.error ?? `Request failed (${String(res.status)}).`);
   return data.user;
 }

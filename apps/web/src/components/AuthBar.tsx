@@ -44,11 +44,11 @@ export function AuthBar({ user, onSignIn, onSignOut }: AuthBarProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 'var(--fs-meta)',
+          fontSize: user.avatarEmoji ? 'var(--fs-body)' : 'var(--fs-meta)',
           fontWeight: 700,
         }}
       >
-        {user.displayName.charAt(0).toUpperCase()}
+        {user.avatarEmoji ?? user.displayName.charAt(0).toUpperCase()}
       </span>
       <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
         {user.displayName}

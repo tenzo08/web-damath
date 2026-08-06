@@ -29,6 +29,10 @@ model User {
   /// rather than first on the file store, since the migration landed before the rank
   /// system's storage did.
   rating       Int      @default(1200)
+  /// One of auth/avatars.ts's fixed emoji set, or null for the default initial-letter
+  /// circle (AuthBar.tsx). Validated server-side against that same list on PATCH
+  /// /auth/me — never an arbitrary client-supplied string.
+  avatarEmoji  String?
   createdAt    DateTime @default(now())
 }
 

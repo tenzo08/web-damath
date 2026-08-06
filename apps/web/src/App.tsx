@@ -453,7 +453,7 @@ function AppShell() {
 
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={auth.login} onSignup={auth.signup} />
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} user={auth.user} onUpdateProfile={auth.updateProfile} />
       <GameSetupModal
         open={setupOpen}
         onClose={() => setSetupOpen(false)}

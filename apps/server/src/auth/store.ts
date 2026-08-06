@@ -10,6 +10,8 @@ export interface User {
   readonly displayName: string;
   /** Elo rating — see rating/elo.ts. Every account starts at STARTING_RATING and moves after each online game (human or bot) that actually finishes with a winner or a draw. */
   readonly rating: number;
+  /** One of avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle. */
+  readonly avatarEmoji: string | null;
   readonly createdAt: string;
 }
 
@@ -98,6 +100,7 @@ export class PrismaUserStore implements UserStore {
         passwordHash: user.passwordHash,
         displayName: user.displayName,
         rating: user.rating,
+        avatarEmoji: user.avatarEmoji,
         createdAt: new Date(user.createdAt),
       },
     });
@@ -106,7 +109,13 @@ export class PrismaUserStore implements UserStore {
   async update(user: User): Promise<void> {
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { email: user.email, passwordHash: user.passwordHash, displayName: user.displayName, rating: user.rating },
+      data: {
+        email: user.email,
+        passwordHash: user.passwordHash,
+        displayName: user.displayName,
+        rating: user.rating,
+        avatarEmoji: user.avatarEmoji,
+      },
     });
   }
 }
@@ -117,6 +126,7 @@ interface PrismaUserRow {
   passwordHash: string;
   displayName: string;
   rating: number;
+  avatarEmoji: string | null;
   createdAt: Date;
 }
 
@@ -127,6 +137,7 @@ function toUser(row: PrismaUserRow): User {
     passwordHash: row.passwordHash,
     displayName: row.displayName,
     rating: row.rating,
+    avatarEmoji: row.avatarEmoji,
     createdAt: row.createdAt.toISOString(),
   };
 }

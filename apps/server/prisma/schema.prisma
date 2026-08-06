@@ -25,13 +25,19 @@ model User {
   email        String   @unique
   passwordHash String
   displayName  String
+  /// Lowercased mirror of displayName, maintained by the app on every write (never set
+  /// directly, never exposed to a client) -- Postgres has no native case-insensitive
+  /// unique constraint without an extension (citext) or a functional index, and this
+  /// keeps the schema a plain declarative `@unique`, the same normalize-before-storage
+  /// convention `email` already uses. See auth/store.ts, auth/routes.ts.
+  displayNameLower String @unique
   /// Elo rating, starting value 1200 — see rating/elo.ts. Added directly on Postgres
   /// rather than first on the file store, since the migration landed before the rank
   /// system's storage did.
   rating       Int      @default(1200)
   /// One of auth/avatars.ts's fixed emoji set, or null for the default initial-letter
-  /// circle (AuthBar.tsx). Validated server-side against that same list on PATCH
-  /// /auth/me — never an arbitrary client-supplied string.
+  /// circle (ProfileButton.tsx/SettingsModal.tsx). Validated server-side against that
+  /// same list on PATCH /auth/me — never an arbitrary client-supplied string.
   avatarEmoji  String?
   /// Set once a verify-email token is successfully redeemed. Not currently enforced
   /// anywhere -- see auth/store.ts.

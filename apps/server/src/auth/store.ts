@@ -25,6 +25,8 @@ export interface User {
 export interface UserStore {
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
+  /** Case-insensitive -- nicknames must be unique regardless of case (auth/routes.ts). */
+  findByDisplayName(displayName: string): Promise<User | null>;
   create(user: User): Promise<void>;
   /** Whole-record replace, same convention as GameStore/TournamentStore's `update` — currently only used to persist a changed `rating`. */
   update(user: User): Promise<void>;
@@ -66,6 +68,12 @@ export class FileUserStore implements UserStore {
   async findById(id: string): Promise<User | null> {
     const users = await this.readAll();
     return users.find((u) => u.id === id) ?? null;
+  }
+
+  async findByDisplayName(displayName: string): Promise<User | null> {
+    const users = await this.readAll();
+    const needle = displayName.toLowerCase();
+    return users.find((u) => u.displayName.toLowerCase() === needle) ?? null;
   }
 
   async create(user: User): Promise<void> {
@@ -113,6 +121,11 @@ export class PrismaUserStore implements UserStore {
     return row ? toUser(row) : null;
   }
 
+  async findByDisplayName(displayName: string): Promise<User | null> {
+    const row = await this.prisma.user.findUnique({ where: { displayNameLower: displayName.toLowerCase() } });
+    return row ? toUser(row) : null;
+  }
+
   async create(user: User): Promise<void> {
     await this.prisma.user.create({
       data: {
@@ -120,6 +133,7 @@ export class PrismaUserStore implements UserStore {
         email: user.email,
         passwordHash: user.passwordHash,
         displayName: user.displayName,
+        displayNameLower: user.displayName.toLowerCase(),
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
         emailVerified: user.emailVerified,
@@ -139,6 +153,7 @@ export class PrismaUserStore implements UserStore {
         email: user.email,
         passwordHash: user.passwordHash,
         displayName: user.displayName,
+        displayNameLower: user.displayName.toLowerCase(),
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
         emailVerified: user.emailVerified,

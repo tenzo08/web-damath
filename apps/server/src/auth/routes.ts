@@ -108,6 +108,9 @@ export function registerAuthRoutes(
       if (await userStore.findByEmail(email)) {
         return reply.code(409).send({ error: 'an account with this email already exists' });
       }
+      if (await userStore.findByDisplayName(displayName)) {
+        return reply.code(409).send({ error: 'this nickname is already taken' });
+      }
 
       const verifyToken = generateActionToken();
       const user: User = {
@@ -179,6 +182,12 @@ export function registerAuthRoutes(
       const trimmedName = displayName !== undefined ? displayName.trim() : undefined;
       if (trimmedName !== undefined && trimmedName.length === 0) {
         return reply.code(400).send({ error: 'display name is required' });
+      }
+      if (trimmedName !== undefined && trimmedName.toLowerCase() !== user.displayName.toLowerCase()) {
+        const existing = await userStore.findByDisplayName(trimmedName);
+        if (existing && existing.id !== user.id) {
+          return reply.code(409).send({ error: 'this nickname is already taken' });
+        }
       }
 
       const updated: User = {

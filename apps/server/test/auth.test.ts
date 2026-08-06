@@ -37,6 +37,13 @@ describe('POST /auth/signup', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('rejects a second signup with the same nickname, case-insensitively', async () => {
+    await signup();
+    const res = await signup({ email: 'someone-else@example.com', displayName: 'ms. cruz' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/nickname/i);
+  });
+
   it('rejects a malformed email', async () => {
     const res = await signup({ email: 'not-an-email' });
     expect(res.statusCode).toBe(400);
@@ -178,6 +185,31 @@ describe('PATCH /auth/me', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().user.avatarEmoji).toBeNull();
+  });
+
+  it('rejects changing to a nickname another account already has, case-insensitively', async () => {
+    await signup({ email: 'other@example.com', displayName: 'Taken Name' });
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { displayName: 'taken name' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/nickname/i);
+  });
+
+  it('allows re-saving your own current name with different casing (not a conflict with yourself)', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { displayName: 'MS. CRUZ' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.displayName).toBe('MS. CRUZ');
   });
 
   it('leaves fields unset in the request untouched', async () => {

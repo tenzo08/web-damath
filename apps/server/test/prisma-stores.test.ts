@@ -60,6 +60,31 @@ describe.skipIf(!DATABASE_URL)('Prisma-backed stores against a real Postgres dat
     expect(afterUpdate).toMatchObject({ rating: 1450, displayName: 'Updated Name' });
   });
 
+  it('PrismaUserStore: findByDisplayName is case-insensitive and stays in sync after update', async () => {
+    const id = randomUUID();
+    createdUserIds.push(id);
+    const email = `prisma-test-${id}@example.com`;
+
+    await userStore.create({
+      id,
+      email,
+      passwordHash: 'hash',
+      displayName: 'CaseCheck Prisma',
+      rating: 1200,
+      createdAt: new Date().toISOString(),
+    });
+
+    expect((await userStore.findByDisplayName('casecheck prisma'))?.id).toBe(id);
+    expect((await userStore.findByDisplayName('CASECHECK PRISMA'))?.id).toBe(id);
+
+    const current = await userStore.findById(id);
+    if (!current) throw new Error('expected the user to be found by id');
+    await userStore.update({ ...current, displayName: 'Renamed Prisma' });
+
+    expect(await userStore.findByDisplayName('casecheck prisma')).toBeNull();
+    expect((await userStore.findByDisplayName('renamed prisma'))?.id).toBe(id);
+  });
+
   it('PrismaGameStore: create, findById, and update round-trip correctly, including tournamentMatch', async () => {
     const id = randomUUID();
     createdGameIds.push(id);

@@ -2,6 +2,10 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
+  '@prisma/engines': true
   esbuild: true
+  prisma: true
 onlyBuiltDependencies:
   - esbuild
+  - "@prisma/engines"
+  - prisma

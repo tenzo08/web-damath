@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { VariantId } from '@damath/engine';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Bracket } from './bracket.js';
 
 export interface PersistedTournament {
@@ -74,4 +75,82 @@ export class FileTournamentStore implements TournamentStore {
   async list(): Promise<readonly PersistedTournament[]> {
     return this.readAll();
   }
+}
+
+/** The real thing — a thin adapter over Prisma's generated `Tournament` model (`prisma/schema.prisma`), used whenever `DATABASE_URL` is set (`index.ts`). `participants`/`bracket` stay JSON, same as the file store — see schema.prisma's own comment on why those aren't normalized into relations. */
+export class PrismaTournamentStore implements TournamentStore {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(t: PersistedTournament): Promise<void> {
+    await this.prisma.tournament.create({ data: toRow(t) });
+  }
+
+  async findById(id: string): Promise<PersistedTournament | null> {
+    const row = await this.prisma.tournament.findUnique({ where: { id } });
+    return row ? toPersistedTournament(row) : null;
+  }
+
+  async findByJoinCode(code: string): Promise<PersistedTournament | null> {
+    const row = await this.prisma.tournament.findUnique({ where: { joinCode: code } });
+    return row ? toPersistedTournament(row) : null;
+  }
+
+  async update(t: PersistedTournament): Promise<void> {
+    const { id, ...data } = toRow(t);
+    await this.prisma.tournament.update({ where: { id }, data });
+  }
+
+  async list(): Promise<readonly PersistedTournament[]> {
+    const rows = await this.prisma.tournament.findMany({ orderBy: { createdAt: 'desc' } });
+    return rows.map(toPersistedTournament);
+  }
+}
+
+function toRow(t: PersistedTournament) {
+  return {
+    id: t.id,
+    name: t.name,
+    variantId: t.variantId,
+    creatorUserId: t.creatorUserId,
+    joinCode: t.joinCode,
+    participants: t.participants as unknown as Prisma.InputJsonValue,
+    bracket: t.bracket as unknown as Prisma.InputJsonValue,
+    status: t.status,
+    startTime: t.startTime ? new Date(t.startTime) : null,
+    endTime: t.endTime ? new Date(t.endTime) : null,
+    createdAt: new Date(t.createdAt),
+    updatedAt: new Date(t.updatedAt),
+  };
+}
+
+interface PrismaTournamentRow {
+  id: string;
+  name: string;
+  variantId: string;
+  creatorUserId: string;
+  joinCode: string;
+  participants: Prisma.JsonValue;
+  bracket: Prisma.JsonValue;
+  status: string;
+  startTime: Date | null;
+  endTime: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toPersistedTournament(row: PrismaTournamentRow): PersistedTournament {
+  return {
+    id: row.id,
+    name: row.name,
+    variantId: row.variantId as VariantId,
+    creatorUserId: row.creatorUserId,
+    joinCode: row.joinCode,
+    participants: row.participants as unknown as readonly string[],
+    bracket: row.bracket as unknown as Bracket | null,
+    status: row.status as 'lobby' | 'in_progress' | 'complete',
+    startTime: row.startTime ? row.startTime.toISOString() : null,
+    endTime: row.endTime ? row.endTime.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }

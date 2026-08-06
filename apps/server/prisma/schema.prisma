@@ -1,0 +1,72 @@
+// Mirrors the existing store shapes exactly (auth/store.ts's User, game/store.ts's
+// PersistedGame, tournament/store.ts's PersistedTournament) so the Prisma-backed store
+// implementations are a drop-in swap behind the same UserStore/GameStore/
+// TournamentStore interfaces — nothing outside each store.ts file needs to change
+// (KNOWLEDGE.md, "Scoped-down persistence: a JSON file, not Postgres+Prisma yet").
+//
+// `players`/`participants`/`bracket`/`moveHistory` stay JSON blobs, same as the file
+// stores, rather than being fully normalized into relations — this is still a small
+// classroom app, and normalizing them is a bigger, separate decision than "give this
+// data a real database."
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 moved the connection URL out of this file and into prisma.config.ts —
+// this block only declares the provider now (confirmed against the actual CLI error
+// when the old url/directUrl fields were still here: P1012, "no longer supported").
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  /// Elo rating, starting value 1200 — see rating/elo.ts. Added directly on Postgres
+  /// rather than first on the file store, since the migration landed before the rank
+  /// system's storage did.
+  rating       Int      @default(1200)
+  createdAt    DateTime @default(now())
+}
+
+model Game {
+  id              String   @id @default(uuid())
+  variantId       String
+  whitePlayerId   String?
+  blackPlayerId   String?
+  opponentType    String
+  botTier         String?
+  /// Move<V>[], JSON-boundary typed the same way the file store's `moveHistory: readonly
+  /// unknown[]` already is — see game/store.ts.
+  moveHistory     Json
+  status          String
+  resignedBy      String?
+  tournamentId    String?
+  tournamentRound Int?
+  tournamentIndex Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+}
+
+model Tournament {
+  id            String    @id @default(uuid())
+  name          String
+  variantId     String
+  creatorUserId String
+  joinCode      String    @unique
+  /// string[] — participant user ids, in join order.
+  participants  Json
+  /// Bracket | null (bracket.ts) — null until the tournament starts.
+  bracket       Json?
+  status        String
+  startTime     DateTime?
+  endTime       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}

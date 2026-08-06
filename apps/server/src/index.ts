@@ -2,9 +2,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DifficultyTier } from '@damath/ai';
 import { buildApp } from './app.js';
-import { FileUserStore } from './auth/store.js';
-import { FileGameStore } from './game/store.js';
-import { FileTournamentStore } from './tournament/store.js';
+import { FileUserStore, PrismaUserStore } from './auth/store.js';
+import type { UserStore } from './auth/store.js';
+import { FileGameStore, PrismaGameStore } from './game/store.js';
+import type { GameStore } from './game/store.js';
+import { FileTournamentStore, PrismaTournamentStore } from './tournament/store.js';
+import type { TournamentStore } from './tournament/store.js';
+import { createPrismaClient } from './db/prisma.js';
 
 // Node's native env-file loader (available unconditionally on this project's minimum
 // Node 22.13, `package.json`'s `engines`) — no `dotenv` dependency needed. Optional: a
@@ -22,10 +26,25 @@ if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required — never falls back to a default secret.');
 }
 
-const dataDir = process.env.DATA_DIR ?? fileURLToPath(new URL('../data', import.meta.url));
-const userStore = new FileUserStore(path.join(dataDir, 'users.json'));
-const gameStore = new FileGameStore(path.join(dataDir, 'games.json'));
-const tournamentStore = new FileTournamentStore(path.join(dataDir, 'tournaments.json'));
+// Real persistence when DATABASE_URL is set (Postgres via Prisma — see
+// prisma/schema.prisma), the JSON file stores otherwise. The file stores stay as the
+// zero-setup local-dev path, not just a pre-migration relic — see KNOWLEDGE.md for why
+// they're unsafe for anything beyond that.
+let userStore: UserStore;
+let gameStore: GameStore;
+let tournamentStore: TournamentStore;
+
+if (process.env.DATABASE_URL) {
+  const prisma = createPrismaClient(process.env.DATABASE_URL);
+  userStore = new PrismaUserStore(prisma);
+  gameStore = new PrismaGameStore(prisma);
+  tournamentStore = new PrismaTournamentStore(prisma);
+} else {
+  const dataDir = process.env.DATA_DIR ?? fileURLToPath(new URL('../data', import.meta.url));
+  userStore = new FileUserStore(path.join(dataDir, 'users.json'));
+  gameStore = new FileGameStore(path.join(dataDir, 'games.json'));
+  tournamentStore = new FileTournamentStore(path.join(dataDir, 'tournaments.json'));
+}
 
 const TIERS: readonly DifficultyTier[] = ['learner', 'steady', 'sharp', 'tournament'];
 function readTier(value: string | undefined, fallback: DifficultyTier): DifficultyTier {

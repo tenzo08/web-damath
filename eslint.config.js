@@ -22,4 +22,13 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
+  {
+    // Plain-JS Node scripts (npm lifecycle scripts, tooling) — .ts files get Node's
+    // ambient globals from @types/node automatically; a .mjs file has no such thing,
+    // since that's a TypeScript-only mechanism, not something eslint's JS parsing picks up.
+    files: ['**/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly' },
+    },
+  },
 );

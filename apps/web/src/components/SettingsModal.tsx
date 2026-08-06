@@ -38,6 +38,8 @@ interface SettingsModalProps {
   user: AuthUser | null;
   onUpdateProfile: (patch: { displayName?: string; avatarEmoji?: string | null }) => Promise<void>;
   token: string | null;
+  /** Settings is now the single account-actions surface reached via the top-left profile button, so sign-out lives here instead of a separate always-visible header button. */
+  onSignOut: () => void;
 }
 
 /** Everyone a signed-in user has blocked, with an unblock action — the other half of `ReportBlockButtons`' "Block" button, which has no other visible place to reverse itself from. */
@@ -100,7 +102,17 @@ function BlockedPlayersSection({ token }: { token: string }) {
 }
 
 /** Avatar + display name, editable in place. Split out so ProfileSection's own `useState` (the draft name, save-in-flight state) resets cleanly whenever a different `user` is passed in, rather than being hand-rolled inside SettingsModal itself. */
-function ProfileSection({ user, onUpdateProfile, token }: { user: AuthUser; onUpdateProfile: SettingsModalProps['onUpdateProfile']; token: string }) {
+function ProfileSection({
+  user,
+  onUpdateProfile,
+  token,
+  onSignOut,
+}: {
+  user: AuthUser;
+  onUpdateProfile: SettingsModalProps['onUpdateProfile'];
+  token: string;
+  onSignOut: () => void;
+}) {
   const [name, setName] = useState(user.displayName);
   const [savingName, setSavingName] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState<string | null>(null);
@@ -277,18 +289,45 @@ function ProfileSection({ user, onUpdateProfile, token }: { user: AuthUser; onUp
           {error}
         </p>
       )}
+
+      <button
+        type="button"
+        onClick={onSignOut}
+        style={{
+          marginTop: 'var(--pad-lg)',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          color: 'var(--danger)',
+          fontSize: 'var(--fs-meta)',
+          padding: 'var(--pad-sm) var(--pad-md)',
+          cursor: 'pointer',
+        }}
+      >
+        Sign out
+      </button>
     </div>
   );
 }
 
 /** Personalization, per browser: theme (dark/light/system) and sound effect volume — plus, when signed in, the account's own profile (avatar, display name). Reachable from the lobby header. Music isn't offered here — no audio asset pipeline exists in this codebase, and a toggle with nothing to toggle would just be a broken control (see TASK.md). */
-export function SettingsModal({ open, onClose, user, onUpdateProfile, token }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, user, onUpdateProfile, token, onSignOut }: SettingsModalProps) {
   const { theme, setTheme, soundEnabled, setSoundEnabled, soundVolume, setSoundVolume } = useSettings();
 
   return (
     <Modal open={open} onClose={onClose} title="Settings" width={480}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-xl)' }}>
-        {user && token && <ProfileSection user={user} onUpdateProfile={onUpdateProfile} token={token} />}
+        {user && token && (
+          <ProfileSection
+            user={user}
+            onUpdateProfile={onUpdateProfile}
+            token={token}
+            onSignOut={() => {
+              onSignOut();
+              onClose();
+            }}
+          />
+        )}
 
         {token && (
           <div>

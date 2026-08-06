@@ -381,7 +381,6 @@ function AppShell() {
         <LobbyScreen
           user={auth.user}
           onSignIn={() => setLoginOpen(true)}
-          onSignOut={auth.logout}
           onPlayFriend={openSetupForFriend}
           onPlayComputer={openSetupForComputer}
           onPlayOnline={() => setScreen('online')}
@@ -518,6 +517,7 @@ function AppShell() {
         user={auth.user}
         onUpdateProfile={auth.updateProfile}
         token={auth.token}
+        onSignOut={auth.logout}
       />
       <GameSetupModal
         open={setupOpen}

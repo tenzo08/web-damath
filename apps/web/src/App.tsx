@@ -399,6 +399,7 @@ function AppShell() {
       {screen === 'online' && (
         <OnlineGameScreen
           token={auth.token}
+          user={auth.user}
           initialRoomId={historyRoomId ?? spectateRoomId ?? tournamentContext?.roomId ?? undefined}
           origin={historyRoomId ? 'history' : spectateRoomId ? 'spectate' : 'tournament'}
           onGameFinished={auth.refreshUser}

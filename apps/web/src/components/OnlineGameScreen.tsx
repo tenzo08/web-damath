@@ -10,9 +10,12 @@ import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import type { PublicGameView } from '../lib/onlineProtocol';
 import { useSettings } from '../lib/settings';
 import { playCaptureSound, playErrorSound, playLossSound, playMoveSound, playWinSound } from '../lib/sound';
+import type { AuthUser } from '../lib/authClient';
 
 interface OnlineGameScreenProps {
   token: string | null;
+  /** `null` while signed out. While still inside its placement window (placementGamesPlayed < placementGamesRequired), "Find match" routes straight to a bot game instead of waiting for a human — this is only used to explain that in the matchmaking screen's own copy. */
+  user: AuthUser | null;
   onBackToLobby: () => void;
   onOpenLogin: () => void;
   /** Set when arriving via TournamentScreen's "Play this match" or MatchHistoryScreen's "Replay"/"Resume" — joins that room directly instead of showing the variant picker/matchmaking flow. */
@@ -98,7 +101,7 @@ const secondaryButton = {
  * gracefully degraded when the server isn't reachable rather than erroring out, per
  * the request to showcase the flow even where it can't run in this environment.
  */
-export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoomId, origin = 'tournament', onGameFinished }: OnlineGameScreenProps) {
+export function OnlineGameScreen({ token, user, onBackToLobby, onOpenLogin, initialRoomId, origin = 'tournament', onGameFinished }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
@@ -282,7 +285,9 @@ export function OnlineGameScreen({ token, onBackToLobby, onOpenLogin, initialRoo
               </select>
             </label>
             <p style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', margin: 'var(--pad-sm) 0 var(--pad-lg) 0' }}>
-              Pairing you with a player. If none is available we'll match you with the computer.
+              {user && user.placementGamesPlayed < user.placementGamesRequired
+                ? `New accounts play ${String(user.placementGamesRequired - user.placementGamesPlayed)} more game(s) against the computer first, so ratings start from a real level (${String(user.placementGamesPlayed)}/${String(user.placementGamesRequired)} played).`
+                : "Pairing you with a player. If none is available we'll match you with the computer."}
             </p>
             <button type="button" onClick={() => online.queue(variantId)} style={primaryButton}>
               Find match

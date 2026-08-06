@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { DifficultyTier } from '@damath/ai';
 import { buildApp, type AppOptions } from '../src/app.js';
-import { FileUserStore } from '../src/auth/store.js';
+import { FileUserStore, type UserStore } from '../src/auth/store.js';
 import { FileGameStore } from '../src/game/store.js';
 import { FileTournamentStore } from '../src/tournament/store.js';
 import { FileModerationStore } from '../src/moderation/store.js';
@@ -15,6 +15,8 @@ export interface TestApp {
   cleanup: () => Promise<void>;
   /** Every password-reset/verify-email link "sent" so far — `notifyActionLink` (auth/routes.ts) pushes here instead of logging, since the token is one-way-hashed before storage and there's no other way for a test to observe it. */
   actionLinks: { kind: 'reset' | 'verify'; email: string; link: string }[];
+  /** Direct store access for setup a plain HTTP call can't reach cleanly — e.g. fast-forwarding an account past its placement window (rating/elo.ts) for a test that isn't itself about placement. */
+  userStore: UserStore;
 }
 
 export function makeTestApp(
@@ -22,9 +24,10 @@ export function makeTestApp(
 ): TestApp {
   const actionLinks: TestApp['actionLinks'] = [];
   const dir = mkdtempSync(path.join(tmpdir(), 'damath-server-test-'));
+  const userStore = new FileUserStore(path.join(dir, 'users.json'));
   const app = buildApp({
     jwtSecret: 'test-secret',
-    userStore: new FileUserStore(path.join(dir, 'users.json')),
+    userStore,
     gameStore: new FileGameStore(path.join(dir, 'games.json')),
     tournamentStore: new FileTournamentStore(path.join(dir, 'tournaments.json')),
     moderationStore: new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json')),
@@ -38,6 +41,7 @@ export function makeTestApp(
     app,
     dir,
     actionLinks,
+    userStore,
     cleanup: async () => {
       await app.close();
       rmSync(dir, { recursive: true, force: true });

@@ -93,7 +93,26 @@ export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonP
       </span>
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
         <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-primary)', fontWeight: 700 }}>{user.displayName}</span>
-        <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>Rating {user.rating}</span>
+        <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          Rating {user.rating}
+          {user.placementGamesPlayed < user.placementGamesRequired && (
+            <span
+              title={`${String(user.placementGamesRequired - user.placementGamesPlayed)} placement game(s) left`}
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                color: 'var(--accent)',
+                border: '1px solid var(--accent)',
+                borderRadius: 3,
+                padding: '0 3px',
+              }}
+            >
+              Provisional
+            </span>
+          )}
+        </span>
       </span>
     </button>
   );

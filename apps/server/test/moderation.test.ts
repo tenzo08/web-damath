@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PLACEMENT_GAMES_REQUIRED } from '../src/rating/elo.js';
 import { makeTestApp, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
@@ -101,6 +102,13 @@ describe('blocking', () => {
     const a = await signup('blk-queue-a@example.com', 'QueueA');
     const b = await signup('blk-queue-b@example.com', 'QueueB');
     const c = await signup('blk-queue-c@example.com', 'QueueC');
+    // This test is about blocking, not placement (rating/elo.ts) -- a fresh account's
+    // placement window would otherwise route `enqueue` straight to a bot instead of the
+    // human queue this test actually exercises.
+    for (const { id } of [a, b, c]) {
+      const user = await testApp.userStore.findById(id);
+      if (user) await testApp.userStore.update({ ...user, placementGamesPlayed: PLACEMENT_GAMES_REQUIRED });
+    }
 
     await testApp.app.inject({
       method: 'POST',

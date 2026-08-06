@@ -5,7 +5,7 @@ import { actionTokenExpiry, generateActionToken, hashActionToken, isActionTokenE
 import { isValidAvatarEmoji } from './avatars.js';
 import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
-import { STARTING_RATING } from '../rating/elo.js';
+import { PLACEMENT_GAMES_REQUIRED, STARTING_RATING } from '../rating/elo.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -110,7 +110,7 @@ function defaultGoogleVerifier(clientId: string): GoogleIdTokenVerifier {
   };
 }
 
-/** Never sends `passwordHash`/token hashes back over the wire. */
+/** Never sends `passwordHash`/token hashes back over the wire. `placementGamesRequired` rides along (not just the raw count) so the client never hardcodes rating/elo.ts's own policy constant to compute "X of Y placement games" or a provisional badge. */
 function publicUser(user: User) {
   return {
     id: user.id,
@@ -119,6 +119,8 @@ function publicUser(user: User) {
     rating: user.rating,
     avatarEmoji: user.avatarEmoji,
     emailVerified: user.emailVerified,
+    placementGamesPlayed: user.placementGamesPlayed,
+    placementGamesRequired: PLACEMENT_GAMES_REQUIRED,
     createdAt: user.createdAt,
   };
 }
@@ -187,6 +189,7 @@ export function registerAuthRoutes(
         verifyTokenHash: hashActionToken(verifyToken),
         verifyTokenExpiresAt: actionTokenExpiry(),
         googleId: null,
+        placementGamesPlayed: 0,
         createdAt: new Date().toISOString(),
       };
       await userStore.create(user);
@@ -289,6 +292,7 @@ export function registerAuthRoutes(
         verifyTokenHash: null,
         verifyTokenExpiresAt: null,
         googleId: claims.sub,
+        placementGamesPlayed: 0,
         createdAt: new Date().toISOString(),
       };
       await userStore.create(user);

@@ -7,7 +7,7 @@ import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
 import { findVariant } from './variants.js';
 import type { UserStore } from '../auth/store.js';
 import type { ModerationStore } from '../moderation/store.js';
-import { BOT_TIER_RATING, nextRating, nextRatings } from '../rating/elo.js';
+import { BOT_TIER_RATING, PLACEMENT_GAMES_REQUIRED, PLACEMENT_K_FACTOR, PLACEMENT_TIER, nextRating, nextRatings } from '../rating/elo.js';
 
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
 
@@ -119,9 +119,30 @@ export class RoomManager {
     return { ok: true, room, color };
   }
 
-  /** docs/AI_OPPONENT.md §9. Pairs immediately with another queued player wanting the same variant, else starts a bot-fallback timer. Every variant has an AI now (valueScale.ts's `ToNumber<V>` bridge), so the fallback is no longer restricted to the three integer variants. */
+  /**
+   * docs/AI_OPPONENT.md §9. Pairs immediately with another queued player wanting the
+   * same variant, else starts a bot-fallback timer. Every variant has an AI now
+   * (valueScale.ts's `ToNumber<V>` bridge), so the fallback is no longer restricted to
+   * the three integer variants.
+   *
+   * An account still inside its placement window (rating/elo.ts's
+   * `PLACEMENT_GAMES_REQUIRED`) skips human queue-matchmaking entirely and goes
+   * straight to a bot game, no wait — "the system should check the level of the player"
+   * before pairing them against a real opponent's rating. A direct-invite room
+   * (`createRoom`/`joinRoom`) bypasses this gate on purpose: it's an opt-in match
+   * between two people who already know each other, not the cold-start ranked pool
+   * problem placement exists to solve.
+   */
   async enqueue(userId: string, variantId: VariantId): Promise<EnqueueResult> {
     this.cancelQueue(userId);
+
+    const user = await this.options.userStore.findById(userId);
+    if (user && user.placementGamesPlayed < PLACEMENT_GAMES_REQUIRED) {
+      const variant = findVariant(variantId);
+      if (!variant) throw new Error(`unknown variant id ${variantId}`);
+      const room = await this.persistAndInstantiateBot(variant, userId, PLACEMENT_TIER);
+      return { status: 'matched', room, color: 'white' };
+    }
 
     for (const [otherUserId, entry] of this.queue) {
       if (otherUserId === userId || entry.variantId !== variantId) continue;
@@ -208,6 +229,11 @@ export class RoomManager {
    * winner to advance a bracket" constraint here. Fires exactly once per game, same
    * "further moves are rejected once the room is over" guarantee `reportTournamentResult
    * IfFinished` relies on.
+   *
+   * Also where a finished bot game counts toward the account's placement window
+   * (rating/elo.ts's `PLACEMENT_GAMES_REQUIRED`) — `PLACEMENT_K_FACTOR` applies to
+   * *this* game if the account was still inside that window when it started, then the
+   * counter increments regardless of the outcome.
    */
   private async updateRatingsIfFinished(room: RoomHandle, view: PublicGameView): Promise<void> {
     if (view.status !== 'finished') return;
@@ -221,13 +247,21 @@ export class RoomManager {
         if (!human) return;
         const botRating = BOT_TIER_RATING[(room.botTier as DifficultyTier | null) ?? 'steady'];
         const outcome = view.winner === null ? 'draw' : view.winner === humanColor ? 'win' : 'loss';
-        await this.options.userStore.update({ ...human, rating: nextRating(human.rating, botRating, outcome) });
+        const inPlacement = human.placementGamesPlayed < PLACEMENT_GAMES_REQUIRED;
+        const kFactor = inPlacement ? PLACEMENT_K_FACTOR : undefined;
+        await this.options.userStore.update({
+          ...human,
+          rating: nextRating(human.rating, botRating, outcome, kFactor),
+          placementGamesPlayed: inPlacement ? human.placementGamesPlayed + 1 : human.placementGamesPlayed,
+        });
       } else {
         const { white, black } = view.players;
         if (!white || !black) return; // shouldn't happen once finished, but never guess at a missing seat
         const [whiteUser, blackUser] = await Promise.all([this.options.userStore.findById(white), this.options.userStore.findById(black)]);
         if (!whiteUser || !blackUser) return;
-        const next = nextRatings(whiteUser.rating, blackUser.rating, view.winner);
+        const kFactorWhite = whiteUser.placementGamesPlayed < PLACEMENT_GAMES_REQUIRED ? PLACEMENT_K_FACTOR : undefined;
+        const kFactorBlack = blackUser.placementGamesPlayed < PLACEMENT_GAMES_REQUIRED ? PLACEMENT_K_FACTOR : undefined;
+        const next = nextRatings(whiteUser.rating, blackUser.rating, view.winner, kFactorWhite, kFactorBlack);
         // Sequential, not `Promise.all` — `FileUserStore.update` is a whole-file
         // read-modify-write; two concurrent updates would both read the same stale file
         // and the second write would silently clobber the first (caught by a real test:
@@ -309,7 +343,7 @@ export class RoomManager {
     return handle;
   }
 
-  private async persistAndInstantiateBot(variant: AnyVariant, humanUserId: string): Promise<RoomHandle> {
+  private async persistAndInstantiateBot(variant: AnyVariant, humanUserId: string, tier: DifficultyTier = this.options.queueBotTier): Promise<RoomHandle> {
     const id = randomUUID();
     const now = new Date().toISOString();
     const persisted: PersistedGame = {
@@ -317,7 +351,7 @@ export class RoomManager {
       variantId: variant.id,
       players: { white: humanUserId, black: BOT_PLAYER_ID },
       opponentType: 'bot',
-      botTier: this.options.queueBotTier,
+      botTier: tier,
       moveHistory: [],
       status: 'active',
       resignedBy: null,
@@ -327,7 +361,7 @@ export class RoomManager {
       updatedAt: now,
     };
     await this.options.gameStore.create(persisted);
-    const handle = this.instantiateBot(persisted, variant, this.options.queueBotTier);
+    const handle = this.instantiateBot(persisted, variant, tier);
     this.rooms.set(id, handle);
     return handle;
   }

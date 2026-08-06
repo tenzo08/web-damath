@@ -7,7 +7,7 @@ import { RoomManager } from '../src/game/rooms.js';
 import { FileGameStore, type GameStore } from '../src/game/store.js';
 import { FileUserStore, type User, type UserStore } from '../src/auth/store.js';
 import { FileModerationStore, type ModerationStore } from '../src/moderation/store.js';
-import { STARTING_RATING } from '../src/rating/elo.js';
+import { PLACEMENT_GAMES_REQUIRED, STARTING_RATING } from '../src/rating/elo.js';
 
 /**
  * Real timers, not fake ones: `vi.advanceTimersByTimeAsync` doesn't reliably flush the
@@ -42,8 +42,29 @@ function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEna
   });
 }
 
-async function makeUser(id: string, rating = STARTING_RATING): Promise<User> {
-  const user: User = { id, email: `${id}@example.com`, passwordHash: 'x', displayName: id, rating, createdAt: new Date().toISOString() };
+/**
+ * `placementGamesPlayed` defaults past the threshold (not 0) -- most of this file's
+ * tests are about matchmaking/room mechanics, not placement, and a fresh account's
+ * placement window would otherwise route `enqueue` straight to a bot in every one of
+ * them. Tests that specifically exercise placement pass `placementGamesPlayed: 0`.
+ */
+async function makeUser(id: string, rating = STARTING_RATING, placementGamesPlayed = PLACEMENT_GAMES_REQUIRED): Promise<User> {
+  const user: User = {
+    id,
+    email: `${id}@example.com`,
+    passwordHash: 'x',
+    displayName: id,
+    rating,
+    avatarEmoji: null,
+    emailVerified: false,
+    resetTokenHash: null,
+    resetTokenExpiresAt: null,
+    verifyTokenHash: null,
+    verifyTokenExpiresAt: null,
+    googleId: null,
+    placementGamesPlayed,
+    createdAt: new Date().toISOString(),
+  };
   await userStore.create(user);
   return user;
 }
@@ -422,5 +443,69 @@ describe('rating updates on a finished game', () => {
     const human = await userStore.findById('human-user');
     expect(human?.rating).toBeLessThan(1200);
     expect(1200 - (human?.rating ?? 0)).toBeGreaterThan(15); // a real drop, not a rounding artifact
+  });
+});
+
+describe('placement games (rating/elo.ts PLACEMENT_GAMES_REQUIRED)', () => {
+  it('routes a still-in-placement account straight to a bot, skipping the human queue entirely', async () => {
+    await makeUser('new-user', 1200, 0);
+    await makeUser('waiting-human', 1200); // already past placement, genuinely waiting for a human
+    const manager = makeManager({ queueBotTimeoutMs: 24 * 60 * 60 * 1000 }); // effectively never fires on its own
+
+    await manager.enqueue('waiting-human', 'integer');
+    const result = await manager.enqueue('new-user', 'integer');
+
+    expect(result.status).toBe('matched');
+    if (result.status === 'matched') {
+      expect(result.room.opponentType).toBe('bot');
+      expect(result.room.botTier).toBe('steady'); // PLACEMENT_TIER, not makeManager's own queueBotTier ('learner')
+      expect(result.room.players.white).toBe('new-user');
+    }
+    // The waiting human was never touched by this -- still queued, not paired with the placement account.
+    expect(matched).toHaveLength(0);
+  });
+
+  it('finishing a placement game increments placementGamesPlayed', async () => {
+    await makeUser('new-user', 1200, 0);
+    const manager = makeManager();
+    const result = await manager.enqueue('new-user', 'integer');
+    if (result.status !== 'matched') throw new Error('expected an immediate bot match');
+
+    await manager.resign(result.room.id, 'new-user');
+    const user = await userStore.findById('new-user');
+    expect(user?.placementGamesPlayed).toBe(1);
+  });
+
+  it('a placement-window loss swings rating further than the same loss would post-placement (boosted K-factor)', async () => {
+    await makeUser('placement-user', 1200, 0);
+    await makeUser('graduated-user', 1200, PLACEMENT_GAMES_REQUIRED);
+    const manager = makeManager({ queueBotTimeoutMs: 20 });
+
+    const placementResult = await manager.enqueue('placement-user', 'integer');
+    if (placementResult.status !== 'matched') throw new Error('expected an immediate bot match for the placement account');
+
+    // graduated-user is past placement -- enqueue queues normally and only reaches a
+    // bot after the fallback timeout, same path the existing "human-vs-bot resignation"
+    // test above already exercises.
+    const graduatedQueued = await manager.enqueue('graduated-user', 'integer');
+    expect(graduatedQueued).toEqual({ status: 'queued' });
+    await waitFor(() => matched.length === 1);
+    const graduatedRoomId = matched[0]?.view.roomId;
+    expect(graduatedRoomId).toBeDefined();
+
+    await manager.resign(placementResult.room.id, 'placement-user');
+    await manager.resign(graduatedRoomId!, 'graduated-user');
+
+    const placementDrop = 1200 - ((await userStore.findById('placement-user'))?.rating ?? 0);
+    const graduatedDrop = 1200 - ((await userStore.findById('graduated-user'))?.rating ?? 0);
+    expect(placementDrop).toBeGreaterThan(graduatedDrop);
+  });
+
+  it('enqueue behaves normally again once placementGamesPlayed reaches the threshold', async () => {
+    await makeUser('done-user', 1200, PLACEMENT_GAMES_REQUIRED);
+    const manager = makeManager({ queueBotTimeoutMs: 24 * 60 * 60 * 1000 });
+
+    const result = await manager.enqueue('done-user', 'integer');
+    expect(result).toEqual({ status: 'queued' });
   });
 });

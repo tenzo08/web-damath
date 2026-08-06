@@ -53,6 +53,9 @@ model User {
   /// every NULL as distinct under a unique constraint, so any number of non-Google
   /// accounts can coexist with this column unset.
   googleId     String?  @unique
+  /// How many bot games this account has finished -- see rating/elo.ts's
+  /// PLACEMENT_GAMES_REQUIRED. Starts at 0.
+  placementGamesPlayed Int @default(0)
   createdAt    DateTime @default(now())
 
   @@index([resetTokenHash])

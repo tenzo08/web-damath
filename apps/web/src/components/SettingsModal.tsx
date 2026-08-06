@@ -191,6 +191,11 @@ function ProfileSection({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>{user.email}</span>
           <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>Rating {user.rating}</span>
+          {user.placementGamesPlayed < user.placementGamesRequired && (
+            <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--accent)' }}>
+              Provisional — {user.placementGamesRequired - user.placementGamesPlayed} placement game(s) left against the computer
+            </span>
+          )}
         </div>
       </div>
 

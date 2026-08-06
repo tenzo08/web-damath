@@ -21,6 +21,8 @@ export interface User {
   readonly verifyTokenExpiresAt: string | null;
   /** Google's stable per-account `sub` claim, once this account has signed in with Google at least once — null for an account that's only ever used email/password. Every account still has a real `passwordHash` either way (auth/routes.ts's Google-signup completion step collects one same as ordinary signup), so Google is a second way to prove identity, not a replacement for one. */
   readonly googleId: string | null;
+  /** How many bot games (docs/AI_OPPONENT.md §9's queue-fallback path) this account has finished — see rating/elo.ts's PLACEMENT_GAMES_REQUIRED. Starts at 0; `rooms.ts`'s `enqueue` routes a still-in-placement account straight to a bot instead of the ordinary human queue, and `updateRatingsIfFinished` increments this and uses the boosted PLACEMENT_K_FACTOR until it reaches the threshold. */
+  readonly placementGamesPlayed: number;
   readonly createdAt: string;
 }
 
@@ -156,6 +158,7 @@ export class PrismaUserStore implements UserStore {
         verifyTokenHash: user.verifyTokenHash,
         verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
         googleId: user.googleId,
+        placementGamesPlayed: user.placementGamesPlayed,
         createdAt: new Date(user.createdAt),
       },
     });
@@ -177,6 +180,7 @@ export class PrismaUserStore implements UserStore {
         verifyTokenHash: user.verifyTokenHash,
         verifyTokenExpiresAt: user.verifyTokenExpiresAt ? new Date(user.verifyTokenExpiresAt) : null,
         googleId: user.googleId,
+        placementGamesPlayed: user.placementGamesPlayed,
       },
     });
   }
@@ -205,6 +209,7 @@ interface PrismaUserRow {
   verifyTokenHash: string | null;
   verifyTokenExpiresAt: Date | null;
   googleId: string | null;
+  placementGamesPlayed: number;
   createdAt: Date;
 }
 
@@ -222,6 +227,7 @@ function toUser(row: PrismaUserRow): User {
     verifyTokenHash: row.verifyTokenHash,
     verifyTokenExpiresAt: row.verifyTokenExpiresAt ? row.verifyTokenExpiresAt.toISOString() : null,
     googleId: row.googleId,
+    placementGamesPlayed: row.placementGamesPlayed,
     createdAt: row.createdAt.toISOString(),
   };
 }

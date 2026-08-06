@@ -14,6 +14,21 @@ export const STARTING_RATING = 1200;
 const K_FACTOR = 32;
 
 /**
+ * How many games (against the computer, docs/AI_OPPONENT.md §9's queue-fallback path)
+ * a new account plays before it's allowed into ordinary human queue-matchmaking
+ * (rooms.ts's `enqueue`) — the "the system should check the level of the player first"
+ * placement window. `PLACEMENT_TIER` is fixed at `steady`, not configurable per
+ * deployment like `QUEUE_BOT_TIER`: it needs to be the same fair baseline for every new
+ * account's calibration games, not whatever bot strength ops happens to have dialed in
+ * for ordinary queue-fallback.
+ */
+export const PLACEMENT_GAMES_REQUIRED = 3;
+export const PLACEMENT_TIER: DifficultyTier = 'steady';
+
+/** Double the normal K-factor while an account is still in its placement window — the rating should move fast toward an accurate value before there's enough game history for the standard K=32 read to mean much, the same reasoning FIDE/USCF-style "provisional rating" periods use a higher K for. */
+export const PLACEMENT_K_FACTOR = 64;
+
+/**
  * Notional ratings for each AI difficulty tier (docs/AI_OPPONENT.md §2) — playing the
  * computer updates your rating exactly like playing a human does, against this fixed
  * opponent "rating" instead of a real account's. Spaced 400 points apart, matching the
@@ -33,11 +48,11 @@ export function expectedScore(ratingA: number, ratingB: number): number {
   return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
 }
 
-/** One player's new rating after one game, given their outcome against `opponentRating`. */
-export function nextRating(rating: number, opponentRating: number, outcome: MatchOutcome): number {
+/** One player's new rating after one game, given their outcome against `opponentRating`. `kFactor` defaults to the standard 32; callers pass `PLACEMENT_K_FACTOR` while the account is still within its placement window. */
+export function nextRating(rating: number, opponentRating: number, outcome: MatchOutcome, kFactor: number = K_FACTOR): number {
   const actual = outcome === 'win' ? 1 : outcome === 'loss' ? 0 : 0.5;
   const expected = expectedScore(rating, opponentRating);
-  return Math.round(rating + K_FACTOR * (actual - expected));
+  return Math.round(rating + kFactor * (actual - expected));
 }
 
 /**
@@ -45,12 +60,20 @@ export function nextRating(rating: number, opponentRating: number, outcome: Matc
  * `room.ts`'s `PublicGameView` already uses — `winner: null` is a draw. Zero-sum by
  * construction (one side's gain exactly equals the other's loss), since
  * `expectedScore(a, b) + expectedScore(b, a) === 1` and `actualWhite + actualBlack ===
- * 1` for every possible outcome including a draw.
+ * 1` for every possible outcome including a draw. Each side's K-factor is independent —
+ * one account can be in its placement window while the other isn't (a direct-invite
+ * room bypasses the queue's placement gate, so this does happen in practice).
  */
-export function nextRatings(ratingWhite: number, ratingBlack: number, winner: Player | null): { white: number; black: number } {
+export function nextRatings(
+  ratingWhite: number,
+  ratingBlack: number,
+  winner: Player | null,
+  kFactorWhite: number = K_FACTOR,
+  kFactorBlack: number = K_FACTOR,
+): { white: number; black: number } {
   const outcomeFor = (player: Player): MatchOutcome => (winner === null ? 'draw' : winner === player ? 'win' : 'loss');
   return {
-    white: nextRating(ratingWhite, ratingBlack, outcomeFor('white')),
-    black: nextRating(ratingBlack, ratingWhite, outcomeFor('black')),
+    white: nextRating(ratingWhite, ratingBlack, outcomeFor('white'), kFactorWhite),
+    black: nextRating(ratingBlack, ratingWhite, outcomeFor('black'), kFactorBlack),
   };
 }

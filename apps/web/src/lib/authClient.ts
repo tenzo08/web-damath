@@ -10,6 +10,9 @@ export interface AuthUser {
   avatarEmoji: string | null;
   /** Set once a verify-email link is redeemed. Not currently gating any feature -- just a real, checkable fact about the account. */
   emailVerified: boolean;
+  /** How many placement games (apps/server/src/rating/elo.ts's PLACEMENT_GAMES_REQUIRED) this account has finished against the computer. Ranked online matchmaking routes straight to a bot game, no human wait, until this reaches placementGamesRequired. */
+  placementGamesPlayed: number;
+  placementGamesRequired: number;
   createdAt: string;
 }
 

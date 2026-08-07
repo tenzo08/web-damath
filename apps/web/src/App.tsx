@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
 import type { AnyVariant, Player, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
@@ -9,10 +9,9 @@ import { useAuth } from './hooks/useAuth';
 import { useLiveUpdates } from './hooks/useLiveUpdates';
 import { Board } from './components/Board';
 import { Rail } from './components/Rail';
-import { ScorePanel } from './components/ScorePanel';
+import { PlayerCard } from './components/PlayerCard';
 import { ClockPanel } from './components/ClockPanel';
 import { MoveLedger } from './components/MoveLedger';
-import { OpponentStatus } from './components/OpponentStatus';
 import { GameControls } from './components/GameControls';
 import { GameMenu } from './components/GameMenu';
 import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal';
@@ -51,7 +50,6 @@ function GameShellView<V>({
   variant,
   gameApi,
   format,
-  opponentPanel,
   blockInteraction,
   thinkingLabel,
   scoreLabelOverrides,
@@ -62,7 +60,6 @@ function GameShellView<V>({
   variant: Variant<V>;
   gameApi: ReturnType<typeof useGame<V>>;
   format: (value: V) => string;
-  opponentPanel: ReactNode;
   blockInteraction: boolean;
   /** Shown as the status line while `blockInteraction` is true — a friendly nickname's "is thinking…", not "Computer is thinking…" (never named "Computer" here, per direct product decision). */
   thinkingLabel?: string | undefined;
@@ -157,6 +154,17 @@ function GameShellView<V>({
   const lastMove = (viewIndex !== null ? (ledger[viewIndex - 1] ?? null) : (ledger.at(-1) ?? null))?.move ?? null;
   const statusLine = gameOver ? announcement : blockInteraction ? (thinkingLabel ?? 'Opponent is thinking…') : `${playerLabel(game.turn)} to move`;
 
+  // chess.com's own convention: your own side is always the bottom card, the other
+  // side the top one -- `flipped` already carries that (Board.tsx's row order flips
+  // the same way), so the two cards just mirror it instead of tracking it separately.
+  const topColor: Player = flipped ? 'white' : 'black';
+  const bottomColor: Player = flipped ? 'black' : 'white';
+  const scores = finalScores ?? game.scores;
+  const labelFor = (side: Player) => scoreLabelOverrides?.[side] ?? playerLabel(side);
+  const playerCard = (side: Player) => (
+    <PlayerCard side={side} label={labelFor(side)} score={format(scores[side])} isTurn={!finalScores && game.turn === side} />
+  );
+
   return (
     <main
       style={{
@@ -174,7 +182,8 @@ function GameShellView<V>({
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
-          <div style={{ flex: '3 1 420px', maxWidth: 760, minWidth: 280, width: '100%' }}>
+          <div style={{ flex: '3 1 420px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+            {playerCard(topColor)}
             <Board
               game={boardGame}
               format={format}
@@ -195,10 +204,10 @@ function GameShellView<V>({
               }}
               onClearSelection={clearSelection}
             />
+            {playerCard(bottomColor)}
           </div>
 
           <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-            <ScorePanel game={game} finalScores={finalScores} format={format} labelOverrides={scoreLabelOverrides} />
             <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
             <GameControls
               canUndo={canUndo}
@@ -211,7 +220,6 @@ function GameShellView<V>({
               onStepForward={stepForward}
               onFlip={onFlip}
             />
-            {opponentPanel}
           </div>
 
           {/* The one column that's meant to scroll internally, per request — a fixed
@@ -278,7 +286,6 @@ function GameShell<V>({
       flipped={flipped}
       onFlip={onFlip}
       nav={nav}
-      opponentPanel={<OpponentStatus opponentName={opponentName} thinking={computersTurn} />}
     />
   );
 }

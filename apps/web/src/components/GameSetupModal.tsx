@@ -50,7 +50,7 @@ const cardButton = (active: boolean) =>
  * "when starting a new game with an AI the player has to choose the option it wants."
  * Reached from the lobby's "Play the Computer" card and from the in-game menu's
  * "New game" action; never surfaced mid-game, which is what makes the choice durable
- * for that match (see OpponentStatus, the read-only display shown once playing).
+ * for that match (see PlayerCard, the read-only display shown once playing).
  */
 export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initialOpponent, fixedOpponentKind }: GameSetupModalProps) {
   const [opponentKind, setOpponentKind] = useState<'friend' | 'computer'>(fixedOpponentKind ?? initialOpponent.kind);

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/react';
-import { PUZZLE_VARIANTS } from '../lib/puzzles';
+import { PUZZLE_VARIANTS, dailySeed } from '../lib/puzzles';
 import { SettingsProvider } from '../lib/settings';
 import { PuzzleScreen } from './PuzzleScreen';
 
@@ -68,5 +68,38 @@ describe('PuzzleScreen', () => {
     // Puzzle 2 ("Pick the better capture") is a single-jump capture.
     fireEvent.click(screen.getByRole('button', { name: 'Next puzzle ▸' }));
     expect(screen.getByText('1 move to solve')).toBeInTheDocument();
+  });
+});
+
+describe("PuzzleScreen's daily puzzle", () => {
+  // Must match PuzzleScreen.tsx's own DAILY_SOLVED_KEY — not exported, since it's an
+  // internal implementation detail nothing else needs, but the tests below drive it
+  // through localStorage directly to check the "already solved" UI without needing to
+  // actually play through a real capture sequence via MiniBoard's unlabelled squares.
+  const DAILY_SOLVED_KEY = 'damath.dailyPuzzle.solved';
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('"Today\'s Puzzle" switches to a puzzle dated today, distinct from the curated set', () => {
+    renderPuzzleScreen();
+    fireEvent.click(screen.getByRole('button', { name: /Today's Puzzle/ }));
+    expect(screen.getByText(/Today's Puzzle ·/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '← Back to curated puzzles' })).toBeInTheDocument();
+  });
+
+  it('shows "already solved" once the day\'s puzzle id is marked solved in localStorage', () => {
+    localStorage.setItem(DAILY_SOLVED_KEY, `daily-${String(dailySeed(new Date()))}`);
+    renderPuzzleScreen();
+    expect(screen.getByRole('button', { name: /Today's Puzzle ✓/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Today's Puzzle/ }));
+    expect(screen.getByText(/already solved today/)).toBeInTheDocument();
+  });
+
+  it('does not show "already solved" for a stale (different-day) localStorage entry', () => {
+    localStorage.setItem(DAILY_SOLVED_KEY, 'daily-20200101');
+    renderPuzzleScreen();
+    expect(screen.queryByRole('button', { name: /Today's Puzzle ✓/ })).not.toBeInTheDocument();
   });
 });

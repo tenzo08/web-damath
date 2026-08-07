@@ -2,7 +2,17 @@ import { useMemo, useState } from 'react';
 import { applyMove, operationAt, pieceAt } from '@damath/engine';
 import type { AnyVariant, GameState, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniSquareSpec } from './diagram/MiniBoard';
-import { PUZZLES, PUZZLE_VARIANTS, findLegalMove, generatePuzzle, legalSolutionMove, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
+import {
+  PUZZLES,
+  PUZZLE_VARIANTS,
+  findLegalMove,
+  generatePuzzle,
+  getDailyPuzzle,
+  legalSolutionMove,
+  puzzleSolvedState,
+  puzzleStartState,
+  type Puzzle,
+} from '../lib/puzzles';
 import { isPlayable } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useSettings } from '../lib/settings';
@@ -44,6 +54,27 @@ const secondaryButton = {
 
 function samePosition(a: Position, b: Position): boolean {
   return a.row === b.row && a.col === b.col;
+}
+
+// Just the *last* solved daily puzzle's id (e.g. "daily-20260807") — enough to answer
+// "is today's specifically solved", since a new day means a new id and the old one no
+// longer matches, no separate date comparison needed. `try/catch`: localStorage throws
+// in some private-browsing modes, and "can't remember you solved it" is a fine
+// degradation, not worth surfacing an error over.
+const DAILY_SOLVED_KEY = 'damath.dailyPuzzle.solved';
+function isDailySolved(puzzleId: string): boolean {
+  try {
+    return localStorage.getItem(DAILY_SOLVED_KEY) === puzzleId;
+  } catch {
+    return false;
+  }
+}
+function markDailySolved(puzzleId: string): void {
+  try {
+    localStorage.setItem(DAILY_SOLVED_KEY, puzzleId);
+  } catch {
+    // Best-effort — see isDailySolved's comment.
+  }
 }
 
 /** `goTo` always wraps its argument into [0, PUZZLES.length) via modulo, so an out-of-range index here is a real bug, not a case to degrade gracefully from. */
@@ -103,11 +134,15 @@ function buildRows<V>(
  */
 export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   const [index, setIndex] = useState(0);
-  const [mode, setMode] = useState<'curated' | 'generated'>('curated');
+  const [mode, setMode] = useState<'curated' | 'generated' | 'daily'>('curated');
   const [generated, setGenerated] = useState<Puzzle<AnyPuzzleValue> | null>(null);
   const [genVariantId, setGenVariantId] = useState<VariantId>(PUZZLE_VARIANTS[0]?.id ?? 'whole');
   const [genError, setGenError] = useState<string | null>(null);
-  const puzzle = mode === 'generated' && generated ? generated : puzzleAt(index);
+  // Computed once per visit, not re-rolled on every render — `getDailyPuzzle` is
+  // deterministic for a given UTC day, but still does real work (up to 300 attempts
+  // of simulated self-play) to get there.
+  const dailyPuzzle = useMemo(() => getDailyPuzzle(), []);
+  const puzzle = mode === 'daily' ? dailyPuzzle : mode === 'generated' && generated ? generated : puzzleAt(index);
 
   const [state, setState] = useState<GameState<AnyPuzzleValue>>(() => puzzleStartState(puzzle));
   const [selected, setSelected] = useState<Position | null>(null);
@@ -160,6 +195,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
         setState(applyMove(state, move, puzzle.variant));
         setStatus('solved');
         setFeedback(null);
+        if (mode === 'daily') markDailySolved(puzzle.id);
         if (move.captures.length > 0) playCaptureSound(effectiveVolume);
         else playWinSound(effectiveVolume);
       } else {
@@ -181,6 +217,10 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   function goTo(newIndex: number) {
     setMode('curated');
     setIndex(((newIndex % PUZZLES.length) + PUZZLES.length) % PUZZLES.length);
+  }
+
+  function goToDaily() {
+    setMode('daily');
   }
 
   function generateNew() {
@@ -213,11 +253,18 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+        <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
             ← Lobby
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Puzzles</h1>
+          <button
+            type="button"
+            onClick={goToDaily}
+            style={{ ...(mode === 'daily' ? primaryButton : secondaryButton), marginLeft: 'auto' }}
+          >
+            ⭐ Today's Puzzle{isDailySolved(dailyPuzzle.id) ? ' ✓' : ''}
+          </button>
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
@@ -228,7 +275,14 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
           <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <div style={cardStyle}>
               <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-                {mode === 'curated' ? `Puzzle ${index + 1} of ${PUZZLES.length}` : `Generated puzzle · ${puzzle.variant.name}`}
+                {mode === 'daily'
+                  ? `Today's Puzzle · ${new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`
+                  : mode === 'curated'
+                    ? `Puzzle ${index + 1} of ${PUZZLES.length}`
+                    : `Generated puzzle · ${puzzle.variant.name}`}
+                {mode === 'daily' && isDailySolved(dailyPuzzle.id) && (
+                  <span style={{ color: 'var(--success, #3fb950)' }}> · already solved today</span>
+                )}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', margin: 'var(--pad-sm) 0 0 0' }}>
                 <span
@@ -318,7 +372,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
                   {genError}
                 </p>
               )}
-              {mode === 'generated' && (
+              {mode !== 'curated' && (
                 <button type="button" onClick={() => goTo(index)} style={secondaryButton}>
                   ← Back to curated puzzles
                 </button>

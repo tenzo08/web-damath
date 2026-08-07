@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { legalMoves } from '@damath/engine';
 import type { AnyVariant, Variant } from '@damath/engine';
-import { PUZZLES, PUZZLE_VARIANTS, generatePuzzle, legalSolutionMove, puzzleSolvedState, puzzleStartState } from './puzzles';
+import { PUZZLES, PUZZLE_VARIANTS, dailySeed, generatePuzzle, getDailyPuzzle, legalSolutionMove, puzzleSolvedState, puzzleStartState } from './puzzles';
 
 /** Same union-distribution trick App.tsx and PuzzleScreen.tsx already rely on to recover a concrete `V` from `AnyVariant` at a call site. */
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -81,5 +81,51 @@ describe('generatePuzzle', () => {
       }
     }
     expect(ids.size).toBe(PUZZLE_VARIANTS.length * 10);
+  });
+});
+
+describe('daily puzzle', () => {
+  it('dailySeed is a stable UTC calendar-date integer, not affected by time of day', () => {
+    expect(dailySeed(new Date(Date.UTC(2026, 7, 7, 0, 0, 0)))).toBe(20260807);
+    expect(dailySeed(new Date(Date.UTC(2026, 7, 7, 23, 59, 59)))).toBe(20260807);
+    expect(dailySeed(new Date(Date.UTC(2026, 0, 1)))).toBe(20260101);
+  });
+
+  it('the same UTC day always produces the identical puzzle (same setup, same solution)', () => {
+    const day = new Date(Date.UTC(2026, 7, 7));
+    const a = getDailyPuzzle(day);
+    const b = getDailyPuzzle(new Date(Date.UTC(2026, 7, 7, 18, 30)));
+    expect(a.id).toBe(b.id);
+    expect(a.setupMoves).toEqual(b.setupMoves);
+    expect(a.solutionFrom).toEqual(b.solutionFrom);
+    expect(a.solutionTo).toEqual(b.solutionTo);
+  });
+
+  it('different UTC days produce different puzzle ids', () => {
+    const a = getDailyPuzzle(new Date(Date.UTC(2026, 7, 7)));
+    const b = getDailyPuzzle(new Date(Date.UTC(2026, 7, 8)));
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it('is a real, legal, solvable puzzle (same shape every curated/generated puzzle is held to)', () => {
+    const puzzle = getDailyPuzzle(new Date(Date.UTC(2026, 7, 7)));
+    expect(() => puzzleStartState(puzzle)).not.toThrow();
+    const state = puzzleStartState(puzzle);
+    const moves = legalMoves(state);
+    expect(
+      moves.some(
+        (m) =>
+          m.from.row === puzzle.solutionFrom.row &&
+          m.from.col === puzzle.solutionFrom.col &&
+          m.to.row === puzzle.solutionTo.row &&
+          m.to.col === puzzle.solutionTo.col,
+      ),
+    ).toBe(true);
+    expect(() => puzzleSolvedState(puzzle)).not.toThrow();
+  });
+
+  it("id always starts with 'daily-' and encodes the seed", () => {
+    const puzzle = getDailyPuzzle(new Date(Date.UTC(2026, 7, 7)));
+    expect(puzzle.id).toBe('daily-20260807');
   });
 });

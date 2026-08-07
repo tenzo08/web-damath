@@ -22,6 +22,7 @@ import { LoginModal } from './components/LoginModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { SettingsModal } from './components/SettingsModal';
 import { LobbyScreen } from './components/LobbyScreen';
+import { Footer } from './components/Footer';
 import { playerLabel } from './lib/notation';
 import { randomBotNickname } from './lib/botNicknames';
 import { verifyEmail } from './lib/authClient';
@@ -538,10 +539,12 @@ function AppShell() {
   const lockScroll = !isNarrow && (screen === 'game' || screen === 'online');
 
   return (
-    // `flexWrap` lets Rail (a normal 232px sidebar on wide screens, but a full-width top
-    // bar on narrow ones — see Rail.tsx's own `useMediaQuery`) push the game shell onto
-    // its own row underneath, purely by CSS reacting to Rail's own returned width.
-    <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, minWidth: 0, height: lockScroll ? '100dvh' : undefined, overflow: lockScroll ? 'hidden' : undefined }}>
+    <>
+      {/* `flexWrap` lets Rail (a normal 232px sidebar on wide screens, but a full-width
+          top bar on narrow ones — see Rail.tsx's own `useMediaQuery`) push the game
+          shell onto its own row underneath, purely by CSS reacting to Rail's own
+          returned width. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, minWidth: 0, height: lockScroll ? '100dvh' : undefined, overflow: lockScroll ? 'hidden' : undefined }}>
       {screen === 'lobby' && (
         <LobbyScreen
           user={auth.user}
@@ -745,7 +748,13 @@ function AppShell() {
         initialOpponent={setupInitial.opponent}
         fixedOpponentKind={setupFixedKind}
       />
-    </div>
+      </div>
+      {/* Omitted during locked-scroll gameplay (see the `height: 100dvh, overflow:
+          hidden` above) — that layout deliberately fits the board to one viewport with
+          no page scroll, and a footer there would either clip or force back the exact
+          scrolling it exists to avoid. */}
+      {!lockScroll && <Footer />}
+    </>
   );
 }
 

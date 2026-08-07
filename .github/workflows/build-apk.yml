@@ -1,0 +1,67 @@
+name: Build Android APK
+
+# Rebuilds the sideload APK (apps/twa) on every push to main, so it always reflects
+# whatever's actually deployed — "the apk... should be updated every single time there
+# is an update in the system automatically." Gated on the APK_ENABLED repository
+# variable so it stays a harmless no-op (not a permanently failing CI badge) until the
+# one-time setup in apps/twa/README.md is done: a real deployed domain in
+# twa-manifest.json and a signing keystore stored as repository secrets. Both are
+# genuinely required — a Trusted Web Activity can't wrap a domain that doesn't exist yet,
+# and Android refuses to install an "update" signed with a different key than whatever's
+# already installed.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    if: ${{ vars.APK_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Decode signing keystore
+        working-directory: apps/twa
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
+
+      - name: Generate the Android project from twa-manifest.json
+        working-directory: apps/twa
+        run: bubblewrap init --manifest ./twa-manifest.json --skipPwaValidation
+
+      - name: Build the signed APK
+        working-directory: apps/twa
+        run: |
+          bubblewrap build \
+            --skipPwaValidation \
+            --password "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --alias damath \
+            --aliasPassword "${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Rename to a stable asset filename
+        working-directory: apps/twa
+        # Same name every run -- the footer's download link (apps/web/src/components/
+        # Footer.tsx) never has to change to match whatever Bubblewrap happened to call it.
+        run: mv app-release-signed.apk damath.apk
+
+      - name: Publish to the "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Damath (Android, sideload)
+          body: |
+            Automatically rebuilt from `main` on every push. Sideload-only — download
+            `damath.apk` and install it directly; this isn't on the Play Store.
+          files: apps/twa/damath.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

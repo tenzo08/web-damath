@@ -60,7 +60,11 @@ export function Board<V>({
         gridTemplateRows: 'repeat(8, 1fr)',
         width: '100%',
         aspectRatio: '1',
-        maxWidth: 760,
+        // Capped by viewport height as well as width so the board (plus the clock and
+        // player cards stacked with it) actually fits a desktop viewport without
+        // forcing the page to scroll — a smaller, height-aware scale rather than the
+        // previous flat 760px, which regularly ran taller than the window.
+        maxWidth: 'min(560px, 58vh, 100%)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
         // Deliberately no `overflow: hidden` here — it would clip the focus ring at the

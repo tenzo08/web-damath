@@ -7,6 +7,7 @@ import { useComputerOpponent } from './hooks/useComputerOpponent';
 import { useGameClock } from './hooks/useGameClock';
 import { useAuth } from './hooks/useAuth';
 import { useLiveUpdates } from './hooks/useLiveUpdates';
+import { useMediaQuery, NARROW_QUERY } from './hooks/useMediaQuery';
 import { Board } from './components/Board';
 import { Rail } from './components/Rail';
 import { PlayerCard } from './components/PlayerCard';
@@ -170,38 +171,28 @@ function GameShellView<V>({
       style={{
         flex: '1 1 auto',
         minWidth: 0,
-        padding: 'var(--pad-xl)',
+        minHeight: 0,
+        padding: 'var(--pad-lg)',
         display: 'flex',
         justifyContent: 'center',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 'min(1800px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
         <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)', fontWeight: 700 }}>{variant.name}</h1>
           <p style={{ margin: 0, fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>{statusLine}</p>
         </header>
 
-        <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
-          {/* Controls (back/forward foremost) and the moves list, one single column on
-              the left of the board instead of two separate side columns. */}
-          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-            <GameControls
-              canUndo={canUndo}
-              canResign={canResign && !blockInteraction}
-              isViewingHistory={isViewingHistory}
-              flipped={flipped}
-              onUndo={undo}
-              onResign={resign}
-              onStepBack={stepBack}
-              onStepForward={stepForward}
-              onFlip={onFlip}
-            />
-            {/* The one section that's meant to scroll internally, per request — a fixed
-                max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
-            <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
-          </div>
-
-          <div style={{ flex: '3 1 420px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+        {/* Board (with the clock above it) on the left at a smaller scale, controls and
+            the moves list in a column to its right — chess.com's own arrangement.
+            `alignItems: 'stretch'` lets the right column match the board column's full
+            height, so MoveLedger's own `flex: 1` can actually use the leftover space
+            instead of the column just being as tall as GameControls alone. Below the
+            wrap breakpoint (narrow viewports) the row wraps and the controls column
+            drops beneath the board instead of beside it. */}
+        <div style={{ display: 'flex', gap: 'var(--gap-lg)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'stretch', minHeight: 0 }}>
+          <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
             <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
             {playerCard(topColor)}
             <Board
@@ -225,6 +216,23 @@ function GameShellView<V>({
               onClearSelection={clearSelection}
             />
             {playerCard(bottomColor)}
+          </div>
+
+          <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+            <GameControls
+              canUndo={canUndo}
+              canResign={canResign && !blockInteraction}
+              isViewingHistory={isViewingHistory}
+              flipped={flipped}
+              onUndo={undo}
+              onResign={resign}
+              onStepBack={stepBack}
+              onStepForward={stepForward}
+              onFlip={onFlip}
+            />
+            {/* The one section that's meant to scroll internally, per request — a fixed
+                max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
+            <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
           </div>
         </div>
       </div>
@@ -389,11 +397,20 @@ function AppShell() {
     onBackToLobby: () => setScreen('lobby'),
   };
 
+  // A live game screen fits the viewport height instead of scrolling the page on a
+  // desktop-width window — the board and its surrounding panels are sized (Board.tsx,
+  // OnlineBoard.tsx, GameShellView above) to fit inside it. Below `NARROW_QUERY`
+  // (phones/small tablets, same breakpoint Rail already switches layout at), this is
+  // deliberately left off: a real small screen still needs to scroll rather than
+  // squeeze everything into an unreadable size.
+  const isNarrow = useMediaQuery(NARROW_QUERY);
+  const lockScroll = !isNarrow && (screen === 'game' || screen === 'online');
+
   return (
     // `flexWrap` lets Rail (a normal 232px sidebar on wide screens, but a full-width top
     // bar on narrow ones — see Rail.tsx's own `useMediaQuery`) push the game shell onto
     // its own row underneath, purely by CSS reacting to Rail's own returned width.
-    <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, minWidth: 0, height: lockScroll ? '100dvh' : undefined, overflow: lockScroll ? 'hidden' : undefined }}>
       {screen === 'lobby' && (
         <LobbyScreen
           user={auth.user}

@@ -1,4 +1,4 @@
-import { ALL_VARIANTS, COUNTING_DAMATH, INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
+import { ALL_VARIANTS, INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
 import type { AnyVariant, GameState, Move, Player, Position, Variant } from '@damath/engine';
 import { toNumberFor } from '@damath/ai';
 import { playerLabel } from './notation';

@@ -17,6 +17,7 @@ import { isPlayable } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useSettings } from '../lib/settings';
 import { playCaptureSound, playErrorSound, playWinSound } from '../lib/sound';
+import { markFirstPuzzleSolved } from '../lib/clientAchievements';
 
 interface PuzzleScreenProps {
   onBackToLobby: () => void;
@@ -197,6 +198,7 @@ export function PuzzleScreen({ onBackToLobby, onPuzzleRush }: PuzzleScreenProps)
         setStatus('solved');
         setFeedback(null);
         if (mode === 'daily') markDailySolved(puzzle.id);
+        markFirstPuzzleSolved();
         if (move.captures.length > 0) playCaptureSound(effectiveVolume);
         else playWinSound(effectiveVolume);
       } else {

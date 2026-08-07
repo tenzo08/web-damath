@@ -44,6 +44,7 @@ const PuzzleScreen = lazy(() => import('./components/PuzzleScreen').then((m) => 
 const LeaderboardScreen = lazy(() => import('./components/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
 const PuzzleRushScreen = lazy(() => import('./components/PuzzleRushScreen').then((m) => ({ default: m.PuzzleRushScreen })));
 const GameReviewScreen = lazy(() => import('./components/GameReviewScreen').then((m) => ({ default: m.GameReviewScreen })));
+const AchievementsScreen = lazy(() => import('./components/AchievementsScreen').then((m) => ({ default: m.AchievementsScreen })));
 
 /** The Suspense fallback for every lazy screen above — brief by design, since these are small chunks even on slow connections; just enough to avoid a blank flash. */
 function ScreenFallback() {
@@ -365,7 +366,7 @@ function GameShell<V>({
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush' | 'review';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush' | 'review' | 'achievements';
 
 /**
  * Real URL paths for each screen, and the browser's own back/forward — there was no
@@ -386,6 +387,7 @@ const SCREEN_PATHS: Record<Screen, string> = {
   leaderboard: '/leaderboard',
   puzzleRush: '/puzzles/rush',
   review: '/review',
+  achievements: '/achievements',
 };
 
 function screenFromPath(pathname: string): Screen {
@@ -556,6 +558,7 @@ function AppShell() {
           onTournaments={() => navigate('tournaments')}
           onPuzzles={() => navigate('puzzles')}
           onLeaderboard={auth.user ? () => navigate('leaderboard') : null}
+          onAchievements={auth.user ? () => navigate('achievements') : null}
           onMatchHistory={auth.user ? () => navigate('history') : null}
           onSpectate={auth.user ? () => navigate('spectate') : null}
           onlineCount={live.onlineCount}
@@ -584,6 +587,12 @@ function AppShell() {
       {screen === 'leaderboard' && (
         <Suspense fallback={<ScreenFallback />}>
           <LeaderboardScreen token={auth.token} myUserId={auth.user?.id ?? null} onBackToLobby={() => navigate('lobby')} />
+        </Suspense>
+      )}
+
+      {screen === 'achievements' && (
+        <Suspense fallback={<ScreenFallback />}>
+          <AchievementsScreen token={auth.token} onBackToLobby={() => navigate('lobby')} />
         </Suspense>
       )}
 

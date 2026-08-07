@@ -15,6 +15,8 @@ interface LobbyScreenProps {
   onPuzzles: () => void;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled, same reasoning as `onMatchHistory`/`onSpectate` (the leaderboard route itself requires sign-in). */
   onLeaderboard: (() => void) | null;
+  /** Same reasoning as `onLeaderboard` — the game-derived badges need a signed-in account's own game history. */
+  onAchievements: (() => void) | null;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled. */
   onMatchHistory: (() => void) | null;
   /** `null` when signed out, same reasoning as `onMatchHistory`. */
@@ -89,6 +91,7 @@ export function LobbyScreen({
   onTournaments,
   onPuzzles,
   onLeaderboard,
+  onAchievements,
   onMatchHistory,
   onSpectate,
   onlineCount,
@@ -179,6 +182,9 @@ export function LobbyScreen({
           <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
           {onLeaderboard && (
             <ModeCard icon="📊" title={t('lobby.leaderboard.title')} description={t('lobby.leaderboard.description')} onClick={onLeaderboard} />
+          )}
+          {onAchievements && (
+            <ModeCard icon="🎖️" title={t('lobby.achievements.title')} description={t('lobby.achievements.description')} onClick={onAchievements} />
           )}
           {onMatchHistory && (
             <ModeCard icon="📜" title={t('lobby.matchHistory.title')} description={t('lobby.matchHistory.description')} onClick={onMatchHistory} />

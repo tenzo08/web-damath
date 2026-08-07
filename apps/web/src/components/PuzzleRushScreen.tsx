@@ -7,6 +7,7 @@ import { isPlayable } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useSettings } from '../lib/settings';
 import { playCaptureSound, playErrorSound, playLossSound, playWinSound } from '../lib/sound';
+import { markFirstPuzzleSolved } from '../lib/clientAchievements';
 
 interface PuzzleRushScreenProps {
   onBackToPuzzles: () => void;
@@ -198,6 +199,7 @@ export function PuzzleRushScreen({ onBackToPuzzles }: PuzzleRushScreenProps) {
       const nextState = applyMove(state, move, puzzle.variant, { checkGameOver: false });
       setState(nextState);
       setScore((s) => s + 1);
+      markFirstPuzzleSolved();
       if (move.captures.length > 0) playCaptureSound(effectiveVolume);
       else playWinSound(effectiveVolume);
       // A short beat so the solved position is actually visible before the next puzzle

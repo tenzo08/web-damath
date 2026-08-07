@@ -403,17 +403,8 @@ export function OnlineGameScreen({
               {online.color === null && (
                 <p style={{ width: '100%', margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>Spectating</p>
               )}
-              <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-                {playerCardFor(topColor, online.view)}
-                <OnlineBoard
-                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
-                  selected={selected}
-                  myColor={online.color}
-                  legalFrom={legalFrom}
-                  onActivateSquare={activateSquare}
-                />
-                {playerCardFor(bottomColor, online.view)}
-              </div>
+              {/* Controls (back/forward foremost) and the moves list, one single column
+                  on the left of the board instead of two separate side columns. */}
               <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
                 {online.view.status === 'finished' && (
                   <div style={cardStyle}>
@@ -492,10 +483,21 @@ export function OnlineGameScreen({
                 {token && online.color !== null && online.view.opponentType === 'human' && opponentUserId && (
                   <ReportBlockButtons token={token} targetUserId={opponentUserId} targetName="your opponent" roomId={online.view.roomId} />
                 )}
+                {/* The one section that's meant to scroll internally, per request — a
+                    fixed max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
+                <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
               </div>
 
-              <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
-                <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
+              <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+                {playerCardFor(topColor, online.view)}
+                <OnlineBoard
+                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
+                  selected={selected}
+                  myColor={online.color}
+                  legalFrom={legalFrom}
+                  onActivateSquare={activateSquare}
+                />
+                {playerCardFor(bottomColor, online.view)}
               </div>
             </div>
           )}

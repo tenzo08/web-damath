@@ -182,7 +182,27 @@ function GameShellView<V>({
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
+          {/* Controls (back/forward foremost) and the moves list, one single column on
+              the left of the board instead of two separate side columns. */}
+          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+            <GameControls
+              canUndo={canUndo}
+              canResign={canResign && !blockInteraction}
+              isViewingHistory={isViewingHistory}
+              flipped={flipped}
+              onUndo={undo}
+              onResign={resign}
+              onStepBack={stepBack}
+              onStepForward={stepForward}
+              onFlip={onFlip}
+            />
+            {/* The one section that's meant to scroll internally, per request — a fixed
+                max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
+            <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
+          </div>
+
           <div style={{ flex: '3 1 420px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+            <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
             {playerCard(topColor)}
             <Board
               game={boardGame}
@@ -205,27 +225,6 @@ function GameShellView<V>({
               onClearSelection={clearSelection}
             />
             {playerCard(bottomColor)}
-          </div>
-
-          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-            <ClockPanel gameSeconds={clock.gameSeconds} moveSeconds={clock.moveSeconds} moveClockWaived={moveClockWaived} />
-            <GameControls
-              canUndo={canUndo}
-              canResign={canResign && !blockInteraction}
-              isViewingHistory={isViewingHistory}
-              flipped={flipped}
-              onUndo={undo}
-              onResign={resign}
-              onStepBack={stepBack}
-              onStepForward={stepForward}
-              onFlip={onFlip}
-            />
-          </div>
-
-          {/* The one column that's meant to scroll internally, per request — a fixed
-              max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
-          <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
-            <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
           </div>
         </div>
       </div>

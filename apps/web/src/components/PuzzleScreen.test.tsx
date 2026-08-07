@@ -7,7 +7,7 @@ import { PuzzleScreen } from './PuzzleScreen';
 function renderPuzzleScreen() {
   render(
     <SettingsProvider>
-      <PuzzleScreen onBackToLobby={() => {}} />
+      <PuzzleScreen onBackToLobby={() => {}} onPuzzleRush={() => {}} />
     </SettingsProvider>,
   );
 }

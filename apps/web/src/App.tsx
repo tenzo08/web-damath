@@ -41,6 +41,7 @@ const MatchHistoryScreen = lazy(() => import('./components/MatchHistoryScreen').
 const SpectateScreen = lazy(() => import('./components/SpectateScreen').then((m) => ({ default: m.SpectateScreen })));
 const PuzzleScreen = lazy(() => import('./components/PuzzleScreen').then((m) => ({ default: m.PuzzleScreen })));
 const LeaderboardScreen = lazy(() => import('./components/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
+const PuzzleRushScreen = lazy(() => import('./components/PuzzleRushScreen').then((m) => ({ default: m.PuzzleRushScreen })));
 
 /** The Suspense fallback for every lazy screen above — brief by design, since these are small chunks even on slow connections; just enough to avoid a blank flash. */
 function ScreenFallback() {
@@ -356,7 +357,7 @@ function GameShell<V>({
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush';
 
 /**
  * Real URL paths for each screen, and the browser's own back/forward — there was no
@@ -375,6 +376,7 @@ const SCREEN_PATHS: Record<Screen, string> = {
   spectate: '/spectate',
   puzzles: '/puzzles',
   leaderboard: '/leaderboard',
+  puzzleRush: '/puzzles/rush',
 };
 
 function screenFromPath(pathname: string): Screen {
@@ -542,7 +544,13 @@ function AppShell() {
 
       {screen === 'puzzles' && (
         <Suspense fallback={<ScreenFallback />}>
-          <PuzzleScreen onBackToLobby={() => navigate('lobby')} />
+          <PuzzleScreen onBackToLobby={() => navigate('lobby')} onPuzzleRush={() => navigate('puzzleRush')} />
+        </Suspense>
+      )}
+
+      {screen === 'puzzleRush' && (
+        <Suspense fallback={<ScreenFallback />}>
+          <PuzzleRushScreen onBackToPuzzles={() => navigate('puzzles')} />
         </Suspense>
       )}
 

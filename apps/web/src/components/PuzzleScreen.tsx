@@ -20,6 +20,7 @@ import { playCaptureSound, playErrorSound, playWinSound } from '../lib/sound';
 
 interface PuzzleScreenProps {
   onBackToLobby: () => void;
+  onPuzzleRush: () => void;
 }
 
 /** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses" — same trick App.tsx's `GameShell` call site already relies on, needed here because a generated puzzle's variant (and so its chip value type `V`) can change at runtime as the player picks a different one to generate from. */
@@ -132,7 +133,7 @@ function buildRows<V>(
  * alongside it, procedurally building an unlimited supply of the same two tactical
  * shapes (`generatePuzzle`) for whichever of the three number-typed variants is picked.
  */
-export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
+export function PuzzleScreen({ onBackToLobby, onPuzzleRush }: PuzzleScreenProps) {
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState<'curated' | 'generated' | 'daily'>('curated');
   const [generated, setGenerated] = useState<Puzzle<AnyPuzzleValue> | null>(null);
@@ -258,13 +259,14 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
             ← Lobby
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Puzzles</h1>
-          <button
-            type="button"
-            onClick={goToDaily}
-            style={{ ...(mode === 'daily' ? primaryButton : secondaryButton), marginLeft: 'auto' }}
-          >
-            ⭐ Today's Puzzle{isDailySolved(dailyPuzzle.id) ? ' ✓' : ''}
-          </button>
+          <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginLeft: 'auto' }}>
+            <button type="button" onClick={onPuzzleRush} style={secondaryButton}>
+              🏃 Puzzle Rush
+            </button>
+            <button type="button" onClick={goToDaily} style={mode === 'daily' ? primaryButton : secondaryButton}>
+              ⭐ Today's Puzzle{isDailySolved(dailyPuzzle.id) ? ' ✓' : ''}
+            </button>
+          </div>
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>

@@ -13,7 +13,7 @@ export interface TournamentMatchRef {
 export interface PublicGameView {
   readonly roomId: string;
   readonly variantId: VariantId;
-  readonly board: readonly (readonly ({ owner: Player; isDama: boolean; value: string } | null)[])[];
+  readonly board: readonly (readonly ({ id: string; owner: Player; isDama: boolean; value: string } | null)[])[];
   readonly turn: Player;
   readonly scores: { readonly white: string; readonly black: string };
   readonly status: 'active' | 'finished';
@@ -157,7 +157,7 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
       roomId: params.id,
       variantId: params.variant.id,
       board: game.board.map((row) =>
-        row.map((piece) => (piece ? { owner: piece.owner, isDama: piece.isDama, value: arithmetic.format(piece.value) } : null)),
+        row.map((piece) => (piece ? { id: piece.id, owner: piece.owner, isDama: piece.isDama, value: arithmetic.format(piece.value) } : null)),
       ),
       turn: game.turn,
       scores: { white: arithmetic.format(game.scores.white), black: arithmetic.format(game.scores.black) },

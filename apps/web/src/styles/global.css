@@ -132,6 +132,19 @@ select {
   pointer-events: none;
 }
 
+/* Board.tsx's PieceLayer overlay — a piece's `top`/`left` change between renders while
+   the same DOM node persists (keyed by piece.id, not by square), so this transition is
+   what actually animates a move as a slide instead of an instant snap. Deliberately not
+   transitioning `width`/`height` (irrelevant here) or using `transform` (percentage
+   `top`/`left` against the overlay's own box is simpler and plenty fast for at most a
+   couple of dozen pieces). `--dur-*` zeroing under `prefers-reduced-motion: reduce`
+   (tokens.css) disables this automatically, same as every other animation in this file. */
+.board-piece {
+  transition:
+    top calc(var(--dur-base) * 2) var(--ease),
+    left calc(var(--dur-base) * 2) var(--ease);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

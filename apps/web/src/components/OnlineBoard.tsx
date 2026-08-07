@@ -50,6 +50,7 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
         maxWidth: 'min(560px, 58vh, 100%)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
+        position: 'relative',
       }}
     >
       {rows.map((row) =>
@@ -81,17 +82,47 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
                 cursor: 'pointer',
               }}
             >
-              {piece ? (
-                <MiniPieceView owner={piece.owner} isDama={piece.isDama} label={piece.value} />
-              ) : (
-                <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
-                  {operationGlyph(operationAt(pos))}
-                </span>
-              )}
+              {/* The piece itself renders in the absolutely-positioned overlay below,
+                  keyed by `piece.id` so a move animates as a slide (see Board.tsx's
+                  PieceLayer for the identical local-play reasoning) — this glyph is
+                  rendered unconditionally and simply gets visually covered when a piece
+                  occupies the square. */}
+              <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
+                {operationGlyph(operationAt(pos))}
+              </span>
             </button>
           );
         }),
       )}
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {rows.flatMap((row) =>
+          cols
+            .map((col) => ({ row, col, piece: view.board[row]?.[col] ?? null }))
+            .filter((entry): entry is { row: number; col: number; piece: WirePiece } => entry.piece !== null)
+            .map(({ row, col, piece }) => {
+              const visualRow = flipped ? row : 7 - row;
+              const visualCol = flipped ? 7 - col : col;
+              return (
+                <div
+                  key={piece.id}
+                  className="board-piece"
+                  style={{
+                    position: 'absolute',
+                    top: `${String(visualRow * 12.5)}%`,
+                    left: `${String(visualCol * 12.5)}%`,
+                    width: '12.5%',
+                    height: '12.5%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MiniPieceView owner={piece.owner} isDama={piece.isDama} label={piece.value} />
+                </div>
+              );
+            }),
+        )}
+      </div>
     </div>
   );
 }

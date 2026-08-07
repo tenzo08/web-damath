@@ -74,7 +74,7 @@ function buildOnlineLedger(variant: Variant<AnyValue>, moveHistory: readonly unk
 function replayedWireBoard(variant: Variant<AnyValue>, moveHistory: readonly unknown[], upTo: number): PublicGameView['board'] {
   const replayed = replayMoves(variant, (moveHistory as Move<AnyValue>[]).slice(0, upTo));
   return replayed.board.map((row) =>
-    row.map((piece) => (piece ? { owner: piece.owner, isDama: piece.isDama, value: variant.arithmetic.format(piece.value) } : null)),
+    row.map((piece) => (piece ? { id: piece.id, owner: piece.owner, isDama: piece.isDama, value: variant.arithmetic.format(piece.value) } : null)),
   );
 }
 

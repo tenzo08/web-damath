@@ -3,6 +3,7 @@ import { operationAt, pieceAt } from '@damath/engine';
 import type { GameState, Move, Position } from '@damath/engine';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
 import { Square } from './Square';
+import { PieceLayer } from './PieceLayer';
 
 interface BoardProps<V> {
   game: GameState<V>;
@@ -66,6 +67,7 @@ export function Board<V>({
         gridTemplateRows: 'repeat(8, 1fr)',
         width: '100%',
         aspectRatio: '1',
+        position: 'relative',
         // Capped by viewport height as well as width so the board (plus the clock and
         // player cards stacked with it) actually fits a desktop viewport without
         // forcing the page to scroll — a smaller, height-aware scale rather than the
@@ -130,6 +132,7 @@ export function Board<V>({
           );
         }),
       )}
+      <PieceLayer game={game} format={format} flipped={flipped} />
     </div>
   );
 }

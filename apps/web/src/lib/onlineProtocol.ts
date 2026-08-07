@@ -6,6 +6,7 @@ import type { Player, Position, VariantId } from '@damath/engine';
  * WebSocket, the same boundary any two independently-deployable services would have).
  */
 export interface WirePiece {
+  id: string;
   owner: Player;
   isDama: boolean;
   value: string;

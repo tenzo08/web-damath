@@ -1,7 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Operation, Piece as PieceModel, Position } from '@damath/engine';
 import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
-import { Piece } from './Piece';
 
 interface SquareProps<V> {
   pos: Position;
@@ -91,15 +90,14 @@ export function Square<V>({
       }}
     >
       {/* The physical board prints the operation in the square's center — and once a
-          chip sits on that square, the printed glyph is physically covered. A piece
-          hides the operation entirely rather than the two ever sharing the square. */}
-      {piece ? (
-        <Piece piece={piece} format={format} />
-      ) : (
-        <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
-          {operationGlyph(operation)}
-        </span>
-      )}
+          chip sits on that square, the printed glyph is physically covered. Rendered
+          unconditionally here: the piece itself now lives in Board.tsx's `PieceLayer`
+          overlay (a separate absolutely-positioned layer, keyed by piece id so a move
+          animates instead of snapping — see PieceLayer.tsx), which visually covers this
+          glyph by stacking on top whenever a piece actually occupies the square. */}
+      <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
+        {operationGlyph(operation)}
+      </span>
     </button>
   );
 }

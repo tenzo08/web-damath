@@ -123,18 +123,23 @@ export function LobbyScreen({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', minWidth: 0 }}>
           <ProfileButton user={user} onOpenSettings={onOpenSettings} onSignIn={onSignIn} />
+          <LocaleSwitcher />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', justifyContent: narrow ? 'space-between' : 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           {onlineCount !== null && (
             <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
               {onlineCount} online
             </span>
           )}
-          <LocaleSwitcher />
         </div>
       </header>
 
+      {/* `flex-start` with a small capped top gap, not `center` -- centering the whole
+          block vertically left a huge dead gap above "Damath" on any screen taller than
+          the content on its own (found by actually rendering this at a real 1080p-plus
+          viewport). `clamp()` keeps that top gap small on a short viewport and bounded
+          on a tall one, instead of scaling all the way up with available space. */}
       <div
         style={{
           flex: 1,
@@ -143,11 +148,12 @@ export function LobbyScreen({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
+          paddingTop: 'clamp(8px, 4vh, 48px)',
           gap: 'var(--gap-xl)',
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center' }}>Damath</h1>
+        <h1 style={{ margin: 0, fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center' }}>Damath</h1>
         <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560, textAlign: 'center' }}>{t('lobby.tagline')}</p>
 
         {/* Fixed 4-column, 2-row grid — up to eight mode cards (six always shown, plus

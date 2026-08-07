@@ -147,7 +147,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
       gameStore: options.gameStore,
       userStore: options.userStore,
       moderationStore: options.moderationStore,
-      queueBotTimeoutMs: options.queueBotTimeoutMs ?? 45000,
+      queueBotTimeoutMs: options.queueBotTimeoutMs ?? 90000,
       queueBotEnabled: options.queueBotEnabled ?? true,
       queueBotTier: options.queueBotTier ?? 'steady',
       // A drawn match (no clear winner) is left for the manual report route — Damath has

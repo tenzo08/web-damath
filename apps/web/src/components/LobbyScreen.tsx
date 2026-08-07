@@ -12,11 +12,8 @@ interface LobbyScreenProps {
   onPlayOnline: () => void;
   onLearn: () => void;
   onTournaments: () => void;
-  onPuzzles: () => void;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled, same reasoning as `onMatchHistory`/`onSpectate` (the leaderboard route itself requires sign-in). */
   onLeaderboard: (() => void) | null;
-  /** Same reasoning as `onLeaderboard` — the game-derived badges need a signed-in account's own game history. */
-  onAchievements: (() => void) | null;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled. */
   onMatchHistory: (() => void) | null;
   /** `null` when signed out, same reasoning as `onMatchHistory`. */
@@ -89,9 +86,7 @@ export function LobbyScreen({
   onPlayOnline,
   onLearn,
   onTournaments,
-  onPuzzles,
   onLeaderboard,
-  onAchievements,
   onMatchHistory,
   onSpectate,
   onlineCount,
@@ -162,10 +157,10 @@ export function LobbyScreen({
         <h1 style={{ margin: 0, fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center' }}>Damath</h1>
         <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560, textAlign: 'center' }}>{t('lobby.tagline')}</p>
 
-        {/* Fixed 4-column, 2-row grid — up to eight mode cards (six always shown, plus
-            Match History and Spectate once signed in) fill it exactly. Drops to 2
-            columns below NARROW_QUERY, where 4 across would squeeze each card under
-            100px wide. */}
+        {/* Fixed 4-column, 2-row grid — up to eight mode cards (five always shown, plus
+            Leaderboard, Match History, and Spectate once signed in) fill it exactly.
+            Drops to 2 columns below NARROW_QUERY, where 4 across would squeeze each
+            card under 100px wide. */}
         <div
           style={{
             display: 'grid',
@@ -178,13 +173,9 @@ export function LobbyScreen({
           <ModeCard icon="🤖" title={t('lobby.playComputer.title')} description={t('lobby.playComputer.description')} onClick={onPlayComputer} />
           <ModeCard icon="🌐" title={t('lobby.playOnline.title')} description={t('lobby.playOnline.description')} onClick={onPlayOnline} />
           <ModeCard icon="🎓" title={t('lobby.learn.title')} description={t('lobby.learn.description')} onClick={onLearn} />
-          <ModeCard icon="🧩" title={t('lobby.puzzles.title')} description={t('lobby.puzzles.description')} onClick={onPuzzles} />
           <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
           {onLeaderboard && (
             <ModeCard icon="📊" title={t('lobby.leaderboard.title')} description={t('lobby.leaderboard.description')} onClick={onLeaderboard} />
-          )}
-          {onAchievements && (
-            <ModeCard icon="🎖️" title={t('lobby.achievements.title')} description={t('lobby.achievements.description')} onClick={onAchievements} />
           )}
           {onMatchHistory && (
             <ModeCard icon="📜" title={t('lobby.matchHistory.title')} description={t('lobby.matchHistory.description')} onClick={onMatchHistory} />

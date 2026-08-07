@@ -31,20 +31,17 @@ import { SettingsProvider, useSettings } from './lib/settings';
 import { playCaptureSound, playMoveSound, playWinSound } from './lib/sound';
 
 // Split out of the initial bundle — none of these are needed for the very first
-// paint (the lobby), and TutorialModal/PuzzleScreen in particular carry a fair amount
-// of their own data (board diagrams, curated puzzles). `.then(m => ({default: m.X}))`
-// adapts each named export to what `lazy()` requires, without adding a default export
-// to components other call sites already import by name.
+// paint (the lobby), and TutorialModal in particular carries a fair amount of its own
+// data (board diagrams). `.then(m => ({default: m.X}))` adapts each named export to
+// what `lazy()` requires, without adding a default export to components other call
+// sites already import by name.
 const TutorialModal = lazy(() => import('./components/TutorialModal').then((m) => ({ default: m.TutorialModal })));
 const OnlineGameScreen = lazy(() => import('./components/OnlineGameScreen').then((m) => ({ default: m.OnlineGameScreen })));
 const TournamentScreen = lazy(() => import('./components/TournamentScreen').then((m) => ({ default: m.TournamentScreen })));
 const MatchHistoryScreen = lazy(() => import('./components/MatchHistoryScreen').then((m) => ({ default: m.MatchHistoryScreen })));
 const SpectateScreen = lazy(() => import('./components/SpectateScreen').then((m) => ({ default: m.SpectateScreen })));
-const PuzzleScreen = lazy(() => import('./components/PuzzleScreen').then((m) => ({ default: m.PuzzleScreen })));
 const LeaderboardScreen = lazy(() => import('./components/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
-const PuzzleRushScreen = lazy(() => import('./components/PuzzleRushScreen').then((m) => ({ default: m.PuzzleRushScreen })));
 const GameReviewScreen = lazy(() => import('./components/GameReviewScreen').then((m) => ({ default: m.GameReviewScreen })));
-const AchievementsScreen = lazy(() => import('./components/AchievementsScreen').then((m) => ({ default: m.AchievementsScreen })));
 
 /** The Suspense fallback for every lazy screen above — brief by design, since these are small chunks even on slow connections; just enough to avoid a blank flash. */
 function ScreenFallback() {
@@ -366,14 +363,14 @@ function GameShell<V>({
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush' | 'review' | 'achievements';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'leaderboard' | 'review';
 
 /**
  * Real URL paths for each screen, and the browser's own back/forward — there was no
  * client router at all before this (every "go back" was purely an in-memory state
  * change), so pressing the phone's/browser's back button just left the site entirely
  * instead of returning to the previous screen. `vercel.json`'s rewrite already serves
- * `index.html` for any path, so a direct visit or refresh on e.g. `/puzzles` works
+ * `index.html` for any path, so a direct visit or refresh on e.g. `/tournaments` works
  * once the client reads the path back into `screen` on mount, below.
  */
 const SCREEN_PATHS: Record<Screen, string> = {
@@ -383,11 +380,8 @@ const SCREEN_PATHS: Record<Screen, string> = {
   tournaments: '/tournaments',
   history: '/history',
   spectate: '/spectate',
-  puzzles: '/puzzles',
   leaderboard: '/leaderboard',
-  puzzleRush: '/puzzles/rush',
   review: '/review',
-  achievements: '/achievements',
 };
 
 function screenFromPath(pathname: string): Screen {
@@ -566,26 +560,12 @@ function AppShell() {
           onPlayOnline={() => navigate('online')}
           onLearn={() => setTutorialOpen(true)}
           onTournaments={() => navigate('tournaments')}
-          onPuzzles={() => navigate('puzzles')}
           onLeaderboard={auth.user ? () => navigate('leaderboard') : null}
-          onAchievements={auth.user ? () => navigate('achievements') : null}
           onMatchHistory={auth.user ? () => navigate('history') : null}
           onSpectate={auth.user ? () => navigate('spectate') : null}
           onlineCount={live.onlineCount}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-      )}
-
-      {screen === 'puzzles' && (
-        <Suspense fallback={<ScreenFallback />}>
-          <PuzzleScreen onBackToLobby={() => navigate('lobby')} onPuzzleRush={() => navigate('puzzleRush')} />
-        </Suspense>
-      )}
-
-      {screen === 'puzzleRush' && (
-        <Suspense fallback={<ScreenFallback />}>
-          <PuzzleRushScreen onBackToPuzzles={() => navigate('puzzles')} />
-        </Suspense>
       )}
 
       {screen === 'review' && reviewContext && (
@@ -597,12 +577,6 @@ function AppShell() {
       {screen === 'leaderboard' && (
         <Suspense fallback={<ScreenFallback />}>
           <LeaderboardScreen token={auth.token} myUserId={auth.user?.id ?? null} onBackToLobby={() => navigate('lobby')} />
-        </Suspense>
-      )}
-
-      {screen === 'achievements' && (
-        <Suspense fallback={<ScreenFallback />}>
-          <AchievementsScreen token={auth.token} onBackToLobby={() => navigate('lobby')} />
         </Suspense>
       )}
 

@@ -56,9 +56,9 @@ describe('browser back/forward navigation', () => {
   });
 
   it('a direct visit to a screen URL (e.g. a refresh) lands on that screen instead of always the lobby', async () => {
-    window.history.replaceState(null, '', '/puzzles');
+    window.history.replaceState(null, '', '/tournaments');
     render(<App />);
-    expect(await screen.findByRole('heading', { name: 'Puzzles' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tournaments' })).toBeInTheDocument();
   });
 
   it('an unrecognised path falls back to the lobby rather than a blank screen', () => {

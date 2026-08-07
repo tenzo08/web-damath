@@ -34,7 +34,7 @@ function squareName(pos: Position): string {
   return `${String.fromCharCode(97 + pos.col)}${String(pos.row + 1)}`;
 }
 
-/** Mirrors PuzzleScreen.tsx's own buildRows exactly (read-only here — no onActivate, this is a replay, not a puzzle to solve). See PuzzleRushScreen.tsx's identical doc comment for why this is a small separate copy rather than a shared import. */
+/** Builds a read-only diagram of one ply's board state for `MiniBoard`. */
 function buildRows<V>(state: ReturnType<typeof replayMoves<V>>, variant: Variant<V>, flipped: boolean): (MiniSquareSpec | null)[][] {
   const rowOrder = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const colOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];

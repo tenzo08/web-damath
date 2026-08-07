@@ -48,8 +48,7 @@ export function useGameReview<V>(variant: Variant<V>, moveHistory: readonly Move
         // Without this, a worker that throws (a bundling issue, a genuine runtime bug
         // inside @damath/ai) leaves this Promise permanently unresolved — `analyzing`
         // would stay `true` forever with no way for the UI to know anything went wrong,
-        // unlike LeaderboardScreen/AchievementsScreen's own fetches, which both have a
-        // real error path.
+        // unlike LeaderboardScreen's own fetch, which has a real error path.
         worker.onerror = (event: ErrorEvent) => {
           worker.terminate();
           if (liveWorker === worker) liveWorker = null;

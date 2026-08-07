@@ -10,7 +10,6 @@ import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
 import { registerSpectateRoutes } from './game/spectate.js';
 import { registerLeaderboardRoutes } from './rating/routes.js';
-import { registerAchievementRoutes } from './achievements/routes.js';
 import type { GameStore } from './game/store.js';
 import { redactTokenFromUrl } from './log.js';
 import type { RoomManager } from './game/rooms.js';
@@ -132,7 +131,6 @@ export function buildApp(options: AppOptions): FastifyInstance {
     registerSpectateRoutes(app, options.gameStore, options.userStore);
     registerModerationRoutes(app, options.moderationStore, options.userStore);
     registerLeaderboardRoutes(app, options.userStore);
-    registerAchievementRoutes(app, options.gameStore);
 
     app.get('/health', async () => ({ status: 'ok' }));
 

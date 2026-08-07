@@ -4,9 +4,9 @@ import type { MiniSquareSpec } from './diagram/MiniBoard';
 
 /**
  * These diagrams are illustrative excerpts, not positions replayed through the real
- * engine (`lib/puzzles.ts`'s `PUZZLES` are that already) -- so nothing here can call
- * `legalMoves`. Instead this mechanically checks the two properties a human reviewer
- * would otherwise have to eyeball: every diagram is a real checkerboard (playable iff
+ * engine -- so nothing here can call `legalMoves`. Instead this mechanically checks
+ * the two properties a human reviewer would otherwise have to eyeball: every diagram
+ * is a real checkerboard (playable iff
  * `row + col` is odd, `docs/DAMATH_RULES.md` §1.2), and every arrow's `to` is actually
  * reachable from its `from` by a real one-step diagonal move or a real two-step
  * diagonal jump over an occupied square -- the exact shape of bug this test was written

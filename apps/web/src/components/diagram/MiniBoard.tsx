@@ -53,11 +53,9 @@ export interface MiniSquareSpec {
   playable?: boolean;
   /** A short caption drawn over the square corner — the tutorial uses this for step numbers/arrows ("1", "2", "→"). */
   badge?: string;
-  /** Set only by an interactive caller (PuzzleScreen) — every other use of this component stays a static, non-interactive diagram. */
-  onActivate?: (() => void) | undefined;
 }
 
-export function MiniSquareView({ operation, piece, highlight, playable = true, badge, onActivate }: MiniSquareSpec) {
+export function MiniSquareView({ operation, piece, highlight, playable = true, badge }: MiniSquareSpec) {
   if (!playable) {
     return <div style={{ background: 'var(--square-void)', aspectRatio: '1' }} />;
   }
@@ -67,19 +65,6 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
 
   return (
     <div
-      role={onActivate ? 'button' : undefined}
-      tabIndex={onActivate ? 0 : undefined}
-      onClick={onActivate}
-      onKeyDown={
-        onActivate
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onActivate();
-              }
-            }
-          : undefined
-      }
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -88,7 +73,6 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
         position: 'relative',
         background,
         boxShadow: highlight === 'selected' ? 'inset 0 0 0 2px var(--accent)' : undefined,
-        cursor: onActivate ? 'pointer' : undefined,
       }}
     >
       {piece ? (
@@ -150,7 +134,7 @@ export function MiniBoard({
     // child with a literal pixel `width` (below) makes that shrink-to-fit width the
     // same fixed pixel value — so the figure grew to match a "constant size" board
     // instead of the other way around, confirmed live (a 760px board stayed 760px wide
-    // inside a 395px-wide container). Found while investigating "the puzzle board...
+    // inside a 395px-wide container). Found while investigating "the diagram board...
     // is not dynamic on the size of the screen."
     <figure style={{ margin: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
       <div

@@ -146,13 +146,13 @@ select {
 }
 
 /* A restrained page-entrance animation applied globally to every screen's own `<main>`
-   root (LobbyScreen, PuzzleScreen, OnlineGameScreen, etc. — every top-level screen in
-   this app already uses `<main>` as its one container, confirmed across all of them
+   root (LobbyScreen, TournamentScreen, OnlineGameScreen, etc. — every top-level screen
+   in this app already uses `<main>` as its one container, confirmed across all of them
    rather than assumed). A CSS `animation` fires when the element is freshly inserted
    into the DOM, which is exactly what happens on a real screen navigation (App.tsx
    unmounts the old screen's `<main>` and mounts the new one) — it does NOT re-fire on
    ordinary in-page re-renders or interactive state changes within an already-mounted
-   screen (a board click, a puzzle solving, a timer tick), since those never recreate the
+   screen (a board click, a timer tick), since those never recreate the
    `<main>` node itself. One global rule instead of touching every screen component
    individually — "better animations on each page but don't overdo it," so this is a
    small opacity+rise, not a slide or bounce, and disabled entirely under

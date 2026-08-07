@@ -53,6 +53,17 @@ export function Rail({ onOpenTutorial, menuButton }: RailProps) {
         aria-label="Match settings"
         style={{
           width: '100%',
+          // Without this, AppShell's outer wrapper (a flex row that wraps this nav
+          // and `<main>` onto separate lines on narrow screens) stretches this line
+          // to fill whatever leftover vertical space the page has — the default
+          // cross-axis `align-items: stretch` a flex row gets when nothing overrides
+          // it. `<main>` doesn't mind (it wants to fill the height anyway), but this
+          // compact top bar isn't meant to be a tall block: stretched, its own
+          // *internal* flex-wrap children (title, menu button, tutorial button) then
+          // spread across that inflated height too, producing large gaps between them
+          // — found by measuring a real rendered nav at ~380px tall for ~90px of
+          // actual content.
+          alignSelf: 'flex-start',
           background: 'var(--surface-rail)',
           borderBottom: '1px solid var(--border)',
           display: 'flex',

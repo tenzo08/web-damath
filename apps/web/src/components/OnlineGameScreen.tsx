@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, applyMove, createGame, legalMoves, pieceAt, replayMoves } from '@damath/engine';
 import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
 import { positionKey } from '../lib/board';
+import { useMediaQuery, NARROW_QUERY } from '../hooks/useMediaQuery';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
 import { MoveLedger } from './MoveLedger';
@@ -118,6 +119,11 @@ export function OnlineGameScreen({
   onGameFinished,
 }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
+  // Same breakpoint Rail itself renders around — the "back to lobby" button below is
+  // full-width to match the wide sidebar's other buttons there, but forcing that same
+  // width in the narrow top bar wraps it onto its own oversized line (Rail.tsx's own
+  // doc comment has the fuller story).
+  const narrow = useMediaQuery(NARROW_QUERY);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
   // `null` means "viewing the live position" — same convention `useGame`'s `viewIndex`
@@ -295,7 +301,7 @@ export function OnlineGameScreen({
             type="button"
             onClick={onBackToLobby}
             style={{
-              width: '100%',
+              width: narrow ? undefined : '100%',
               background: 'var(--accent)',
               color: 'var(--accent-on)',
               border: 'none',

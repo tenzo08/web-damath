@@ -131,7 +131,8 @@ export function MiniBoard({
   arrows,
 }: {
   rows: (MiniSquareSpec | null)[][];
-  size?: number | undefined;
+  /** A pixel number, or any CSS width value (e.g. `'min(640px, 62vh, 100%)'`) for a board that should also shrink on short viewports, not just narrow ones. */
+  size?: number | string | undefined;
   label?: string | undefined;
   /** Drawn as arrows overlaid on the grid, from square-center to square-center — the tutorial uses this to show the actual path a move or capture takes, not just the before/after squares. */
   arrows?: readonly MiniArrowSpec[] | undefined;
@@ -142,7 +143,16 @@ export function MiniBoard({
   const cellCenter = (r: number, c: number) => ({ x: ((c + 0.5) / cols) * 100, y: ((r + 0.5) / rowCount) * 100 });
 
   return (
-    <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+    // `width: '100%'` here is what actually makes the board responsive, not just the
+    // grid div's own `maxWidth: '100%'` below — a percentage max-width only constrains
+    // against an already-sized containing block. Without an explicit width on this
+    // figure, it's a plain block box that shrink-to-fits its child instead, and a
+    // child with a literal pixel `width` (below) makes that shrink-to-fit width the
+    // same fixed pixel value — so the figure grew to match a "constant size" board
+    // instead of the other way around, confirmed live (a 760px board stayed 760px wide
+    // inside a 395px-wide container). Found while investigating "the puzzle board...
+    // is not dynamic on the size of the screen."
+    <figure style={{ margin: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
       <div
         role="img"
         aria-label={label ?? 'board diagram'}

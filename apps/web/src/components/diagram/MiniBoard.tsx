@@ -179,13 +179,28 @@ export function MiniBoard({
               const from = cellCenter(a.from.row, a.from.col);
               const to = cellCenter(a.to.row, a.to.col);
               const capture = a.kind === 'capture';
+              // Pull both ends in from the square centers so the line starts and ends
+              // at the edge of a chip rather than drawing straight through its center
+              // — a center-to-center line rendered directly on top of the departure
+              // piece's own printed number, making it unreadable. The piece circle is
+              // 72% of a square (MiniPieceView), so a 30%-of-a-cell inset clears it.
+              const dx = to.x - from.x;
+              const dy = to.y - from.y;
+              const length = Math.hypot(dx, dy) || 1;
+              const inset = (100 / cols) * 0.3;
+              const ux = dx / length;
+              const uy = dy / length;
+              const x1 = from.x + ux * inset;
+              const y1 = from.y + uy * inset;
+              const x2 = to.x - ux * inset;
+              const y2 = to.y - uy * inset;
               return (
                 <line
                   key={i}
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
                   stroke={capture ? 'var(--danger, #e35b5b)' : 'var(--accent)'}
                   strokeWidth={2.5}
                   strokeLinecap="round"

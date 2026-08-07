@@ -45,7 +45,9 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
         gridTemplateRows: 'repeat(8, 1fr)',
         width: '100%',
         aspectRatio: '1',
-        maxWidth: 760,
+        // Same viewport-height-aware cap as the local board (Board.tsx) — keeps the
+        // online board fitting a desktop viewport without forcing page scroll.
+        maxWidth: 'min(560px, 58vh, 100%)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
       }}

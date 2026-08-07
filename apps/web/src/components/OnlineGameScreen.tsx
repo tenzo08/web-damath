@@ -194,6 +194,23 @@ export function OnlineGameScreen({
     if (online.error && online.error !== previousError.current) playErrorSound(effectiveVolume);
     previousError.current = online.error;
   }, [online.error, effectiveVolume]);
+
+  // The "opponent found" transition (chess.com's own convention) — shown only for a
+  // genuine fresh pairing straight out of the matchmaking queue (`'queued' -> 'in_game'`
+  // via the `matched` message), never for rejoining an existing room from history,
+  // a tournament, spectating, or an automatic reconnect after a dropped connection —
+  // none of those are "the game really starting."
+  const [showMatchIntro, setShowMatchIntro] = useState(false);
+  const previousConnectionStatus = useRef(online.status);
+  useEffect(() => {
+    const wasQueued = previousConnectionStatus.current === 'queued';
+    previousConnectionStatus.current = online.status;
+    if (!wasQueued || online.status !== 'in_game') return undefined;
+    setShowMatchIntro(true);
+    const timer = setTimeout(() => setShowMatchIntro(false), 1800);
+    return () => clearTimeout(timer);
+  }, [online.status]);
+
   const displayBoard =
     online.view && variant && viewIndex !== null ? replayedWireBoard(variant, online.view.moveHistory, viewIndex) : online.view?.board;
 
@@ -293,8 +310,8 @@ export function OnlineGameScreen({
           </button>
         }
       />
-      <main style={{ flex: '1 1 auto', minWidth: 0, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <main style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, padding: 'var(--pad-lg)', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+        <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
             <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{titleText}</h1>
           </header>
@@ -382,8 +399,29 @@ export function OnlineGameScreen({
             </div>
           )}
 
-          {(online.status === 'in_game' || online.status === 'reconnecting') && online.view && (
-            <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
+          {showMatchIntro && online.view && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--pad-xl) 0' }}>
+              <div
+                className="match-intro-card"
+                style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)', alignItems: 'center', minWidth: 280 }}
+              >
+                <p style={{ margin: 0, fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+                  Opponent found
+                </p>
+                <div className="match-intro-side" style={{ width: '100%' }}>
+                  {playerCardFor(topColor, online.view)}
+                </div>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>vs</span>
+                <div className="match-intro-side" style={{ width: '100%' }}>
+                  {playerCardFor(bottomColor, online.view)}
+                </div>
+                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Game starting…</p>
+              </div>
+            </div>
+          )}
+
+          {!showMatchIntro && (online.status === 'in_game' || online.status === 'reconnecting') && online.view && (
+            <div style={{ display: 'flex', gap: 'var(--gap-lg)', flexWrap: 'wrap', alignItems: 'stretch', justifyContent: 'center', minHeight: 0 }}>
               {online.status === 'reconnecting' && (
                 <div
                   role="status"
@@ -403,9 +441,24 @@ export function OnlineGameScreen({
               {online.color === null && (
                 <p style={{ width: '100%', margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>Spectating</p>
               )}
-              {/* Controls (back/forward foremost) and the moves list, one single column
-                  on the left of the board instead of two separate side columns. */}
-              <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+
+              {/* Board on the left at a smaller scale, controls and the moves list in a
+                  column to its right — same arrangement as local play's GameShellView.
+                  Below the wrap breakpoint the row wraps and the controls column drops
+                  beneath the board instead of beside it. */}
+              <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+                {playerCardFor(topColor, online.view)}
+                <OnlineBoard
+                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
+                  selected={selected}
+                  myColor={online.color}
+                  legalFrom={legalFrom}
+                  onActivateSquare={activateSquare}
+                />
+                {playerCardFor(bottomColor, online.view)}
+              </div>
+
+              <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
                 {online.view.status === 'finished' && (
                   <div style={cardStyle}>
                     <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
@@ -486,18 +539,6 @@ export function OnlineGameScreen({
                 {/* The one section that's meant to scroll internally, per request — a
                     fixed max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
                 <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
-              </div>
-
-              <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-                {playerCardFor(topColor, online.view)}
-                <OnlineBoard
-                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
-                  selected={selected}
-                  myColor={online.color}
-                  legalFrom={legalFrom}
-                  onActivateSquare={activateSquare}
-                />
-                {playerCardFor(bottomColor, online.view)}
               </div>
             </div>
           )}

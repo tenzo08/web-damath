@@ -64,6 +64,29 @@ select {
   display: none; /* Chromium/WebKit */
 }
 
+/* The "opponent found" transition OnlineGameScreen shows for a moment right after
+   matchmaking pairs two players, before the live board appears — chess.com's own
+   convention (docs request: "an animation before the game really starts the same as
+   how chess.com works"). Durations reference the same `--dur-*` tokens
+   `prefers-reduced-motion: reduce` already zeroes out in tokens.css, so this respects
+   that preference automatically rather than needing its own override. */
+@keyframes match-intro-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.match-intro-card {
+  animation: match-intro-slide-in calc(var(--dur-base) * 3) var(--ease);
+}
+.match-intro-side {
+  animation: match-intro-slide-in calc(var(--dur-base) * 4) var(--ease);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

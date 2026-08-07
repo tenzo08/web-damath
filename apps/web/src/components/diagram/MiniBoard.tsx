@@ -194,13 +194,20 @@ export function MiniBoard({
               const y1 = from.y + uy * inset;
               const x2 = to.x - ux * inset;
               const y2 = to.y - uy * inset;
+              // A capture arrow is a two-square jump, so its straight-line midpoint
+              // lands exactly on the captured piece's own square — bow the path around
+              // it (a quadratic curve, control point offset perpendicular to the line)
+              // instead of drawing through the piece's number.
+              const midX = (x1 + x2) / 2;
+              const midY = (y1 + y2) / 2;
+              const bow = capture ? (100 / cols) * 0.22 : 0;
+              const controlX = midX + -uy * bow;
+              const controlY = midY + ux * bow;
               return (
-                <line
+                <path
                   key={i}
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
+                  d={`M${String(x1)},${String(y1)} Q${String(controlX)},${String(controlY)} ${String(x2)},${String(y2)}`}
+                  fill="none"
                   stroke={capture ? 'var(--danger, #e35b5b)' : 'var(--accent)'}
                   strokeWidth={2.5}
                   strokeLinecap="round"

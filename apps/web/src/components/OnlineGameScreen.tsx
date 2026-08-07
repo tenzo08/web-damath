@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, applyMove, createGame, pieceAt, replayMoves } from '@damath/engine';
-import type { Move, Position, Variant, VariantId } from '@damath/engine';
+import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
 import { MoveLedger } from './MoveLedger';
+import { PlayerCard } from './PlayerCard';
+import { Rail } from './Rail';
 import { ReportBlockButtons } from './ReportBlockButtons';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
+import { playerLabel } from '../lib/notation';
 import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import type { PublicGameView } from '../lib/onlineProtocol';
 import { useSettings } from '../lib/settings';
@@ -18,6 +21,8 @@ interface OnlineGameScreenProps {
   user: AuthUser | null;
   onBackToLobby: () => void;
   onOpenLogin: () => void;
+  /** Wired to the same `Rail` "How to play" button local play's `GameShell` uses — one tutorial modal, opened from whichever screen is currently playing. */
+  onOpenTutorial: () => void;
   /** Set when arriving via TournamentScreen's "Play this match" or MatchHistoryScreen's "Replay"/"Resume" — joins that room directly instead of showing the variant picker/matchmaking flow. */
   initialRoomId?: string | undefined;
   /** Only meaningful together with `initialRoomId` — which screen handed off this room, purely for header/back-button copy. Defaults to `'tournament'` so the existing TournamentScreen call site didn't need to change. */
@@ -101,7 +106,16 @@ const secondaryButton = {
  * gracefully degraded when the server isn't reachable rather than erroring out, per
  * the request to showcase the flow even where it can't run in this environment.
  */
-export function OnlineGameScreen({ token, user, onBackToLobby, onOpenLogin, initialRoomId, origin = 'tournament', onGameFinished }: OnlineGameScreenProps) {
+export function OnlineGameScreen({
+  token,
+  user,
+  onBackToLobby,
+  onOpenLogin,
+  onOpenTutorial,
+  initialRoomId,
+  origin = 'tournament',
+  onGameFinished,
+}: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
   const [variantId, setVariantId] = useState<VariantId>('integer');
   const [selected, setSelected] = useState<Position | null>(null);
@@ -208,228 +222,273 @@ export function OnlineGameScreen({ token, user, onBackToLobby, onOpenLogin, init
     if (piece && piece.owner === online.color) setSelected(pos);
   }
 
+  // Same chess.com convention local play's GameShellView uses: your own seat is always
+  // the bottom card, mirroring OnlineBoard's own `flipped = myColor === 'black'` — a
+  // spectator (myColor === null) falls back to the same not-flipped default the board does.
+  const flipped = online.color === 'black';
+  const topColor: Player = flipped ? 'white' : 'black';
+  const bottomColor: Player = flipped ? 'black' : 'white';
+
+  function playerCardFor(side: Player, view: PublicGameView) {
+    const isMe = online.color === side;
+    // No opponent name/avatar/rating resolution for a human opponent yet -- PublicGameView
+    // only carries their user id, and room.ts's getView() is synchronous (see KNOWLEDGE.md
+    // for why threading a userStore lookup through it is out of scope here) -- so a human
+    // opponent gets the same generic Light/Dark label the old info card showed.
+    const label = isMe ? (user?.displayName ?? playerLabel(side)) : view.opponentType === 'bot' ? (view.botNickname ?? 'Unknown') : playerLabel(side);
+    return (
+      <PlayerCard
+        side={side}
+        label={label}
+        avatarEmoji={isMe ? (user?.avatarEmoji ?? null) : null}
+        rating={isMe ? (user?.rating ?? null) : null}
+        score={view.scores[side]}
+        isTurn={view.status !== 'finished' && view.turn === side}
+      />
+    );
+  }
+
+  const backLabel = initialRoomId ? (origin === 'history' ? 'History' : origin === 'spectate' ? 'Spectate' : 'Tournament') : 'Lobby';
+  const titleText = initialRoomId
+    ? origin === 'history'
+      ? 'Match Replay'
+      : origin === 'spectate'
+        ? 'Spectating'
+        : 'Tournament Match'
+    : 'Play Online';
+
   return (
-    <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
-          <button type="button" onClick={onBackToLobby} style={secondaryButton}>
-            ← {initialRoomId ? (origin === 'history' ? 'History' : origin === 'spectate' ? 'Spectate' : 'Tournament') : 'Lobby'}
+    <>
+      <Rail
+        onOpenTutorial={onOpenTutorial}
+        menuButton={
+          <button
+            type="button"
+            onClick={onBackToLobby}
+            style={{
+              width: '100%',
+              background: 'var(--accent)',
+              color: 'var(--accent-on)',
+              border: 'none',
+              borderRadius: 'var(--radius)',
+              padding: 'var(--pad-sm) var(--pad-md)',
+              fontSize: 'var(--fs-label)',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ← {backLabel}
           </button>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>
-            {initialRoomId
-              ? origin === 'history'
-                ? 'Match Replay'
-                : origin === 'spectate'
-                  ? 'Spectating'
-                  : 'Tournament Match'
-              : 'Play Online'}
-          </h1>
-        </header>
+        }
+      />
+      <main style={{ flex: '1 1 auto', minWidth: 0, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+          <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+            <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{titleText}</h1>
+          </header>
 
-        {!token && (
-          <div style={cardStyle}>
-            <p style={{ margin: '0 0 var(--pad-md) 0', color: 'var(--text-secondary)' }}>
-              Sign in to find a real opponent — the server pairs you with another signed-in player, or a computer
-              opponent if no one's waiting.
-            </p>
-            <button type="button" onClick={onOpenLogin} style={primaryButton}>
-              Sign in
-            </button>
-          </div>
-        )}
+          {!token && (
+            <div style={cardStyle}>
+              <p style={{ margin: '0 0 var(--pad-md) 0', color: 'var(--text-secondary)' }}>
+                Sign in to find a real opponent — the server pairs you with another signed-in player, or a computer
+                opponent if no one's waiting.
+              </p>
+              <button type="button" onClick={onOpenLogin} style={primaryButton}>
+                Sign in
+              </button>
+            </div>
+          )}
 
-        {token && online.status === 'connecting' && (
-          <div style={cardStyle}>
-            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Connecting to {SERVER_HTTP_URL}…</p>
-          </div>
-        )}
+          {token && online.status === 'connecting' && (
+            <div style={cardStyle}>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Connecting to {SERVER_HTTP_URL}…</p>
+            </div>
+          )}
 
-        {token && online.status === 'unreachable' && (
-          <div style={cardStyle}>
-            <p style={{ margin: '0 0 var(--pad-sm) 0', color: 'var(--danger)' }}>{online.error ?? "Can't reach the multiplayer server."}</p>
-            <p style={{ margin: '0 0 var(--pad-lg) 0', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-              This is what the flow looks like once <code>apps/server</code> is running (<code>pnpm -F server dev</code>): pick a
-              variant, find a match, and the server pairs you with another player or, after a short wait, a labelled
-              computer opponent — never silently.
-            </p>
-            <div style={{ display: 'flex', gap: 'var(--gap-sm)', opacity: 0.5, pointerEvents: 'none', marginBottom: 'var(--pad-lg)' }}>
-              <select disabled style={{ ...secondaryButton, cursor: 'default' }}>
-                <option>Integer Damath</option>
-              </select>
-              <button type="button" disabled style={primaryButton}>
+          {token && online.status === 'unreachable' && (
+            <div style={cardStyle}>
+              <p style={{ margin: '0 0 var(--pad-sm) 0', color: 'var(--danger)' }}>{online.error ?? "Can't reach the multiplayer server."}</p>
+              <p style={{ margin: '0 0 var(--pad-lg) 0', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
+                This is what the flow looks like once <code>apps/server</code> is running (<code>pnpm -F server dev</code>): pick a
+                variant, find a match, and the server pairs you with another player or, after a short wait, a labelled
+                computer opponent — never silently.
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--gap-sm)', opacity: 0.5, pointerEvents: 'none', marginBottom: 'var(--pad-lg)' }}>
+                <select disabled style={{ ...secondaryButton, cursor: 'default' }}>
+                  <option>Integer Damath</option>
+                </select>
+                <button type="button" disabled style={primaryButton}>
+                  Find match
+                </button>
+              </div>
+              <button type="button" onClick={online.connect} style={secondaryButton}>
+                Try again
+              </button>
+            </div>
+          )}
+
+          {token && online.status === 'idle' && initialRoomId && (
+            <div style={cardStyle}>
+              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Joining the match…</p>
+            </div>
+          )}
+
+          {token && online.status === 'idle' && !initialRoomId && (
+            <div style={cardStyle}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', maxWidth: 320 }}>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Variant</span>
+                <select value={variantId} onChange={(e) => setVariantId(e.target.value as VariantId)} style={{ ...secondaryButton, cursor: 'pointer' }}>
+                  {ALL_VARIANTS.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.gradeLevel})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', margin: 'var(--pad-sm) 0 var(--pad-lg) 0' }}>
+                {user && user.placementGamesPlayed < user.placementGamesRequired
+                  ? `New accounts play ${String(user.placementGamesRequired - user.placementGamesPlayed)} more game(s) against the computer first, so ratings start from a real level (${String(user.placementGamesPlayed)}/${String(user.placementGamesRequired)} played).`
+                  : "Pairing you with a player. If none is available we'll match you with the computer."}
+              </p>
+              <button type="button" onClick={() => online.queue(variantId)} style={primaryButton}>
                 Find match
               </button>
             </div>
-            <button type="button" onClick={online.connect} style={secondaryButton}>
-              Try again
-            </button>
-          </div>
-        )}
+          )}
 
-        {token && online.status === 'idle' && initialRoomId && (
-          <div style={cardStyle}>
-            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Joining the match…</p>
-          </div>
-        )}
-
-        {token && online.status === 'idle' && !initialRoomId && (
-          <div style={cardStyle}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', maxWidth: 320 }}>
-              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Variant</span>
-              <select value={variantId} onChange={(e) => setVariantId(e.target.value as VariantId)} style={{ ...secondaryButton, cursor: 'pointer' }}>
-                {ALL_VARIANTS.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.gradeLevel})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', margin: 'var(--pad-sm) 0 var(--pad-lg) 0' }}>
-              {user && user.placementGamesPlayed < user.placementGamesRequired
-                ? `New accounts play ${String(user.placementGamesRequired - user.placementGamesPlayed)} more game(s) against the computer first, so ratings start from a real level (${String(user.placementGamesPlayed)}/${String(user.placementGamesRequired)} played).`
-                : "Pairing you with a player. If none is available we'll match you with the computer."}
-            </p>
-            <button type="button" onClick={() => online.queue(variantId)} style={primaryButton}>
-              Find match
-            </button>
-          </div>
-        )}
-
-        {online.status === 'queued' && (
-          <div style={cardStyle}>
-            <p style={{ margin: '0 0 var(--pad-lg) 0', color: 'var(--text-secondary)' }}>Waiting for an opponent…</p>
-            <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-              <button type="button" onClick={online.declineBot} style={secondaryButton}>
-                Keep waiting for a human
-              </button>
-              <button type="button" onClick={online.cancelQueue} style={secondaryButton}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {(online.status === 'in_game' || online.status === 'reconnecting') && online.view && (
-          <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
-            {online.status === 'reconnecting' && (
-              <div
-                role="status"
-                style={{
-                  width: '100%',
-                  background: 'var(--surface-panel)',
-                  border: '1px solid var(--warning, var(--border))',
-                  borderRadius: 'var(--radius-card)',
-                  padding: 'var(--pad-sm) var(--pad-md)',
-                  color: 'var(--text-secondary)',
-                  fontSize: 'var(--fs-meta)',
-                }}
-              >
-                Connection lost — reconnecting to the match…
-              </div>
-            )}
-            <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%' }}>
-              <OnlineBoard
-                view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
-                selected={selected}
-                myColor={online.color}
-                onActivateSquare={activateSquare}
-              />
-            </div>
-            <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-              <div style={cardStyle}>
-                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-                  {online.color === null
-                    ? 'Spectating'
-                    : `You're ${online.color === 'white' ? 'Light' : 'Dark'}`}{' '}
-                  · {online.view.opponentType === 'bot' ? `vs ${online.view.botNickname ?? 'Unknown'}` : 'vs a player'}
-                </p>
-                <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-label)' }}>
-                  Light {online.view.scores.white} — Dark {online.view.scores.black}
-                </p>
-                <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
-                  {online.view.status === 'finished'
-                    ? online.view.resignedBy
-                      ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                      : online.view.drawnByAgreement
-                        ? 'Draw by agreement.'
-                        : online.view.winner
-                          ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                          : 'Game over — draw.'
-                    : `${online.view.turn === 'white' ? 'Light' : 'Dark'} to move`}
-                </p>
-              </div>
-              {/* Back/forward history browsing — deliberately not an undo control. Online
-                  games are server-authoritative; a player can look at any earlier position
-                  but can't retract a move that's already landed. */}
+          {online.status === 'queued' && (
+            <div style={cardStyle}>
+              <p style={{ margin: '0 0 var(--pad-lg) 0', color: 'var(--text-secondary)' }}>Waiting for an opponent…</p>
               <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                <button type="button" onClick={stepBack} disabled={(viewIndex ?? historyLength) <= 0} style={secondaryButton}>
-                  ◂ Back
+                <button type="button" onClick={online.declineBot} style={secondaryButton}>
+                  Keep waiting for a human
                 </button>
-                <button type="button" onClick={stepForward} disabled={!isViewingHistory} style={secondaryButton}>
-                  Forward ▸
+                <button type="button" onClick={online.cancelQueue} style={secondaryButton}>
+                  Cancel
                 </button>
               </div>
-              {/* A spectator (online.color === null) never sees any of these — there's
-                  nothing for them to offer, accept, decline, or resign. */}
-              {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
-                <div style={{ ...cardStyle, padding: 'var(--pad-md)', border: '1px solid var(--accent)' }}>
-                  <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)' }}>Your opponent offered a draw.</p>
-                  <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                    <button type="button" onClick={() => online.respondDraw(true)} style={primaryButton}>
-                      Accept
-                    </button>
-                    <button type="button" onClick={() => online.respondDraw(false)} style={secondaryButton}>
-                      Decline
-                    </button>
-                  </div>
+            </div>
+          )}
+
+          {(online.status === 'in_game' || online.status === 'reconnecting') && online.view && (
+            <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
+              {online.status === 'reconnecting' && (
+                <div
+                  role="status"
+                  style={{
+                    width: '100%',
+                    background: 'var(--surface-panel)',
+                    border: '1px solid var(--warning, var(--border))',
+                    borderRadius: 'var(--radius-card)',
+                    padding: 'var(--pad-sm) var(--pad-md)',
+                    color: 'var(--text-secondary)',
+                    fontSize: 'var(--fs-meta)',
+                  }}
+                >
+                  Connection lost — reconnecting to the match…
                 </div>
               )}
-              {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy === online.color && (
-                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-                  Draw offer sent — waiting for your opponent…
-                </p>
+              {online.color === null && (
+                <p style={{ width: '100%', margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>Spectating</p>
               )}
-              {online.color !== null && online.view.status !== 'finished' && (
+              <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+                {playerCardFor(topColor, online.view)}
+                <OnlineBoard
+                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
+                  selected={selected}
+                  myColor={online.color}
+                  onActivateSquare={activateSquare}
+                />
+                {playerCardFor(bottomColor, online.view)}
+              </div>
+              <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+                {online.view.status === 'finished' && (
+                  <div style={cardStyle}>
+                    <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                      {online.view.resignedBy
+                        ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                        : online.view.drawnByAgreement
+                          ? 'Draw by agreement.'
+                          : online.view.winner
+                            ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                            : 'Game over — draw.'}
+                    </p>
+                  </div>
+                )}
+                {/* Back/forward history browsing — deliberately not an undo control. Online
+                    games are server-authoritative; a player can look at any earlier position
+                    but can't retract a move that's already landed. */}
                 <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                  {online.view.opponentType === 'human' && (
-                    <button
-                      type="button"
-                      onClick={online.offerDraw}
-                      disabled={isViewingHistory || online.status !== 'in_game' || online.view.drawOfferedBy !== null}
-                      style={secondaryButton}
-                    >
-                      Offer Draw
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={online.resign}
-                    disabled={isViewingHistory || online.status !== 'in_game'}
-                    style={{ ...secondaryButton, color: 'var(--danger)' }}
-                  >
-                    Resign
+                  <button type="button" onClick={stepBack} disabled={(viewIndex ?? historyLength) <= 0} style={secondaryButton}>
+                    ◂ Back
+                  </button>
+                  <button type="button" onClick={stepForward} disabled={!isViewingHistory} style={secondaryButton}>
+                    Forward ▸
                   </button>
                 </div>
-              )}
-              {online.error && (
-                <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
-                  {online.error}
-                </p>
-              )}
-              {/* Only a real player reporting their real opponent -- not a spectator
-                  reporting either player, and never against the computer opponent,
-                  which has no account to report or block. */}
-              {token && online.color !== null && online.view.opponentType === 'human' && opponentUserId && (
-                <ReportBlockButtons token={token} targetUserId={opponentUserId} targetName="your opponent" roomId={online.view.roomId} />
-              )}
-            </div>
+                {/* A spectator (online.color === null) never sees any of these — there's
+                    nothing for them to offer, accept, decline, or resign. */}
+                {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
+                  <div style={{ ...cardStyle, padding: 'var(--pad-md)', border: '1px solid var(--accent)' }}>
+                    <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)' }}>Your opponent offered a draw.</p>
+                    <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                      <button type="button" onClick={() => online.respondDraw(true)} style={primaryButton}>
+                        Accept
+                      </button>
+                      <button type="button" onClick={() => online.respondDraw(false)} style={secondaryButton}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy === online.color && (
+                  <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
+                    Draw offer sent — waiting for your opponent…
+                  </p>
+                )}
+                {online.color !== null && online.view.status !== 'finished' && (
+                  <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                    {online.view.opponentType === 'human' && (
+                      <button
+                        type="button"
+                        onClick={online.offerDraw}
+                        disabled={isViewingHistory || online.status !== 'in_game' || online.view.drawOfferedBy !== null}
+                        style={secondaryButton}
+                      >
+                        Offer Draw
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={online.resign}
+                      disabled={isViewingHistory || online.status !== 'in_game'}
+                      style={{ ...secondaryButton, color: 'var(--danger)' }}
+                    >
+                      Resign
+                    </button>
+                  </div>
+                )}
+                {online.error && (
+                  <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
+                    {online.error}
+                  </p>
+                )}
+                {/* Only a real player reporting their real opponent -- not a spectator
+                    reporting either player, and never against the computer opponent,
+                    which has no account to report or block. */}
+                {token && online.color !== null && online.view.opponentType === 'human' && opponentUserId && (
+                  <ReportBlockButtons token={token} targetUserId={opponentUserId} targetName="your opponent" roomId={online.view.roomId} />
+                )}
+              </div>
 
-            <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
-              <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
+              <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
+                <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </main>
+          )}
+        </div>
+      </main>
+    </>
   );
 }

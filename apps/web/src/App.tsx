@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
 import type { AnyVariant, Player, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
@@ -18,22 +18,37 @@ import { GameMenu } from './components/GameMenu';
 import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal';
 import { GameOverModal } from './components/GameOverModal';
 import { StartConfirmModal } from './components/StartConfirmModal';
-import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { SettingsModal } from './components/SettingsModal';
 import { LobbyScreen } from './components/LobbyScreen';
-import { OnlineGameScreen } from './components/OnlineGameScreen';
-import { TournamentScreen } from './components/TournamentScreen';
-import { MatchHistoryScreen } from './components/MatchHistoryScreen';
-import { SpectateScreen } from './components/SpectateScreen';
-import { PuzzleScreen } from './components/PuzzleScreen';
 import { playerLabel } from './lib/notation';
 import { randomBotNickname } from './lib/botNicknames';
 import { verifyEmail } from './lib/authClient';
 import { LocaleProvider } from './lib/i18n';
 import { SettingsProvider, useSettings } from './lib/settings';
 import { playCaptureSound, playMoveSound, playWinSound } from './lib/sound';
+
+// Split out of the initial bundle — none of these are needed for the very first
+// paint (the lobby), and TutorialModal/PuzzleScreen in particular carry a fair amount
+// of their own data (board diagrams, curated puzzles). `.then(m => ({default: m.X}))`
+// adapts each named export to what `lazy()` requires, without adding a default export
+// to components other call sites already import by name.
+const TutorialModal = lazy(() => import('./components/TutorialModal').then((m) => ({ default: m.TutorialModal })));
+const OnlineGameScreen = lazy(() => import('./components/OnlineGameScreen').then((m) => ({ default: m.OnlineGameScreen })));
+const TournamentScreen = lazy(() => import('./components/TournamentScreen').then((m) => ({ default: m.TournamentScreen })));
+const MatchHistoryScreen = lazy(() => import('./components/MatchHistoryScreen').then((m) => ({ default: m.MatchHistoryScreen })));
+const SpectateScreen = lazy(() => import('./components/SpectateScreen').then((m) => ({ default: m.SpectateScreen })));
+const PuzzleScreen = lazy(() => import('./components/PuzzleScreen').then((m) => ({ default: m.PuzzleScreen })));
+
+/** The Suspense fallback for every lazy screen above — brief by design, since these are small chunks even on slow connections; just enough to avoid a blank flash. */
+function ScreenFallback() {
+  return (
+    <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--pad-xl)' }}>
+      <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>Loading…</p>
+    </main>
+  );
+}
 
 /** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses." */
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -463,73 +478,85 @@ function AppShell() {
         />
       )}
 
-      {screen === 'puzzles' && <PuzzleScreen onBackToLobby={() => setScreen('lobby')} />}
+      {screen === 'puzzles' && (
+        <Suspense fallback={<ScreenFallback />}>
+          <PuzzleScreen onBackToLobby={() => setScreen('lobby')} />
+        </Suspense>
+      )}
 
       {screen === 'online' && (
-        <OnlineGameScreen
-          token={auth.token}
-          user={auth.user}
-          initialRoomId={historyRoomId ?? spectateRoomId ?? tournamentContext?.roomId ?? undefined}
-          origin={historyRoomId ? 'history' : spectateRoomId ? 'spectate' : 'tournament'}
-          onGameFinished={auth.refreshUser}
-          onOpenTutorial={() => setTutorialOpen(true)}
-          onBackToLobby={() => {
-            if (historyRoomId) {
-              setHistoryRoomId(null);
-              setScreen('history');
-              return;
-            }
-            if (spectateRoomId) {
-              setSpectateRoomId(null);
-              setScreen('spectate');
-              return;
-            }
-            setScreen(tournamentContext ? 'tournaments' : 'lobby');
-            setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));
-          }}
-          onOpenLogin={() => setLoginOpen(true)}
-        />
+        <Suspense fallback={<ScreenFallback />}>
+          <OnlineGameScreen
+            token={auth.token}
+            user={auth.user}
+            initialRoomId={historyRoomId ?? spectateRoomId ?? tournamentContext?.roomId ?? undefined}
+            origin={historyRoomId ? 'history' : spectateRoomId ? 'spectate' : 'tournament'}
+            onGameFinished={auth.refreshUser}
+            onOpenTutorial={() => setTutorialOpen(true)}
+            onBackToLobby={() => {
+              if (historyRoomId) {
+                setHistoryRoomId(null);
+                setScreen('history');
+                return;
+              }
+              if (spectateRoomId) {
+                setSpectateRoomId(null);
+                setScreen('spectate');
+                return;
+              }
+              setScreen(tournamentContext ? 'tournaments' : 'lobby');
+              setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));
+            }}
+            onOpenLogin={() => setLoginOpen(true)}
+          />
+        </Suspense>
       )}
 
       {screen === 'spectate' && (
-        <SpectateScreen
-          token={auth.token}
-          onBackToLobby={() => setScreen('lobby')}
-          onWatch={(roomId) => {
-            setSpectateRoomId(roomId);
-            setScreen('online');
-          }}
-        />
+        <Suspense fallback={<ScreenFallback />}>
+          <SpectateScreen
+            token={auth.token}
+            onBackToLobby={() => setScreen('lobby')}
+            onWatch={(roomId) => {
+              setSpectateRoomId(roomId);
+              setScreen('online');
+            }}
+          />
+        </Suspense>
       )}
 
       {screen === 'history' && (
-        <MatchHistoryScreen
-          token={auth.token}
-          onBackToLobby={() => setScreen('lobby')}
-          onViewGame={(roomId) => {
-            setHistoryRoomId(roomId);
-            setScreen('online');
-          }}
-        />
+        <Suspense fallback={<ScreenFallback />}>
+          <MatchHistoryScreen
+            token={auth.token}
+            onBackToLobby={() => setScreen('lobby')}
+            onViewGame={(roomId) => {
+              setHistoryRoomId(roomId);
+              setScreen('online');
+            }}
+          />
+        </Suspense>
       )}
 
       {screen === 'tournaments' && (
-        <TournamentScreen
-          token={auth.token}
-          user={auth.user}
-          initialSelectedId={tournamentContext?.tournamentId ?? null}
-          tournamentEventCount={live.tournamentEventCount}
-          onlineCount={live.onlineCount}
-          onPlayMatch={(tournamentId, roomId) => {
-            setTournamentContext({ tournamentId, roomId });
-            setScreen('online');
-          }}
-          onBackToLobby={() => {
-            setTournamentContext(null);
-            setScreen('lobby');
-          }}
-          onOpenLogin={() => setLoginOpen(true)}
-        />
+        <Suspense fallback={<ScreenFallback />}>
+          <TournamentScreen
+            token={auth.token}
+            user={auth.user}
+            initialSelectedId={tournamentContext?.tournamentId ?? null}
+            tournamentEventCount={live.tournamentEventCount}
+            onlineCount={live.onlineCount}
+            onPlayMatch={(tournamentId, roomId) => {
+              setTournamentContext({ tournamentId, roomId });
+              setScreen('online');
+            }}
+            onBackToLobby={() => {
+              setTournamentContext(null);
+              setScreen('lobby');
+            }}
+            onOpenLogin={() => setLoginOpen(true)}
+          />
+        </Suspense>
       )}
 
       {screen === 'game' && (
@@ -580,7 +607,14 @@ function AppShell() {
       )}
       {resetToken && <ResetPasswordModal token={resetToken} onClose={() => setResetToken(null)} />}
 
-      <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
+      {/* Only actually mounted once opened — a lazy component's chunk starts loading
+          the instant it's in the tree, `open` prop or not, so gating the mount itself
+          (not just what it renders) is what keeps this out of the initial bundle load. */}
+      {tutorialOpen && (
+        <Suspense fallback={null}>
+          <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
+        </Suspense>
+      )}
       <LoginModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}

@@ -54,7 +54,9 @@ describe('the lobby', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: /^Learn to Play/ }));
-    expect(screen.getByRole('dialog', { name: 'How to play Damath' })).toBeInTheDocument();
+    // findBy*, not getBy*: TutorialModal is code-split (App.tsx), so it loads
+    // asynchronously the first time it's opened.
+    expect(await screen.findByRole('dialog', { name: 'How to play Damath' })).toBeInTheDocument();
     expect(screen.getByText('1. The board')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
@@ -67,7 +69,8 @@ describe('the lobby', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: /^Play Online/ }));
-    expect(screen.getByRole('heading', { name: 'Play Online' })).toBeInTheDocument();
+    // findBy*, not getBy*: OnlineGameScreen is code-split (App.tsx), so it loads asynchronously.
+    expect(await screen.findByRole('heading', { name: 'Play Online' })).toBeInTheDocument();
     expect(screen.getByText(/Sign in to find a real opponent/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '← Lobby' }));

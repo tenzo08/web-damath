@@ -26,6 +26,7 @@ export function Modal({ open, onClose, title, children, width = 560 }: ModalProp
     <div
       role="presentation"
       onClick={onClose}
+      className="modal-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
@@ -41,7 +42,7 @@ export function Modal({ open, onClose, title, children, width = 560 }: ModalProp
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="scroll-hidden"
+        className="scroll-hidden modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--surface-panel)',

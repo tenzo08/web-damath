@@ -50,8 +50,9 @@ for real.
 
 After that, `.github/workflows/build-apk.yml` handles every future rebuild on its own —
 push to `main`, and a fresh APK signed with the same key is published to the repo's
-`latest` GitHub Release within a few minutes. The footer's download link
-(`apps/web/src/components/Footer.tsx`) already points at that stable release URL.
+`latest` GitHub Release within a few minutes. (The web app's footer was later
+simplified down to just the creator credit — link the release URL from wherever makes
+sense once this pipeline is actually turned on.)
 
 ## What the APK can and can't do offline
 

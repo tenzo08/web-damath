@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { applyMove, operationAt, pieceAt } from '@damath/engine';
-import type { GameState, Position, Variant } from '@damath/engine';
+import type { GameState, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniSquareSpec } from './diagram/MiniBoard';
-import { PUZZLES, findLegalMove, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
+import { PUZZLES, PUZZLE_VARIANTS, findLegalMove, generatePuzzle, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
 import { isPlayable } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useSettings } from '../lib/settings';
@@ -80,24 +80,27 @@ function buildRows(
 /**
  * Curated capture-chain / find-the-winning-move positions (chess.com-inspired
  * suggestion #3, TASK.md), reusing MiniBoard the way the request specified. Every
- * puzzle's starting position and solution come from `lib/puzzles.ts`, mined by
- * actually running the engine forward from a real game rather than hand-typed —
+ * curated puzzle's starting position and solution come from `lib/puzzles.ts`, mined by
+ * actually running the engine forward from a real game rather than hand-typed --
  * `puzzles.test.ts` asserts every one of them is still a legal, reachable position
- * whose marked solution is a real legal move there.
+ * whose marked solution is a real legal move there. A "Generate new puzzle" mode sits
+ * alongside it, procedurally building an unlimited supply of the same two tactical
+ * shapes (`generatePuzzle`) for whichever of the three number-typed variants is picked.
  */
 export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   const [index, setIndex] = useState(0);
-  const [state, setState] = useState<GameState<number>>(() => puzzleStartState(puzzleAt(0)));
+  const [mode, setMode] = useState<'curated' | 'generated'>('curated');
+  const [generated, setGenerated] = useState<Puzzle | null>(null);
+  const [genVariantId, setGenVariantId] = useState<VariantId>(PUZZLE_VARIANTS[0]?.id ?? 'whole');
+  const [genError, setGenError] = useState<string | null>(null);
+  const puzzle = mode === 'generated' && generated ? generated : puzzleAt(index);
+
+  const [state, setState] = useState<GameState<number>>(() => puzzleStartState(puzzle));
   const [selected, setSelected] = useState<Position | null>(null);
   const [status, setStatus] = useState<'playing' | 'solved' | 'revealed'>('playing');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const { effectiveVolume } = useSettings();
-  // `goTo` always wraps `index` into [0, PUZZLES.length) via modulo, so this can never
-  // actually be out of range — looked up fresh via `puzzleAt` in every nested function
-  // below rather than closing over a single narrowed `const`, since TS's control-flow
-  // narrowing doesn't cross into nested function declarations anyway.
-  const puzzle = puzzleAt(index);
 
   useEffect(() => {
     setState(puzzleStartState(puzzle));
@@ -105,7 +108,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
     setStatus('playing');
     setFeedback(null);
     setShowHint(false);
-  }, [index]);
+  }, [puzzle]);
 
   function activate(pos: Position) {
     if (status !== 'playing') return;
@@ -146,14 +149,28 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   }
 
   function goTo(newIndex: number) {
+    setMode('curated');
     setIndex(((newIndex % PUZZLES.length) + PUZZLES.length) % PUZZLES.length);
+  }
+
+  function generateNew() {
+    const variant = PUZZLE_VARIANTS.find((v) => v.id === genVariantId) ?? PUZZLE_VARIANTS[0];
+    if (!variant) return; // unreachable -- PUZZLE_VARIANTS is a fixed non-empty constant
+    const next = generatePuzzle(variant);
+    if (!next) {
+      setGenError("Couldn't find a fresh tactical position that time — try again.");
+      return;
+    }
+    setGenError(null);
+    setGenerated(next);
+    setMode('generated');
   }
 
   const rows = buildRows(state, puzzle.variant, selected, activate);
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 'min(1100px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <div style={{ width: '100%', maxWidth: 'min(1400px, 96vw)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
           <button type="button" onClick={onBackToLobby} style={secondaryButton}>
             ← Lobby
@@ -162,14 +179,14 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div style={{ flex: '2 1 360px', maxWidth: 420, minWidth: 260, display: 'flex', justifyContent: 'center' }}>
-            <MiniBoard rows={rows} size={380} label={`${puzzle.variant.name} · ${playerLabel(state.turn)} to move`} />
+          <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <MiniBoard rows={rows} size={760} label={`${puzzle.variant.name} · ${playerLabel(state.turn)} to move`} />
           </div>
 
-          <div style={{ flex: '1 1 280px', maxWidth: 360, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <div style={cardStyle}>
               <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
-                Puzzle {index + 1} of {PUZZLES.length}
+                {mode === 'curated' ? `Puzzle ${index + 1} of ${PUZZLES.length}` : `Generated puzzle · ${puzzle.variant.name}`}
               </p>
               <h2 style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-label)' }}>{puzzle.title}</h2>
 
@@ -212,6 +229,39 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
               <button type="button" onClick={() => goTo(index + 1)} style={primaryButton}>
                 Next puzzle ▸
               </button>
+            </div>
+
+            <div style={{ ...cardStyle, padding: 'var(--pad-md)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Generate a new puzzle
+              </h3>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Variant</span>
+                <select
+                  value={genVariantId}
+                  onChange={(e) => setGenVariantId(e.target.value as VariantId)}
+                  style={{ ...secondaryButton, cursor: 'pointer' }}
+                >
+                  {PUZZLE_VARIANTS.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={generateNew} style={primaryButton}>
+                Generate new puzzle
+              </button>
+              {genError && (
+                <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
+                  {genError}
+                </p>
+              )}
+              {mode === 'generated' && (
+                <button type="button" onClick={() => goTo(index)} style={secondaryButton}>
+                  ← Back to curated puzzles
+                </button>
+              )}
             </div>
           </div>
         </div>

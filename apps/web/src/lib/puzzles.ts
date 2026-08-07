@@ -1,5 +1,6 @@
-import { INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
+import { COUNTING_DAMATH, INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
 import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
+import { playerLabel } from './notation';
 
 export interface Puzzle {
   id: string;
@@ -105,6 +106,84 @@ export function puzzleSolvedState(puzzle: Puzzle): GameState<number> {
   const solution = legalSolutionMove(puzzle);
   if (!solution) throw new Error(`puzzle ${puzzle.id}: its own solutionFrom/solutionTo is not a legal move at the replayed position`);
   return applyMove(puzzleStartState(puzzle), solution, puzzle.variant);
+}
+
+/** The three variants whose chip value is a plain `number` (`docs/VARIANTS.md`) — the only ones `Puzzle`'s `Variant<number>` constraint can represent. Fraction/radical/polynomial variants would need a generic `Puzzle<V>` first (CLAUDE.md's "build concretely, extract generic later"), which is a separate, larger change than adding puzzle *generation*. */
+export const PUZZLE_VARIANTS: readonly Variant<number>[] = [WHOLE_DAMATH, COUNTING_DAMATH, INTEGER_DAMATH];
+
+let generatedCount = 0;
+
+/**
+ * Procedurally builds a fresh tactical puzzle: random self-play from the starting
+ * position for a random number of plies, then checked for one of the two tactical
+ * shapes the curated `PUZZLES` above were hand-picked for (KNOWLEDGE.md) — either the
+ * side to move has exactly one legal move (a forced capture chain), or several legal
+ * captures from *different* chips where the best one meaningfully outscores the rest.
+ * A random walk often lands on neither (game already over, or a quiet position with no
+ * real choice), so this retries up to `MAX_ATTEMPTS` times and gives up with `null` --
+ * PuzzleScreen falls back to a curated puzzle rather than showing nothing.
+ */
+export function generatePuzzle(variant: Variant<number>): Puzzle | null {
+  const MAX_ATTEMPTS = 300;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const setupMoves: [Position, Position][] = [];
+    let state = createGame(variant);
+    const plies = 6 + Math.floor(Math.random() * 14); // 6..19, a real midgame position
+    let alive = true;
+    for (let i = 0; i < plies; i++) {
+      const options = legalMoves(state);
+      if (options.length === 0) {
+        alive = false; // the random walk itself ended the game -- start over
+        break;
+      }
+      const pick = options[Math.floor(Math.random() * options.length)];
+      if (!pick) throw new Error('unreachable: options.length > 0 just checked');
+      setupMoves.push([pick.from, pick.to]);
+      state = applyMove(state, pick, variant, { checkGameOver: false });
+    }
+    if (!alive) continue;
+
+    const options = legalMoves(state);
+    if (options.length === 0) continue;
+    const scored = options
+      .map((move) => ({ move, value: applyMove(state, move, variant, { checkGameOver: false }).scores[state.turn] }))
+      .sort((a, b) => b.value - a.value);
+    const best = scored[0];
+    if (!best) continue;
+    const mover = playerLabel(state.turn);
+
+    if (options.length === 1) {
+      generatedCount += 1;
+      return {
+        id: `generated-${String(generatedCount)}`,
+        variant,
+        title: 'Find the forced move',
+        setupMoves,
+        solutionFrom: best.move.from,
+        solutionTo: best.move.to,
+        hint: `${mover} has exactly one legal move here. Find it.`,
+        explanation: 'Capture is mandatory, and this was the only legal move on the board.',
+      };
+    }
+
+    const runnerUp = scored.find((s) => !samePosition(s.move.from, best.move.from));
+    if (!runnerUp) continue; // every legal move is from the same chip -- no real choice to puzzle over
+    const gap = best.value - runnerUp.value;
+    if (gap < Math.max(2, Math.abs(best.value) * 0.15)) continue; // too close to call a "better" move
+
+    generatedCount += 1;
+    return {
+      id: `generated-${String(generatedCount)}`,
+      variant,
+      title: 'Pick the better capture',
+      setupMoves,
+      solutionFrom: best.move.from,
+      solutionTo: best.move.to,
+      hint: `${mover} has more than one legal capture here, from different chips — compare where each one lands.`,
+      explanation: `This move nets ${variant.arithmetic.format(best.value)}; the next-best legal move here only nets ${variant.arithmetic.format(runnerUp.value)}.`,
+    };
+  }
+  return null;
 }
 
 export type { Player };

@@ -45,6 +45,11 @@
   --square-op: #8f8fa0;
   --square-legal: rgba(227, 179, 65, 0.14);
   --square-last: rgba(127, 166, 201, 0.1);
+  /* A piece with a legal move this turn -- deliberately a different hue (green) from
+     --square-legal's accent gold, since both can appear on screen together (a movable
+     piece elsewhere on the board, a legal destination for the one currently selected)
+     and need to read as two distinct kinds of "you can act here." */
+  --square-movable: rgba(63, 185, 80, 0.14);
 
   --piece-light: #e3b341;
   --piece-light-on: #221904;
@@ -120,4 +125,5 @@
   --square-op: #6e6e7c;
   --square-legal: rgba(156, 107, 10, 0.14);
   --square-last: rgba(63, 111, 150, 0.12);
+  --square-movable: rgba(47, 158, 91, 0.14);
 }

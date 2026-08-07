@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ALL_VARIANTS, applyMove, createGame, pieceAt, replayMoves } from '@damath/engine';
+import { ALL_VARIANTS, applyMove, createGame, legalMoves, pieceAt, replayMoves } from '@damath/engine';
 import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
+import { positionKey } from '../lib/board';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
 import { MoveLedger } from './MoveLedger';
@@ -195,6 +196,16 @@ export function OnlineGameScreen({
   }, [online.error, effectiveVolume]);
   const displayBoard =
     online.view && variant && viewIndex !== null ? replayedWireBoard(variant, online.view.moveHistory, viewIndex) : online.view?.board;
+
+  // Squares holding a piece the seated player can legally move right now -- empty for a
+  // spectator, off-turn, mid-history-browse, or a finished game, same conditions
+  // `activateSquare` below already gates real clicks on.
+  const legalFrom = useMemo(() => {
+    if (!online.view || !variant || online.color === null || isViewingHistory) return new Set<string>();
+    if (online.view.turn !== online.color || online.view.status === 'finished') return new Set<string>();
+    const liveState = replayMoves(variant, online.view.moveHistory as Move<AnyValue>[]);
+    return new Set(legalMoves(liveState).map((m) => positionKey(m.from)));
+  }, [online.view, variant, online.color, isViewingHistory]);
 
   const historyLength = ledger.length;
   function goToMove(index: number) {
@@ -398,6 +409,7 @@ export function OnlineGameScreen({
                   view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
                   selected={selected}
                   myColor={online.color}
+                  legalFrom={legalFrom}
                   onActivateSquare={activateSquare}
                 />
                 {playerCardFor(bottomColor, online.view)}

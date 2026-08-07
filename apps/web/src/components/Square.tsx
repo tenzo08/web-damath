@@ -68,6 +68,10 @@ export function Square<V>({
 
   let background = 'var(--square-play)';
   if (isLegalDestination) background = 'var(--square-legal)';
+  // A piece the current player can legally move this turn -- not shown once it's the
+  // one selected (the accent selection ring below already marks that), so the two
+  // signals never compete on the same square.
+  else if (isSelectable && piece && !isSelected) background = 'var(--square-movable)';
   else if (isLastMove) background = 'var(--square-last)';
 
   return (

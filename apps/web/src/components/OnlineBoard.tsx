@@ -19,6 +19,8 @@ interface OnlineBoardProps {
   view: PublicGameView;
   selected: Position | null;
   myColor: Player | null;
+  /** Squares holding a piece the seated player can legally move this turn -- empty when it isn't their turn, they're spectating, or mid-history-browse. See OnlineGameScreen's own `legalFrom` for how it's computed client-side from the replayed live position. */
+  legalFrom: Set<string>;
   onActivateSquare: (pos: Position) => void;
 }
 
@@ -28,7 +30,7 @@ interface OnlineBoardProps {
  * for a local `GameState<V>` — see `useOnlineGame`'s doc comment. Flips to the seated
  * player's own side automatically, same convenience the local board offers manually.
  */
-export function OnlineBoard({ view, selected, myColor, onActivateSquare }: OnlineBoardProps) {
+export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSquare }: OnlineBoardProps) {
   const flipped = myColor === 'black';
   const rows = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -57,6 +59,7 @@ export function OnlineBoard({ view, selected, myColor, onActivateSquare }: Onlin
           }
           const piece = view.board[row]?.[col] ?? null;
           const isSelected = selected !== null && samePosition(selected, pos);
+          const isMovable = !isSelected && piece !== null && legalFrom.has(key);
           return (
             <button
               key={key}
@@ -71,7 +74,7 @@ export function OnlineBoard({ view, selected, myColor, onActivateSquare }: Onlin
                 aspectRatio: '1',
                 border: 'none',
                 padding: 0,
-                background: 'var(--square-play)',
+                background: isMovable ? 'var(--square-movable)' : 'var(--square-play)',
                 boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
                 cursor: 'pointer',
               }}

@@ -1,10 +1,11 @@
-import { COUNTING_DAMATH, INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
-import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
+import { ALL_VARIANTS, COUNTING_DAMATH, INTEGER_DAMATH, WHOLE_DAMATH, applyMove, createGame, legalMoves } from '@damath/engine';
+import type { AnyVariant, GameState, Move, Player, Position, Variant } from '@damath/engine';
+import { toNumberFor } from '@damath/ai';
 import { playerLabel } from './notation';
 
-export interface Puzzle {
+export interface Puzzle<V = number> {
   id: string;
-  variant: Variant<number>;
+  variant: Variant<V>;
   title: string;
   /**
    * A short sequence of real, legal (from, to) steps from the starting position — the
@@ -79,12 +80,12 @@ function samePosition(a: Position, b: Position): boolean {
   return a.row === b.row && a.col === b.col;
 }
 
-export function findLegalMove(state: GameState<number>, from: Position, to: Position): Move<number> | null {
+export function findLegalMove<V>(state: GameState<V>, from: Position, to: Position): Move<V> | null {
   return legalMoves(state).find((m) => samePosition(m.from, from) && samePosition(m.to, to)) ?? null;
 }
 
 /** Replays a puzzle's setup steps from a fresh game, re-validating each one against `legalMoves` — throws if a step isn't actually legal at the position it's applied to, since that would mean the puzzle data itself is wrong (caught by puzzles.test.ts for every puzzle in `PUZZLES`, not just at render time). */
-export function puzzleStartState(puzzle: Puzzle): GameState<number> {
+export function puzzleStartState<V>(puzzle: Puzzle<V>): GameState<V> {
   let state = createGame(puzzle.variant);
   for (const [from, to] of puzzle.setupMoves) {
     const move = findLegalMove(state, from, to);
@@ -96,20 +97,20 @@ export function puzzleStartState(puzzle: Puzzle): GameState<number> {
   return state;
 }
 
-/** The actual `Move<number>` (with its real capture chain) matching a puzzle's `solutionFrom`/`solutionTo` — `null` if that isn't currently a legal move, which `puzzles.test.ts` treats as a puzzle-data bug. */
-export function legalSolutionMove(puzzle: Puzzle): Move<number> | null {
+/** The actual `Move<V>` (with its real capture chain) matching a puzzle's `solutionFrom`/`solutionTo` — `null` if that isn't currently a legal move, which `puzzles.test.ts` treats as a puzzle-data bug. */
+export function legalSolutionMove<V>(puzzle: Puzzle<V>): Move<V> | null {
   return findLegalMove(puzzleStartState(puzzle), puzzle.solutionFrom, puzzle.solutionTo);
 }
 
 /** The full resulting state after the solution move — used to reveal what actually happens (including any chain) once solved. */
-export function puzzleSolvedState(puzzle: Puzzle): GameState<number> {
+export function puzzleSolvedState<V>(puzzle: Puzzle<V>): GameState<V> {
   const solution = legalSolutionMove(puzzle);
   if (!solution) throw new Error(`puzzle ${puzzle.id}: its own solutionFrom/solutionTo is not a legal move at the replayed position`);
   return applyMove(puzzleStartState(puzzle), solution, puzzle.variant);
 }
 
-/** The three variants whose chip value is a plain `number` (`docs/VARIANTS.md`) — the only ones `Puzzle`'s `Variant<number>` constraint can represent. Fraction/radical/polynomial variants would need a generic `Puzzle<V>` first (CLAUDE.md's "build concretely, extract generic later"), which is a separate, larger change than adding puzzle *generation*. */
-export const PUZZLE_VARIANTS: readonly Variant<number>[] = [WHOLE_DAMATH, COUNTING_DAMATH, INTEGER_DAMATH];
+/** All seven official variants (`docs/VARIANTS.md`) — puzzle generation is generic over the chip value type `V` (`Puzzle<V>`), using `Arithmetic<V>.compare`/`format` for exact ordering/display and `@damath/ai`'s `toNumberFor` bridge only for the "is this meaningfully better" heuristic gap check below, the same approximation the AI opponent already relies on for non-numeric chip types. */
+export const PUZZLE_VARIANTS: readonly AnyVariant[] = ALL_VARIANTS;
 
 let generatedCount = 0;
 
@@ -123,8 +124,9 @@ let generatedCount = 0;
  * real choice), so this retries up to `MAX_ATTEMPTS` times and gives up with `null` --
  * PuzzleScreen falls back to a curated puzzle rather than showing nothing.
  */
-export function generatePuzzle(variant: Variant<number>): Puzzle | null {
+export function generatePuzzle<V>(variant: Variant<V>): Puzzle<V> | null {
   const MAX_ATTEMPTS = 300;
+  const toNumber = toNumberFor<V>(variant.id);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const setupMoves: [Position, Position][] = [];
     let state = createGame(variant);
@@ -147,7 +149,7 @@ export function generatePuzzle(variant: Variant<number>): Puzzle | null {
     if (options.length === 0) continue;
     const scored = options
       .map((move) => ({ move, value: applyMove(state, move, variant, { checkGameOver: false }).scores[state.turn] }))
-      .sort((a, b) => b.value - a.value);
+      .sort((a, b) => variant.arithmetic.compare(b.value, a.value));
     const best = scored[0];
     if (!best) continue;
     const mover = playerLabel(state.turn);
@@ -168,8 +170,13 @@ export function generatePuzzle(variant: Variant<number>): Puzzle | null {
 
     const runnerUp = scored.find((s) => !samePosition(s.move.from, best.move.from));
     if (!runnerUp) continue; // every legal move is from the same chip -- no real choice to puzzle over
-    const gap = best.value - runnerUp.value;
-    if (gap < Math.max(2, Math.abs(best.value) * 0.15)) continue; // too close to call a "better" move
+    // A heuristic-only real-number approximation (packages/ai's own bridge for exactly
+    // this "is one option meaningfully better" problem) -- never used for the puzzle's
+    // displayed values, only to decide whether the gap is worth puzzling over.
+    const bestNum = toNumber(best.value);
+    const runnerUpNum = toNumber(runnerUp.value);
+    const gap = bestNum - runnerUpNum;
+    if (gap < Math.max(2, Math.abs(bestNum) * 0.15)) continue; // too close to call a "better" move
 
     generatedCount += 1;
     return {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { applyMove, operationAt, pieceAt } from '@damath/engine';
-import type { GameState, Position, Variant, VariantId } from '@damath/engine';
+import type { AnyVariant, GameState, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniSquareSpec } from './diagram/MiniBoard';
 import { PUZZLES, PUZZLE_VARIANTS, findLegalMove, generatePuzzle, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
 import { isPlayable } from '../lib/board';
@@ -11,6 +11,10 @@ import { playCaptureSound, playErrorSound, playWinSound } from '../lib/sound';
 interface PuzzleScreenProps {
   onBackToLobby: () => void;
 }
+
+/** Distributes over the `AnyVariant` union to recover "every chip value type any variant uses" — same trick App.tsx's `GameShell` call site already relies on, needed here because a generated puzzle's variant (and so its chip value type `V`) can change at runtime as the player picks a different one to generate from. */
+type ValueOf<T> = T extends Variant<infer V> ? V : never;
+type AnyPuzzleValue = ValueOf<AnyVariant>;
 
 const cardStyle = {
   background: 'var(--surface-panel)',
@@ -43,15 +47,15 @@ function samePosition(a: Position, b: Position): boolean {
 }
 
 /** `goTo` always wraps its argument into [0, PUZZLES.length) via modulo, so an out-of-range index here is a real bug, not a case to degrade gracefully from. */
-function puzzleAt(index: number): Puzzle {
+function puzzleAt(index: number): Puzzle<AnyPuzzleValue> {
   const puzzle = PUZZLES[index];
   if (!puzzle) throw new Error(`unreachable: puzzle index ${String(index)} out of range`);
   return puzzle;
 }
 
-function buildRows(
-  state: GameState<number>,
-  variant: Variant<number>,
+function buildRows<V>(
+  state: GameState<V>,
+  variant: Variant<V>,
   selected: Position | null,
   onActivate: (pos: Position) => void,
 ): (MiniSquareSpec | null)[][] {
@@ -90,25 +94,41 @@ function buildRows(
 export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState<'curated' | 'generated'>('curated');
-  const [generated, setGenerated] = useState<Puzzle | null>(null);
+  const [generated, setGenerated] = useState<Puzzle<AnyPuzzleValue> | null>(null);
   const [genVariantId, setGenVariantId] = useState<VariantId>(PUZZLE_VARIANTS[0]?.id ?? 'whole');
   const [genError, setGenError] = useState<string | null>(null);
   const puzzle = mode === 'generated' && generated ? generated : puzzleAt(index);
 
-  const [state, setState] = useState<GameState<number>>(() => puzzleStartState(puzzle));
+  const [state, setState] = useState<GameState<AnyPuzzleValue>>(() => puzzleStartState(puzzle));
   const [selected, setSelected] = useState<Position | null>(null);
   const [status, setStatus] = useState<'playing' | 'solved' | 'revealed'>('playing');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const { effectiveVolume } = useSettings();
 
-  useEffect(() => {
-    setState(puzzleStartState(puzzle));
+  // Resets `state` (and the rest of this puzzle's play state) the moment `puzzle`
+  // itself changes, synchronously during render rather than in a `useEffect` --
+  // React's own documented pattern for "adjusting state when a prop changes"
+  // (https://react.dev/learn/you-might-not-need-an-effect). Calling `setState`
+  // here only *schedules* the update; this render's own `state` binding is still
+  // the previous puzzle's board, so `effectiveState` (used below in place of
+  // `state` for the rest of *this* render) is what actually prevents passing a
+  // stale board together with the new puzzle's `variant` to `buildRows` --
+  // harmless when every puzzle variant shared the same `number` value shape, but
+  // a hard crash once a puzzle could switch to a structurally different chip
+  // type (e.g. Polynomial's array-based `format` fed the old puzzle's plain
+  // numbers), found by actually generating a Polynomial puzzle from a numeric one.
+  const [puzzleForState, setPuzzleForState] = useState(puzzle);
+  let effectiveState = state;
+  if (puzzleForState !== puzzle) {
+    setPuzzleForState(puzzle);
+    effectiveState = puzzleStartState(puzzle);
+    setState(effectiveState);
     setSelected(null);
     setStatus('playing');
     setFeedback(null);
     setShowHint(false);
-  }, [puzzle]);
+  }
 
   function activate(pos: Position) {
     if (status !== 'playing') return;
@@ -156,7 +176,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
   function generateNew() {
     const variant = PUZZLE_VARIANTS.find((v) => v.id === genVariantId) ?? PUZZLE_VARIANTS[0];
     if (!variant) return; // unreachable -- PUZZLE_VARIANTS is a fixed non-empty constant
-    const next = generatePuzzle(variant);
+    const next = generatePuzzle<AnyPuzzleValue>(variant);
     if (!next) {
       setGenError("Couldn't find a fresh tactical position that time — try again.");
       return;
@@ -166,7 +186,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
     setMode('generated');
   }
 
-  const rows = buildRows(state, puzzle.variant, selected, activate);
+  const rows = buildRows(effectiveState, puzzle.variant, selected, activate);
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
@@ -180,7 +200,7 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
           <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <MiniBoard rows={rows} size={760} label={`${puzzle.variant.name} · ${playerLabel(state.turn)} to move`} />
+            <MiniBoard rows={rows} size={760} label={`${puzzle.variant.name} · ${playerLabel(effectiveState.turn)} to move`} />
           </div>
 
           <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { legalMoves } from '@damath/engine';
+import type { AnyVariant, Variant } from '@damath/engine';
 import { PUZZLES, PUZZLE_VARIANTS, generatePuzzle, legalSolutionMove, puzzleSolvedState, puzzleStartState } from './puzzles';
+
+/** Same union-distribution trick App.tsx and PuzzleScreen.tsx already rely on to recover a concrete `V` from `AnyVariant` at a call site. */
+type ValueOf<T> = T extends Variant<infer V> ? V : never;
+type AnyPuzzleValue = ValueOf<AnyVariant>;
 
 describe('puzzle data', () => {
   for (const puzzle of PUZZLES) {
@@ -40,7 +45,7 @@ describe('generatePuzzle', () => {
   for (const variant of PUZZLE_VARIANTS) {
     it(`produces a real, legal puzzle for ${variant.name} (run repeatedly -- random, not a single lucky seed)`, () => {
       for (let i = 0; i < 20; i++) {
-        const puzzle = generatePuzzle(variant);
+        const puzzle = generatePuzzle<AnyPuzzleValue>(variant);
         expect(puzzle).not.toBeNull();
         if (!puzzle) continue; // narrows for TS below; the assertion above already fails the test if this ever hits
         expect(puzzle.variant).toBe(variant);
@@ -71,7 +76,7 @@ describe('generatePuzzle', () => {
     const ids = new Set<string>();
     for (const variant of PUZZLE_VARIANTS) {
       for (let i = 0; i < 10; i++) {
-        const puzzle = generatePuzzle(variant);
+        const puzzle = generatePuzzle<AnyPuzzleValue>(variant);
         if (puzzle) ids.add(puzzle.id);
       }
     }

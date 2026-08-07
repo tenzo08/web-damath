@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { applyMove, operationAt, pieceAt } from '@damath/engine';
 import type { AnyVariant, GameState, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniSquareSpec } from './diagram/MiniBoard';
-import { PUZZLES, PUZZLE_VARIANTS, findLegalMove, generatePuzzle, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
+import { PUZZLES, PUZZLE_VARIANTS, findLegalMove, generatePuzzle, legalSolutionMove, puzzleSolvedState, puzzleStartState, type Puzzle } from '../lib/puzzles';
 import { isPlayable } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useSettings } from '../lib/settings';
@@ -53,16 +53,26 @@ function puzzleAt(index: number): Puzzle<AnyPuzzleValue> {
   return puzzle;
 }
 
+/**
+ * `flipped` mirrors Board.tsx's own convention exactly: not flipped renders row 7 at
+ * the top and row 0 (White's home) at the bottom; flipped renders row 0 at the top and
+ * row 7 (Dark's home) at the bottom. Puzzles pass `flipped = turn === 'black'` so
+ * whichever side is actually on the move is always the one nearest the reader, the
+ * same "your turn, your side is at the bottom" convention the real game screens use.
+ */
 function buildRows<V>(
   state: GameState<V>,
   variant: Variant<V>,
   selected: Position | null,
+  flipped: boolean,
   onActivate: (pos: Position) => void,
 ): (MiniSquareSpec | null)[][] {
+  const rowOrder = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+  const colOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
   const rows: (MiniSquareSpec | null)[][] = [];
-  for (let row = 0; row < 8; row++) {
+  for (const row of rowOrder) {
     const cols: (MiniSquareSpec | null)[] = [];
-    for (let col = 0; col < 8; col++) {
+    for (const col of colOrder) {
       const pos: Position = { row, col };
       if (!isPlayable(pos)) {
         cols.push({ playable: false });
@@ -186,7 +196,19 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
     setMode('generated');
   }
 
-  const rows = buildRows(effectiveState, puzzle.variant, selected, activate);
+  // The player to move is always the one nearest the reader, same convention the real
+  // game screens use — see buildRows's own doc comment for the exact row/col mapping.
+  const flipped = effectiveState.turn === 'black';
+  const rows = buildRows(effectiveState, puzzle.variant, selected, flipped, activate);
+
+  // "Number of moves needed" (docs request) — every puzzle here is, by construction, a
+  // single-turn "find the winning move" position (lib/puzzles.ts: a forced chain, or
+  // picking the best of several legal captures), so this is always 1 turn even when
+  // that turn is itself a multi-jump capture chain — which is called out separately
+  // (docs/DAMATH_RULES.md §"a whole chain of jumps counts as a single turn") rather
+  // than counted as extra "moves," to avoid overstating what the puzzle actually asks.
+  const solutionMove = useMemo(() => legalSolutionMove(puzzle), [puzzle]);
+  const jumpCount = solutionMove?.captures.length ?? 0;
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
@@ -208,6 +230,25 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
               <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
                 {mode === 'curated' ? `Puzzle ${index + 1} of ${PUZZLES.length}` : `Generated puzzle · ${puzzle.variant.name}`}
               </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', margin: 'var(--pad-sm) 0 0 0' }}>
+                <span
+                  style={{
+                    fontSize: 'var(--fs-micro)',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    fontWeight: 700,
+                    color: 'var(--accent)',
+                    background: 'var(--accent-bg)',
+                    borderRadius: 'var(--radius)',
+                    padding: '2px 8px',
+                  }}
+                >
+                  {playerLabel(effectiveState.turn)} to move
+                </span>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
+                  {jumpCount > 1 ? `1 move — a ${String(jumpCount)}-jump capture` : '1 move to solve'}
+                </span>
+              </div>
               <h2 style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-label)' }}>{puzzle.title}</h2>
 
               {status === 'playing' && (

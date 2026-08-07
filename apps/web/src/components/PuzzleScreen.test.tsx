@@ -52,4 +52,21 @@ describe('PuzzleScreen', () => {
     fireEvent.change(select, { target: { value: 'radical' } });
     fireEvent.click(screen.getByText('Generate new puzzle'));
   });
+
+  it('shows which player is to move and how many moves the puzzle takes to solve', () => {
+    renderPuzzleScreen();
+    // Puzzle 1 ("Find the forced chain") is Dark to move after its three setup plies,
+    // and its solution is a two-jump capture chain — still one turn (docs/DAMATH_RULES.md:
+    // "a whole chain of jumps counts as a single turn"), called out separately rather
+    // than counted as extra moves.
+    expect(screen.getByText('Dark to move')).toBeInTheDocument();
+    expect(screen.getByText(/1 move — a 2-jump capture/)).toBeInTheDocument();
+  });
+
+  it('shows a plain "1 move to solve" for a puzzle whose solution is a single jump', () => {
+    renderPuzzleScreen();
+    // Puzzle 2 ("Pick the better capture") is a single-jump capture.
+    fireEvent.click(screen.getByRole('button', { name: 'Next puzzle ▸' }));
+    expect(screen.getByText('1 move to solve')).toBeInTheDocument();
+  });
 });

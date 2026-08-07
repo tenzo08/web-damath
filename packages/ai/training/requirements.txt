@@ -1,0 +1,12 @@
+# Offline training tooling only — never a runtime dependency of packages/ai or any
+# shipped app. Install into an isolated venv (packages/ai/training/.venv/, gitignored):
+#
+#   python -m venv .venv
+#   .venv/Scripts/python.exe -m pip install -r requirements.txt
+#
+# For GPU training (CUDA), install the CUDA build instead of this plain requirement:
+#
+#   .venv/Scripts/python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+torch>=2.0
+numpy>=1.24

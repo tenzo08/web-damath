@@ -8,6 +8,8 @@ export interface AuthUser {
   rating: number;
   /** One of lib/avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle (ProfileButton.tsx). */
   avatarEmoji: string | null;
+  /** A real uploaded photo (lib/avatars.ts's fileToAvatarDataUrl), or null — takes priority over avatarEmoji wherever both are set (components/Avatar.tsx). */
+  avatarImage: string | null;
   /** Set once a verify-email link is redeemed. Not currently gating any feature -- just a real, checkable fact about the account. */
   emailVerified: boolean;
   /** How many placement games (apps/server/src/rating/elo.ts's PLACEMENT_GAMES_REQUIRED) this account has finished against the computer. Ranked online matchmaking routes straight to a bot game, no human wait, until this reaches placementGamesRequired. */
@@ -74,7 +76,10 @@ export async function me(token: string): Promise<AuthUser> {
   return data.user;
 }
 
-export async function updateProfile(token: string, patch: { displayName?: string; avatarEmoji?: string | null }): Promise<AuthUser> {
+export async function updateProfile(
+  token: string,
+  patch: { displayName?: string; avatarEmoji?: string | null; avatarImage?: string | null },
+): Promise<AuthUser> {
   let res: Response;
   try {
     res = await fetch(`${SERVER_HTTP_URL}/auth/me`, {

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
+import { Avatar } from './Avatar';
 import { useSettings, type ThemePreference } from '../lib/settings';
 import { playMoveSound } from '../lib/sound';
-import { AVATAR_OPTIONS } from '../lib/avatars';
+import { AVATAR_OPTIONS, fileToAvatarDataUrl } from '../lib/avatars';
 import type { AuthUser } from '../lib/authClient';
 import { myBlocks, unblockUser, type BlockedEntry } from '../lib/moderationClient';
 import { sendVerification } from '../lib/authClient';
@@ -36,7 +37,7 @@ interface SettingsModalProps {
   onClose: () => void;
   /** `null` while signed out — the Profile section only makes sense for a real account, so it's omitted entirely rather than shown disabled. */
   user: AuthUser | null;
-  onUpdateProfile: (patch: { displayName?: string; avatarEmoji?: string | null }) => Promise<void>;
+  onUpdateProfile: (patch: { displayName?: string; avatarEmoji?: string | null; avatarImage?: string | null }) => Promise<void>;
   token: string | null;
   /** Settings is now the single account-actions surface reached via the top-left profile button, so sign-out lives here instead of a separate always-visible header button. */
   onSignOut: () => void;
@@ -114,9 +115,11 @@ function ProfileSection({
   const [name, setName] = useState(user.displayName);
   const [savingName, setSavingName] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationSent, setVerificationSent] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function resendVerification() {
     setSendingVerification(true);
@@ -163,29 +166,38 @@ function ProfileSection({
     }
   }
 
+  async function pickPhoto(file: File) {
+    setError(null);
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file);
+      await onUpdateProfile({ avatarImage: dataUrl });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not upload that photo.');
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function removePhoto() {
+    setError(null);
+    setUploadingPhoto(true);
+    try {
+      await onUpdateProfile({ avatarImage: null });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove your photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   return (
     <div>
       <h3 style={sectionHeading}>Profile</h3>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', marginBottom: 'var(--pad-md)' }}>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 48,
-            height: 48,
-            flexShrink: 0,
-            borderRadius: '50%',
-            background: 'var(--accent)',
-            color: 'var(--accent-on)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: user.avatarEmoji ? 24 : 'var(--fs-title)',
-            fontWeight: 700,
-          }}
-        >
-          {user.avatarEmoji ?? user.displayName.charAt(0).toUpperCase()}
-        </span>
+        <Avatar size={48} imageUrl={user.avatarImage} emoji={user.avatarEmoji} fallbackLetter={user.displayName.charAt(0).toUpperCase()} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>{user.email}</span>
           <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>Rating {user.rating}</span>
@@ -252,7 +264,36 @@ function ProfileSection({
       </label>
 
       <span style={{ display: 'block', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)', marginBottom: 'var(--pad-sm)' }}>
-        Avatar
+        Profile picture
+      </span>
+      <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginBottom: 'var(--pad-md)' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void pickPhoto(file);
+          }}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingPhoto}
+          style={{ ...cardButton(false), padding: 'var(--pad-sm) var(--pad-md)' }}
+        >
+          {uploadingPhoto ? 'Uploading…' : 'Upload a photo'}
+        </button>
+        {user.avatarImage && (
+          <button type="button" onClick={() => void removePhoto()} disabled={uploadingPhoto} style={{ ...cardButton(false), padding: 'var(--pad-sm) var(--pad-md)' }}>
+            Remove photo
+          </button>
+        )}
+      </div>
+
+      <span style={{ display: 'block', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)', marginBottom: 'var(--pad-sm)' }}>
+        Or pick an avatar
       </span>
       <div
         role="group"
@@ -284,7 +325,7 @@ function ProfileSection({
         })}
       </div>
       <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>
-        Tap your current avatar again to go back to the plain initial.
+        Tap your current avatar again to go back to the plain initial. An uploaded photo always takes priority over this if you have one.
       </p>
 
       {error && (

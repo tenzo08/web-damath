@@ -269,6 +269,7 @@ export function OnlineGameScreen({
         side={side}
         label={label}
         avatarEmoji={isMe ? (user?.avatarEmoji ?? null) : null}
+        avatarImage={isMe ? (user?.avatarImage ?? null) : null}
         rating={isMe ? (user?.rating ?? null) : null}
         score={view.scores[side]}
         isTurn={view.status !== 'finished' && view.turn === side}

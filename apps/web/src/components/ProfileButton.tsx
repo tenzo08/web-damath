@@ -1,5 +1,6 @@
 import type { AuthUser } from '../lib/authClient';
 import { useLocale } from '../lib/i18n';
+import { Avatar } from './Avatar';
 
 interface ProfileButtonProps {
   user: AuthUser | null;
@@ -53,24 +54,7 @@ export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonP
         cursor: 'pointer',
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 32,
-          height: 32,
-          flexShrink: 0,
-          borderRadius: '50%',
-          background: 'var(--accent)',
-          color: 'var(--accent-on)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: user.avatarEmoji ? 16 : 'var(--fs-meta)',
-          fontWeight: 700,
-        }}
-      >
-        {user.avatarEmoji ?? user.displayName.charAt(0).toUpperCase()}
-      </span>
+      <Avatar size={32} imageUrl={user.avatarImage} emoji={user.avatarEmoji} fallbackLetter={user.displayName.charAt(0).toUpperCase()} />
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
         <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-primary)', fontWeight: 700 }}>{user.displayName}</span>
         <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>

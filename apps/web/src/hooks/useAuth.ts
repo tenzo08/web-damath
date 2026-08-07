@@ -110,7 +110,7 @@ export function useAuth() {
    * rather than swallow it.
    */
   const updateProfile = useCallback(
-    async (patch: { displayName?: string; avatarEmoji?: string | null }) => {
+    async (patch: { displayName?: string; avatarEmoji?: string | null; avatarImage?: string | null }) => {
       if (!token) throw new Error('not signed in');
       setUser(await authClient.updateProfile(token, patch));
     },

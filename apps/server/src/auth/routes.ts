@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { OAuth2Client } from 'google-auth-library';
 import { actionTokenExpiry, generateActionToken, hashActionToken, isActionTokenExpired } from './actionTokens.js';
-import { isValidAvatarEmoji } from './avatars.js';
+import { isValidAvatarEmoji, isValidAvatarImageDataUrl } from './avatars.js';
 import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
 import { PLACEMENT_GAMES_REQUIRED, STARTING_RATING } from '../rating/elo.js';
@@ -118,6 +118,7 @@ function publicUser(user: User) {
     displayName: user.displayName,
     rating: user.rating,
     avatarEmoji: user.avatarEmoji,
+    avatarImage: user.avatarImage,
     emailVerified: user.emailVerified,
     placementGamesPlayed: user.placementGamesPlayed,
     placementGamesRequired: PLACEMENT_GAMES_REQUIRED,
@@ -131,6 +132,11 @@ const updateProfileBodySchema = {
   properties: {
     displayName: { type: 'string', minLength: 1, maxLength: 60 },
     avatarEmoji: { type: ['string', 'null'] },
+    // A generous upper bound on the *encoded string*, not the real byte-cap check —
+    // isValidAvatarImageDataUrl (auth/avatars.ts) does the actual decoded-size
+    // validation below; this is just cheap enough to reject a wildly oversized body
+    // before it's even parsed as a candidate data URL.
+    avatarImage: { type: ['string', 'null'], maxLength: 500_000 },
   },
 } as const;
 
@@ -183,6 +189,7 @@ export function registerAuthRoutes(
         displayName,
         rating: STARTING_RATING,
         avatarEmoji: null,
+        avatarImage: null,
         emailVerified: false,
         resetTokenHash: null,
         resetTokenExpiresAt: null,
@@ -286,6 +293,7 @@ export function registerAuthRoutes(
         displayName,
         rating: STARTING_RATING,
         avatarEmoji: null,
+        avatarImage: null,
         emailVerified: true, // Google already verified this email -- no separate verify-email step needed.
         resetTokenHash: null,
         resetTokenExpiresAt: null,
@@ -330,7 +338,7 @@ export function registerAuthRoutes(
     return reply.send({ user: publicUser(user) });
   });
 
-  app.patch<{ Body: { displayName?: string; avatarEmoji?: string | null } }>(
+  app.patch<{ Body: { displayName?: string; avatarEmoji?: string | null; avatarImage?: string | null } }>(
     '/auth/me',
     { schema: { body: updateProfileBodySchema } },
     async (request, reply) => {
@@ -342,9 +350,12 @@ export function registerAuthRoutes(
       const user = await userStore.findById(request.user.sub);
       if (!user) return reply.code(401).send({ error: 'unauthorized' });
 
-      const { displayName, avatarEmoji } = request.body;
+      const { displayName, avatarEmoji, avatarImage } = request.body;
       if (avatarEmoji !== undefined && avatarEmoji !== null && !isValidAvatarEmoji(avatarEmoji)) {
         return reply.code(400).send({ error: 'not a recognised avatar option' });
+      }
+      if (avatarImage !== undefined && avatarImage !== null && !isValidAvatarImageDataUrl(avatarImage)) {
+        return reply.code(400).send({ error: 'not a valid profile picture — must be a PNG, JPEG, or WebP image under 300KB' });
       }
       const trimmedName = displayName !== undefined ? displayName.trim() : undefined;
       if (trimmedName !== undefined && trimmedName.length === 0) {
@@ -361,6 +372,7 @@ export function registerAuthRoutes(
         ...user,
         displayName: trimmedName ?? user.displayName,
         avatarEmoji: avatarEmoji !== undefined ? avatarEmoji : user.avatarEmoji,
+        avatarImage: avatarImage !== undefined ? avatarImage : user.avatarImage,
       };
       await userStore.update(updated);
       return reply.send({ user: publicUser(updated) });

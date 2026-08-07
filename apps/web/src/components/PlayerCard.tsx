@@ -1,7 +1,11 @@
+import { Avatar } from './Avatar';
+
 interface PlayerCardProps {
   side: 'white' | 'black';
   label: string;
   avatarEmoji?: string | null;
+  /** A real uploaded photo — takes priority over `avatarEmoji` when both are set. */
+  avatarImage?: string | null;
   rating?: number | null;
   score: string;
   isTurn: boolean;
@@ -13,7 +17,7 @@ interface PlayerCardProps {
  * away from the board). Rendered twice per game (one above, one below), the pair
  * together carrying what ScorePanel used to show alone.
  */
-export function PlayerCard({ side, label, avatarEmoji, rating, score, isTurn }: PlayerCardProps) {
+export function PlayerCard({ side, label, avatarEmoji, avatarImage, rating, score, isTurn }: PlayerCardProps) {
   const dotColor = side === 'white' ? 'var(--piece-light)' : 'var(--piece-dark)';
   return (
     <div
@@ -30,24 +34,7 @@ export function PlayerCard({ side, label, avatarEmoji, rating, score, isTurn }: 
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', minWidth: 0 }}>
         <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-        <span
-          aria-hidden="true"
-          style={{
-            width: 32,
-            height: 32,
-            flexShrink: 0,
-            borderRadius: '50%',
-            background: 'var(--accent)',
-            color: 'var(--accent-on)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: avatarEmoji ? 16 : 'var(--fs-meta)',
-          }}
-        >
-          {avatarEmoji ?? label.charAt(0).toUpperCase()}
-        </span>
+        <Avatar size={32} imageUrl={avatarImage} emoji={avatarEmoji} fallbackLetter={label.charAt(0).toUpperCase()} />
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-meta)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {label}

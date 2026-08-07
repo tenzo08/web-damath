@@ -57,6 +57,7 @@ async function makeUser(id: string, rating = STARTING_RATING, placementGamesPlay
     displayName: id,
     rating,
     avatarEmoji: null,
+    avatarImage: null,
     emailVerified: false,
     resetTokenHash: null,
     resetTokenExpiresAt: null,

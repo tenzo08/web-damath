@@ -39,6 +39,10 @@ model User {
   /// circle (ProfileButton.tsx/SettingsModal.tsx). Validated server-side against that
   /// same list on PATCH /auth/me — never an arbitrary client-supplied string.
   avatarEmoji  String?
+  /// A real uploaded photo, as a size-capped `data:image/...;base64,...` URL
+  /// (auth/avatars.ts's MAX_AVATAR_IMAGE_BYTES/isValidAvatarImageDataUrl) — takes
+  /// priority over avatarEmoji wherever both are set, per the client's Avatar component.
+  avatarImage  String?
   /// Set once a verify-email token is successfully redeemed. Not currently enforced
   /// anywhere -- see auth/store.ts.
   emailVerified        Boolean   @default(false)

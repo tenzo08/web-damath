@@ -12,6 +12,8 @@ export interface User {
   readonly rating: number;
   /** One of avatars.ts's AVATAR_OPTIONS, or null for the default initial-letter circle. */
   readonly avatarEmoji: string | null;
+  /** A real uploaded photo, as a size-capped `data:image/...;base64,...` URL (avatars.ts's `isValidAvatarImageDataUrl`), or null. Takes priority over `avatarEmoji` wherever both are set — see the client's `Avatar` component. */
+  readonly avatarImage: string | null;
   /** Set once a verify-email token is successfully redeemed. Not currently enforced anywhere (no feature is gated behind it) — just a real, checkable fact about the account. */
   readonly emailVerified: boolean;
   /** SHA-256 of the live token, never the raw token itself (same "never store the redeemable secret" reasoning as a password hash) — see auth/actionTokens.ts. Null when no reset is pending. */
@@ -152,6 +154,7 @@ export class PrismaUserStore implements UserStore {
         displayNameLower: user.displayName.toLowerCase(),
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
+        avatarImage: user.avatarImage,
         emailVerified: user.emailVerified,
         resetTokenHash: user.resetTokenHash,
         resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
@@ -174,6 +177,7 @@ export class PrismaUserStore implements UserStore {
         displayNameLower: user.displayName.toLowerCase(),
         rating: user.rating,
         avatarEmoji: user.avatarEmoji,
+        avatarImage: user.avatarImage,
         emailVerified: user.emailVerified,
         resetTokenHash: user.resetTokenHash,
         resetTokenExpiresAt: user.resetTokenExpiresAt ? new Date(user.resetTokenExpiresAt) : null,
@@ -203,6 +207,7 @@ interface PrismaUserRow {
   displayName: string;
   rating: number;
   avatarEmoji: string | null;
+  avatarImage: string | null;
   emailVerified: boolean;
   resetTokenHash: string | null;
   resetTokenExpiresAt: Date | null;
@@ -221,6 +226,7 @@ function toUser(row: PrismaUserRow): User {
     displayName: row.displayName,
     rating: row.rating,
     avatarEmoji: row.avatarEmoji,
+    avatarImage: row.avatarImage,
     emailVerified: row.emailVerified,
     resetTokenHash: row.resetTokenHash,
     resetTokenExpiresAt: row.resetTokenExpiresAt ? row.resetTokenExpiresAt.toISOString() : null,

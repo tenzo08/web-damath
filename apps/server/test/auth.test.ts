@@ -187,6 +187,61 @@ describe('PATCH /auth/me', () => {
     expect(res.json().user.avatarEmoji).toBeNull();
   });
 
+  // A real (if tiny) 1×1 transparent PNG — the validator (auth/avatars.ts) checks the
+  // data URL's shape and decoded byte size, not that it's a decodable image, but using
+  // a genuine one here keeps the test honest about what a real upload looks like.
+  const TINY_PNG_DATA_URL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+  it('accepts a real uploaded profile picture and persists it, taking priority alongside the emoji field', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarImage: TINY_PNG_DATA_URL },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.avatarImage).toBe(TINY_PNG_DATA_URL);
+  });
+
+  it('rejects a value that is not a data: image URL', async () => {
+    const token = await signupAndGetToken();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarImage: 'https://example.com/not-a-data-url.png' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects an image over the size cap', async () => {
+    const token = await signupAndGetToken();
+    // ~450,000 base64 chars decodes to well over MAX_AVATAR_IMAGE_BYTES (300,000).
+    const oversized = `data:image/png;base64,${'A'.repeat(450_000)}`;
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarImage: oversized },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('clears the uploaded picture back to null, independently of the emoji field', async () => {
+    const token = await signupAndGetToken();
+    await app.inject({ method: 'PATCH', url: '/auth/me', headers: { authorization: `Bearer ${token}` }, payload: { avatarImage: TINY_PNG_DATA_URL } });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { avatarImage: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.avatarImage).toBeNull();
+  });
+
   it('rejects changing to a nickname another account already has, case-insensitively', async () => {
     await signup({ email: 'other@example.com', displayName: 'Taken Name' });
     const token = await signupAndGetToken();

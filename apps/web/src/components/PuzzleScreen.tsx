@@ -268,8 +268,11 @@ export function PuzzleScreen({ onBackToLobby }: PuzzleScreenProps) {
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div style={{ flex: '3 1 480px', maxWidth: 760, minWidth: 280, width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <MiniBoard rows={rows} size={760} label={`${puzzle.variant.name} · ${playerLabel(effectiveState.turn)} to move`} />
+          <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', justifyContent: 'center' }}>
+            {/* Same viewport-height-aware cap as the real game board (Board.tsx,
+                OnlineBoard.tsx) — matches size across every board in the app instead
+                of puzzles alone running taller than the viewport. */}
+            <MiniBoard rows={rows} size="min(560px, 58vh, 100%)" label={`${puzzle.variant.name} · ${playerLabel(effectiveState.turn)} to move`} />
           </div>
 
           <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>

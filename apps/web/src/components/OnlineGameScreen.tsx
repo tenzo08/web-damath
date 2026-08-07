@@ -30,6 +30,8 @@ interface OnlineGameScreenProps {
   initialRoomId?: string | undefined;
   /** Only meaningful together with `initialRoomId` — which screen handed off this room, purely for header/back-button copy. Defaults to `'tournament'` so the existing TournamentScreen call site didn't need to change. */
   origin?: 'tournament' | 'history' | 'spectate' | undefined;
+  /** Opens GameReviewScreen for this room's variant/move history — App.tsx owns the actual screen switch, this just hands over what to review. */
+  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[]) => void;
   /**
    * Fires once when a game reaches `status: 'finished'` (win, loss, or draw) — App.tsx
    * wires this to `useAuth`'s `refreshUser`, since the server updates the player's Elo
@@ -117,6 +119,7 @@ export function OnlineGameScreen({
   onOpenTutorial,
   initialRoomId,
   origin = 'tournament',
+  onReviewGame,
   onGameFinished,
 }: OnlineGameScreenProps) {
   const online = useOnlineGame(token);
@@ -484,9 +487,18 @@ export function OnlineGameScreen({
                               ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
                               : 'Game over — draw.'}
                     </p>
-                    <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginTop: 'var(--pad-md)' }}>
+                    <div style={{ display: 'flex', gap: 'var(--gap-sm)', flexWrap: 'wrap', marginTop: 'var(--pad-md)' }}>
                       <button type="button" onClick={() => online.queue(online.view?.variantId ?? variantId)} style={primaryButton}>
                         Find another match
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (online.view) onReviewGame(online.view.variantId, online.view.moveHistory);
+                        }}
+                        style={secondaryButton}
+                      >
+                        🔍 Review game
                       </button>
                       <button type="button" onClick={onBackToLobby} style={secondaryButton}>
                         Back to Lobby

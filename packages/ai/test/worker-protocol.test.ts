@@ -17,4 +17,12 @@ describe('handleAiRequest (the worker\'s logic, without a real Worker)', () => {
     const b = handleAiRequest({ id: 'b', state, tier: 'steady', seed: 7 });
     expect(a.result.move).toEqual(b.result.move);
   });
+
+  it('an explicit `options` override bypasses the tier preset entirely', () => {
+    const state = createGame(INTEGER_DAMATH);
+    // 'learner' presets maxDepth 2 -- an explicit override to depth 1 must win, proving
+    // `options` (not `tier`) drove the actual search.
+    const response = handleAiRequest({ id: 'review-1', state, tier: 'learner', options: { maxDepth: 1, timeBudgetMs: 200, blunderRate: 0 } });
+    expect(response.result.depth).toBe(1);
+  });
 });

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
-import type { AnyVariant, Player, Variant } from '@damath/engine';
+import type { AnyVariant, Player, Variant, VariantId } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
 import { useGame } from './hooks/useGame';
 import { useComputerOpponent } from './hooks/useComputerOpponent';
@@ -42,6 +42,7 @@ const SpectateScreen = lazy(() => import('./components/SpectateScreen').then((m)
 const PuzzleScreen = lazy(() => import('./components/PuzzleScreen').then((m) => ({ default: m.PuzzleScreen })));
 const LeaderboardScreen = lazy(() => import('./components/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
 const PuzzleRushScreen = lazy(() => import('./components/PuzzleRushScreen').then((m) => ({ default: m.PuzzleRushScreen })));
+const GameReviewScreen = lazy(() => import('./components/GameReviewScreen').then((m) => ({ default: m.GameReviewScreen })));
 
 /** The Suspense fallback for every lazy screen above — brief by design, since these are small chunks even on slow connections; just enough to avoid a blank flash. */
 function ScreenFallback() {
@@ -77,6 +78,7 @@ function GameShellView<V>({
   onFlip,
   allowManualFlip,
   nav,
+  onReviewGame,
 }: {
   variant: Variant<V>;
   gameApi: ReturnType<typeof useGame<V>>;
@@ -92,6 +94,7 @@ function GameShellView<V>({
   /** Friend mode auto-flips to whichever side is on move instead (GameShell computes `flipped` for that case) — the manual "Flip board" button would just get overridden on the next move, so it's hidden rather than shown-but-ineffective. */
   allowManualFlip: boolean;
   nav: GameNavigation;
+  onReviewGame: () => void;
 }) {
   const {
     game,
@@ -283,6 +286,7 @@ function GameShellView<V>({
         onRematch={nav.onRematch}
         onNewGame={nav.onNewGame}
         onBackToLobby={nav.onBackToLobby}
+        onReview={onReviewGame}
         labelFor={labelFor}
       />
 
@@ -305,6 +309,7 @@ function GameShell<V>({
   onFlip,
   nav,
   playerName,
+  onReviewGame,
 }: {
   variant: Variant<V>;
   tier: DifficultyTier | null;
@@ -313,6 +318,7 @@ function GameShell<V>({
   nav: GameNavigation;
   /** The signed-in player's display name, if any — only ever used for the human seat in vs-AI mode (`useComputerOpponent` always seats the bot black, so the human is always white there). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
   playerName: string | null;
+  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[]) => void;
 }) {
   const gameApi = useGame(variant);
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
@@ -353,11 +359,12 @@ function GameShell<V>({
       onFlip={onFlip}
       allowManualFlip={!isFriendMode}
       nav={nav}
+      onReviewGame={() => onReviewGame(variant.id, gameApi.game.moveHistory)}
     />
   );
 }
 
-type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush';
+type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles' | 'leaderboard' | 'puzzleRush' | 'review';
 
 /**
  * Real URL paths for each screen, and the browser's own back/forward — there was no
@@ -377,6 +384,7 @@ const SCREEN_PATHS: Record<Screen, string> = {
   puzzles: '/puzzles',
   leaderboard: '/leaderboard',
   puzzleRush: '/puzzles/rush',
+  review: '/review',
 };
 
 function screenFromPath(pathname: string): Screen {
@@ -436,6 +444,16 @@ function AppShell() {
   // Same round-trip shape as historyRoomId, for SpectateScreen -> OnlineGameScreen -> back
   // to SpectateScreen. Also mutually exclusive with the other two origin states.
   const [spectateRoomId, setSpectateRoomId] = useState<string | null>(null);
+  // What GameReviewScreen analyzes -- set the moment "Review game" is clicked (local
+  // GameOverModal or OnlineGameScreen's finished panel), read once GameReviewScreen
+  // mounts. `moveHistory` stays untyped (`readonly unknown[]`) here, same JSON-boundary
+  // reasoning OnlineGameScreen's own prop already uses -- GameReviewScreen re-attaches a
+  // concrete `V` once it resolves `variantId`.
+  const [reviewContext, setReviewContext] = useState<{ variantId: VariantId; moveHistory: readonly unknown[] } | null>(null);
+  function openReview(variantId: VariantId, moveHistory: readonly unknown[]) {
+    setReviewContext({ variantId, moveHistory });
+    navigate('review');
+  }
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -554,6 +572,12 @@ function AppShell() {
         </Suspense>
       )}
 
+      {screen === 'review' && reviewContext && (
+        <Suspense fallback={<ScreenFallback />}>
+          <GameReviewScreen variantId={reviewContext.variantId} moveHistory={reviewContext.moveHistory} onBackToLobby={() => navigate('lobby')} />
+        </Suspense>
+      )}
+
       {screen === 'leaderboard' && (
         <Suspense fallback={<ScreenFallback />}>
           <LeaderboardScreen token={auth.token} myUserId={auth.user?.id ?? null} onBackToLobby={() => navigate('lobby')} />
@@ -568,6 +592,7 @@ function AppShell() {
             initialRoomId={historyRoomId ?? spectateRoomId ?? tournamentContext?.roomId ?? undefined}
             origin={historyRoomId ? 'history' : spectateRoomId ? 'spectate' : 'tournament'}
             onGameFinished={auth.refreshUser}
+            onReviewGame={openReview}
             onOpenTutorial={() => setTutorialOpen(true)}
             onBackToLobby={() => {
               if (historyRoomId) {
@@ -649,6 +674,7 @@ function AppShell() {
             onFlip={() => setFlipped((f) => !f)}
             nav={nav}
             playerName={auth.user?.displayName ?? null}
+            onReviewGame={openReview}
           />
         </>
       )}

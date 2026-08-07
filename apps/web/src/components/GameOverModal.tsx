@@ -19,6 +19,7 @@ interface GameOverModalProps<V> {
   onRematch: () => void;
   onNewGame: () => void;
   onBackToLobby: () => void;
+  onReview: () => void;
   /**
    * How to display a side's name — defaults to the generic `playerLabel` ("Light"/
    * "Dark"), but callers that already have a real nickname to show (a signed-in
@@ -51,6 +52,7 @@ export function GameOverModal<V>({
   onRematch,
   onNewGame,
   onBackToLobby,
+  onReview,
   labelFor = playerLabel,
 }: GameOverModalProps<V>) {
   return (
@@ -100,6 +102,9 @@ export function GameOverModal<V>({
           </button>
           <button type="button" style={actionButton(false)} onClick={onNewGame}>
             New game…
+          </button>
+          <button type="button" style={actionButton(false)} onClick={onReview}>
+            🔍 Review game
           </button>
           <button type="button" style={actionButton(false)} onClick={onBackToLobby}>
             Back to lobby

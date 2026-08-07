@@ -469,14 +469,24 @@ export function OnlineGameScreen({
                 {online.view.status === 'finished' && (
                   <div style={cardStyle}>
                     <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
-                      {online.view.resignedBy
-                        ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                        : online.view.drawnByAgreement
-                          ? 'Draw by agreement.'
-                          : online.view.winner
-                            ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
-                            : 'Game over — draw.'}
+                      {online.disconnectForfeitedBy
+                        ? `${online.disconnectForfeitedBy === 'white' ? 'Light' : 'Dark'} disconnected — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                        : online.view.resignedBy
+                          ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                          : online.view.drawnByAgreement
+                            ? 'Draw by agreement.'
+                            : online.view.winner
+                              ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                              : 'Game over — draw.'}
                     </p>
+                    <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginTop: 'var(--pad-md)' }}>
+                      <button type="button" onClick={() => online.queue(online.view?.variantId ?? variantId)} style={primaryButton}>
+                        Find another match
+                      </button>
+                      <button type="button" onClick={onBackToLobby} style={secondaryButton}>
+                        Back to Lobby
+                      </button>
+                    </div>
                   </div>
                 )}
                 {/* Back/forward history browsing — deliberately not an undo control. Online

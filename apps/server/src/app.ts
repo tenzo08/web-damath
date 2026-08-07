@@ -35,6 +35,8 @@ export interface AppOptions {
   queueBotTimeoutMs?: number | undefined;
   queueBotEnabled?: boolean | undefined;
   queueBotTier?: DifficultyTier | undefined;
+  /** How long a fully-disconnected player has to reconnect before forfeiting an active human-vs-human room — see game/ws.ts's `GameSocketOptions.disconnectForfeitMs`. */
+  disconnectForfeitMs?: number | undefined;
   logger?: boolean | undefined;
   /** How long an issued login token stays valid, in `@fastify/jwt`'s `sign.expiresIn` format (e.g. `'30d'`). A token has no way to be individually revoked short of rotating `JWT_SECRET` (which logs out everyone at once) — an expiry bounds how long a leaked token stays useful without that. */
   jwtExpiresIn?: string | undefined;
@@ -150,6 +152,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
       queueBotTimeoutMs: options.queueBotTimeoutMs ?? 90000,
       queueBotEnabled: options.queueBotEnabled ?? true,
       queueBotTier: options.queueBotTier ?? 'steady',
+      disconnectForfeitMs: options.disconnectForfeitMs ?? 30000,
       // A drawn match (no clear winner) is left for the manual report route — Damath has
       // no automatic tiebreak (docs/DAMATH_RULES.md). Awaited by `RoomManager` before its
       // own move/resign response resolves, so the tournament store is durably updated

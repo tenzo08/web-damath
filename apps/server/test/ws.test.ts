@@ -160,6 +160,103 @@ describe('the /ws game protocol', () => {
   });
 });
 
+describe('disconnect forfeiture', () => {
+  it('forfeits the room to the fully-disconnected player after the grace period, and the game cannot be continued afterward', async () => {
+    // A short grace period, same "override for this one test" pattern rooms.test.ts
+    // uses for queueBotTimeoutMs — the default (30s) would make this test slow for no
+    // reason.
+    testApp = makeTestApp({ disconnectForfeitMs: 30 });
+    await testApp.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = testApp.app.server.address();
+    if (address === null || typeof address === 'string') throw new Error('expected a real TCP address');
+    baseUrl = `ws://127.0.0.1:${String(address.port)}`;
+
+    const [tokenA, tokenB] = await Promise.all([signupToken('disconnect-a@example.com'), signupToken('disconnect-b@example.com')]);
+    const socketA = await connect(tokenA);
+    const socketB = await connect(tokenB);
+
+    socketA.send(JSON.stringify({ type: 'create_room', variantId: 'whole' }));
+    const created = await nextMessage(socketA);
+    const roomId = created.roomId as string;
+
+    socketB.send(JSON.stringify({ type: 'join_room', roomId }));
+    await Promise.all([nextMessage(socketB), nextMessage(socketA)]); // joined / state broadcast
+
+    const forfeitNotice = waitFor(socketB, (m) => m.type === 'disconnect_forfeit');
+    const finishedState = waitFor(socketB, (m) => m.type === 'state' && (m as { view: { status: string } }).view.status === 'finished');
+
+    // A's socket closes and never reconnects — the grace period above elapses.
+    socketA.close();
+
+    const notice = await forfeitNotice;
+    expect(notice).toEqual({ type: 'disconnect_forfeit', roomId, color: 'white' });
+    const finished = (await finishedState) as { view: { status: string; winner: string; resignedBy: string } };
+    expect(finished.view.status).toBe('finished');
+    expect(finished.view.winner).toBe('black');
+    expect(finished.view.resignedBy).toBe('white');
+
+    // The remaining player attempting to keep playing must be rejected — the game is
+    // over, not paused, and can never be resumed once forfeited.
+    socketB.send(JSON.stringify({ type: 'move', from: { row: 5, col: 0 }, to: { row: 4, col: 1 } }));
+    const rejected = await nextMessage(socketB);
+    expect(rejected).toEqual({ type: 'error', message: 'game is over' });
+
+    socketB.close();
+    // socketB's own close schedules a disconnect-forfeit timer too (it's now the only
+    // socket for user B, and the room — already finished — is still "active" as far as
+    // ws.ts's close handler can tell without awaiting `getRoom`). Draining it here before
+    // `afterEach` deletes the temp store avoids an unhandled rejection from a stray timer
+    // firing against an already-deleted file — the same "any test that starts a real
+    // timer must account for it outliving the test" lesson KNOWLEDGE.md already records
+    // for the queue-bot fallback timer. `room.resign()` itself is a no-op here (the room
+    // is already over), so this is purely test hygiene, not a production concern.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
+  it('reconnecting before the grace period elapses cancels the forfeit', async () => {
+    testApp = makeTestApp({ disconnectForfeitMs: 200 });
+    await testApp.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = testApp.app.server.address();
+    if (address === null || typeof address === 'string') throw new Error('expected a real TCP address');
+    baseUrl = `ws://127.0.0.1:${String(address.port)}`;
+
+    const [tokenA, tokenB] = await Promise.all([signupToken('reconnect-cancel-a@example.com'), signupToken('reconnect-cancel-b@example.com')]);
+    const socketA = await connect(tokenA);
+    const socketB = await connect(tokenB);
+
+    socketA.send(JSON.stringify({ type: 'create_room', variantId: 'whole' }));
+    const created = await nextMessage(socketA);
+    const roomId = created.roomId as string;
+
+    socketB.send(JSON.stringify({ type: 'join_room', roomId }));
+    await Promise.all([nextMessage(socketB), nextMessage(socketA)]);
+
+    socketA.close();
+    await new Promise((resolve) => socketA.once('close', resolve));
+
+    // Reconnects well within the 200ms grace period.
+    const reconnectedA = await connect(tokenA);
+    reconnectedA.send(JSON.stringify({ type: 'join_room', roomId }));
+    await nextMessage(reconnectedA); // joined
+
+    // Give the original (cancelled) timer time to have fired if the cancellation had
+    // failed, then prove the room is still active and playable.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    socketB.send(JSON.stringify({ type: 'move', from: { row: 2, col: 1 }, to: { row: 3, col: 0 } }));
+    const result = await nextMessage(socketB);
+    expect(result.type).toBe('error'); // black moving out of turn — proves the room is still active, not forfeited
+    expect((result as { message: string }).message).not.toBe('game is over');
+
+    reconnectedA.close();
+    socketB.close();
+    // Same test-hygiene drain as the previous test — socketB's own close schedules a
+    // real disconnect-forfeit timer (200ms) for user B; letting it fire against the
+    // still-live store here, rather than after `afterEach` deletes it, avoids an
+    // unhandled rejection.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  });
+});
+
 describe('the online-user count', () => {
   it('broadcasts to everyone as users connect and disconnect, counting each user once regardless of tabs', async () => {
     const [tokenA, tokenB] = await Promise.all([signupToken('online-a@example.com'), signupToken('online-b@example.com')]);

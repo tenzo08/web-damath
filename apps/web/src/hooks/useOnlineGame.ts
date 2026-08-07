@@ -30,6 +30,11 @@ export function useOnlineGame(token: string | null) {
   const [view, setView] = useState<PublicGameView | null>(null);
   const [color, setColor] = useState<Player | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set only by a `disconnect_forfeit` notice — distinct from `view.resignedBy` so the
+  // UI can say "disconnected", not "resigned", even though the underlying outcome (via
+  // the same `RoomManager.resign` path server-side) is identical either way. Reset on a
+  // fresh connection/room the same way `view`/`color` are.
+  const [disconnectForfeitedBy, setDisconnectForfeitedBy] = useState<Player | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const deliberateRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
@@ -68,6 +73,7 @@ export function useOnlineGame(token: string | null) {
     setStatus('disconnected');
     setView(null);
     setColor(null);
+    setDisconnectForfeitedBy(null);
   }, []);
 
   const connect = useCallback(() => {
@@ -160,11 +166,13 @@ export function useOnlineGame(token: string | null) {
           setView(msg.view);
           setStatus('in_game');
           setError(null);
+          setDisconnectForfeitedBy(null);
           return;
         case 'joined':
           lastRoomIdRef.current = msg.roomId;
           lastRoomModeRef.current = 'player';
           setColor(msg.color);
+          setDisconnectForfeitedBy(null);
           return;
         case 'room_created':
           lastRoomIdRef.current = msg.roomId;
@@ -173,6 +181,7 @@ export function useOnlineGame(token: string | null) {
           setColor('white');
           setStatus('in_game');
           setError(null);
+          setDisconnectForfeitedBy(null);
           return;
         case 'spectating':
           lastRoomIdRef.current = msg.roomId;
@@ -181,11 +190,15 @@ export function useOnlineGame(token: string | null) {
           setView(msg.view);
           setStatus('in_game');
           setError(null);
+          setDisconnectForfeitedBy(null);
           return;
         case 'state':
           lastRoomIdRef.current = msg.view.roomId;
           setView(msg.view);
           setStatus('in_game');
+          return;
+        case 'disconnect_forfeit':
+          setDisconnectForfeitedBy(msg.color);
           return;
         case 'error':
           setError(msg.message);
@@ -209,6 +222,7 @@ export function useOnlineGame(token: string | null) {
     view,
     color,
     error,
+    disconnectForfeitedBy,
     connect,
     disconnect,
     queue,

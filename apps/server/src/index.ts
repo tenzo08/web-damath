@@ -67,6 +67,7 @@ const app = buildApp({
   queueBotTimeoutMs: process.env.QUEUE_BOT_TIMEOUT_MS ? Number(process.env.QUEUE_BOT_TIMEOUT_MS) : undefined,
   queueBotEnabled: process.env.QUEUE_BOT_ENABLED ? process.env.QUEUE_BOT_ENABLED !== 'false' : undefined,
   queueBotTier: readTier(process.env.QUEUE_BOT_TIER, 'steady'),
+  disconnectForfeitMs: process.env.DISCONNECT_FORFEIT_MS ? Number(process.env.DISCONNECT_FORFEIT_MS) : undefined,
   corsOrigin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : undefined,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN,
   webOrigin: process.env.WEB_ORIGIN,

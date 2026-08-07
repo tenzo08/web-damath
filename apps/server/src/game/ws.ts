@@ -17,6 +17,16 @@ export interface GameSocketOptions {
   queueBotTimeoutMs: number;
   queueBotEnabled: boolean;
   queueBotTier: DifficultyTier;
+  /**
+   * How long a player may stay fully disconnected (zero open sockets) from an active
+   * human-vs-human room before forfeiting it — "the first player who disconnected loses
+   * that game," and the game must never be resumable after that grace period lapses.
+   * Deliberately longer than `useOnlineGame.ts`'s own client-side reconnect budget
+   * (5 attempts × 1500ms ≈ 7.5s) so an ordinary WiFi hiccup or a laptop waking from
+   * sleep — which the client already retries on its own — never trips this; this is for
+   * someone who has actually left.
+   */
+  disconnectForfeitMs: number;
   /** Forwarded straight into `RoomManager`'s option of the same name — see rooms.ts. */
   onTournamentMatchFinished?: (ref: TournamentMatchRef, winnerUserId: string) => Promise<void>;
 }
@@ -87,6 +97,45 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
   // tabs/devices open still counts once, since it's keyed by user id, not by socket.
   const socketsByUser = new Map<string, Set<WebSocket>>();
   const roomBySocket = new Map<WebSocket, string>();
+  // Pending disconnect-forfeit grace timers, keyed by userId. Cancelled the instant that
+  // user has any open socket again (see the connection handler below) — reconnecting
+  // doesn't need to specifically rejoin the room to cancel it, since `useOnlineGame.ts`'s
+  // own `onopen` handler re-sends `join_room` immediately anyway.
+  const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  function clearDisconnectTimer(userId: string): void {
+    const timer = disconnectTimers.get(userId);
+    if (timer) clearTimeout(timer);
+    disconnectTimers.delete(userId);
+  }
+
+  /**
+   * Called once a user's very last socket closes while they were seated in an active
+   * human-vs-human room. If they haven't reconnected by the time the grace period
+   * elapses, forfeits the room on their behalf via the exact same `RoomManager.resign`
+   * path a deliberate resignation uses — same winner computation, same rating update,
+   * same tournament auto-report, same persistence. The only thing layered on top here is
+   * a one-off `disconnect_forfeit` notice so the remaining player's UI can say
+   * "disconnected" rather than "resigned".
+   */
+  function scheduleDisconnectForfeit(userId: string, roomId: string): void {
+    clearDisconnectTimer(userId);
+    const timer = setTimeout(() => {
+      void (async () => {
+        disconnectTimers.delete(userId);
+        if (socketsByUser.has(userId)) return; // reconnected in the meantime
+        const room = await roomManager.getRoom(roomId);
+        if (!room || room.opponentType !== 'human') return;
+        const color = room.colorOf(userId);
+        if (color === null) return;
+        const outcome = await roomManager.resign(roomId, userId);
+        if (!outcome.ok) return; // already over by some other route (e.g. they'd already resigned)
+        for (const socket of socketsByRoom.get(roomId) ?? []) send(socket, { type: 'disconnect_forfeit', roomId, color });
+        broadcastRoom(outcome.view);
+      })();
+    }, options.disconnectForfeitMs);
+    disconnectTimers.set(userId, timer);
+  }
 
   function broadcastRoom(view: PublicGameView): void {
     for (const socket of socketsByRoom.get(view.roomId) ?? []) send(socket, { type: 'state', view });
@@ -158,6 +207,10 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
         socketsByUser.set(userId, sockets);
       }
       sockets.add(socket);
+      // This user has a live socket again — any pending disconnect-forfeit grace timer
+      // from an earlier drop no longer applies, regardless of which room (if any) this
+      // particular connection ends up subscribed to.
+      clearDisconnectTimer(userId);
       if (isNewOnlineUser) {
         // The count actually changed — tell everyone, this new socket included (it's
         // already in `socketsByUser` above).
@@ -285,7 +338,8 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
       socket.on('close', () => {
         const userSockets = socketsByUser.get(userId);
         userSockets?.delete(socket);
-        if (userSockets && userSockets.size === 0) {
+        const wentFullyOffline = userSockets !== undefined && userSockets.size === 0;
+        if (wentFullyOffline) {
           socketsByUser.delete(userId);
           broadcastOnlineCount();
         }
@@ -293,6 +347,9 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
         if (roomId) socketsByRoom.get(roomId)?.delete(socket);
         roomBySocket.delete(socket);
         roomManager.cancelQueue(userId);
+        // Only a user with zero remaining sockets anywhere is actually "disconnected" —
+        // closing one of several open tabs/devices must never start the forfeit clock.
+        if (wentFullyOffline && roomId) scheduleDisconnectForfeit(userId, roomId);
       });
     });
   });

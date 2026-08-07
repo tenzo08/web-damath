@@ -62,7 +62,15 @@ export type ServerMessage =
   /** Broadcast to every connected socket — see ws.ts's `broadcastOnlineCount`. */
   | { type: 'online_count'; count: number }
   /** Broadcast to every connected socket whenever any tournament is created, joined, started, or has a result reported (manually or auto-reported) — see manager.ts's `onChange`. */
-  | { type: 'tournament_updated'; tournament: WireTournament };
+  | { type: 'tournament_updated'; tournament: WireTournament }
+  /**
+   * A one-off notice sent to everyone still subscribed to a room the instant the server
+   * forfeits it on a fully-disconnected player's behalf (ws.ts's `scheduleDisconnectForfeit`)
+   * — `color` is the side that forfeited. Always immediately followed by a `state`
+   * message carrying the same outcome as a real resignation (same winner, same rating
+   * update); this message exists only so the UI can say "disconnected", not "resigned".
+   */
+  | { type: 'disconnect_forfeit'; roomId: string; color: Player };
 
 export type ClientMessage =
   | { type: 'create_room'; variantId: VariantId }

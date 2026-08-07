@@ -74,7 +74,12 @@ export function GameMenu({ onRematch, onNewGame, onBackToLobby }: GameMenuProps)
             style={{
               position: 'absolute',
               top: 'calc(100% + 4px)',
-              left: 0,
+              // Anchored to the button's *right* edge, growing leftward — not `left: 0`
+              // (growing rightward). The Menu button sits near the right edge of the
+              // narrow top bar (Rail.tsx), so a rightward-growing menu ran off the edge
+              // of the screen entirely, clipping "Back to lobby" and everything below
+              // it — confirmed live on a real phone screenshot.
+              right: 0,
               minWidth: 200,
               zIndex: 20,
               background: 'var(--surface-raised)',

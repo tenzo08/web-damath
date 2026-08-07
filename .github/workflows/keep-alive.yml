@@ -1,0 +1,26 @@
+name: Keep server warm
+
+# Free-tier Render services spin down after a period of inactivity, and the next
+# request pays a slow cold-start — noticeable as a stalled "Find match" the first time
+# someone plays online after a lull. Pinging the existing /health route on a schedule
+# (app.ts's `app.get('/health', ...)`) keeps the process warm without touching the app
+# itself. Costs nothing: GitHub Actions' free tier covers scheduled workflows on public
+# repos, and a health check is a single unauthenticated GET.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping server health endpoint
+        env:
+          SERVER_HEALTH_URL: ${{ vars.SERVER_HEALTH_URL }}
+        run: |
+          if [ -z "$SERVER_HEALTH_URL" ]; then
+            echo "::error::Set the SERVER_HEALTH_URL repository variable (Settings > Secrets and variables > Actions > Variables) to your Render server's /health URL, e.g. https://your-service.onrender.com/health"
+            exit 1
+          fi
+          curl -sf --max-time 20 "$SERVER_HEALTH_URL" || echo "::warning::Health check failed — the server may be cold-starting or down."

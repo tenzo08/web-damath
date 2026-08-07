@@ -38,7 +38,9 @@ function variantName(variantId: string): string {
 }
 
 function opponentLabel(entry: GameHistoryEntry): string {
-  if (entry.opponentType === 'bot') return `Computer (${entry.botTier ?? '?'})`;
+  // Never "Computer (tier)" -- a friendly nickname instead (server/game/botNames.ts).
+  // opponentType still tracks the real fact accurately, just isn't shown.
+  if (entry.opponentType === 'bot') return entry.botNickname ?? 'Unknown';
   return entry.opponentName ?? 'A former player';
 }
 

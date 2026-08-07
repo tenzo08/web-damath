@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PublicGameView } from '../src/game/room.js';
 import { RoomManager } from '../src/game/rooms.js';
+import { BOT_NICKNAMES } from '../src/game/botNames.js';
 import { FileGameStore, type GameStore } from '../src/game/store.js';
 import { FileUserStore, type User, type UserStore } from '../src/auth/store.js';
 import { FileModerationStore, type ModerationStore } from '../src/moderation/store.js';
@@ -394,6 +395,17 @@ describe('the bot opponent', () => {
     expect(updates).toHaveLength(0);
     await waitFor(() => updates.length > 0, 5000);
     expect(updates.at(-1)?.moveCount).toBe(2);
+  });
+
+  it('gets a friendly nickname, never "Computer" or the tier, even though opponentType/botTier still track the real fact', async () => {
+    const manager = makeManager({ queueBotTimeoutMs: 20 });
+    await manager.enqueue('human-user', 'integer');
+    await waitFor(() => matched.length === 1);
+    const view = matched[0]?.view;
+    expect(view?.opponentType).toBe('bot'); // still tracked accurately internally
+    expect(BOT_NICKNAMES).toContain(view?.botNickname);
+    expect(view?.botNickname).not.toMatch(/computer/i);
+    expect(view?.botNickname).not.toBe(view?.botTier);
   });
 });
 

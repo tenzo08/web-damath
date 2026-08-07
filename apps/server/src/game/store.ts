@@ -12,6 +12,8 @@ export interface PersistedGame {
   readonly players: { readonly white: string | null; readonly black: string | null };
   readonly opponentType: 'human' | 'bot';
   readonly botTier: string | null;
+  /** A friendly name (botNames.ts), never "Computer" or the tier -- opponentType/botTier still carry the real, tracked fact that this is a bot game (leaderboard exclusion, etc.); this is only what a player sees. Null for a human game. */
+  readonly botNickname: string | null;
   /**
    * `Move<V>[]`, stored as `unknown` here — this layer never inspects a chip value, it
    * only persists and returns the move list. `readMoveHistory<V>` at the call site
@@ -176,6 +178,7 @@ function toRow(game: PersistedGame) {
     blackPlayerId: game.players.black,
     opponentType: game.opponentType,
     botTier: game.botTier,
+    botNickname: game.botNickname,
     moveHistory: game.moveHistory as Prisma.InputJsonValue,
     status: game.status,
     resignedBy: game.resignedBy,
@@ -195,6 +198,7 @@ interface PrismaGameRow {
   blackPlayerId: string | null;
   opponentType: string;
   botTier: string | null;
+  botNickname: string | null;
   moveHistory: Prisma.JsonValue;
   status: string;
   resignedBy: string | null;
@@ -213,6 +217,7 @@ function toPersistedGame(row: PrismaGameRow): PersistedGame {
     players: { white: row.whitePlayerId, black: row.blackPlayerId },
     opponentType: row.opponentType as 'human' | 'bot',
     botTier: row.botTier,
+    botNickname: row.botNickname,
     moveHistory: row.moveHistory as readonly unknown[],
     status: row.status as 'active' | 'finished',
     resignedBy: row.resignedBy as Player | null,

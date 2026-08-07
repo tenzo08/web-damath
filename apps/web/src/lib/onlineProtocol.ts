@@ -30,6 +30,8 @@ export interface PublicGameView {
   players: { white: string | null; black: string | null };
   opponentType: 'human' | 'bot';
   botTier: string | null;
+  /** A friendly display name, never "Computer" -- null for a human game. */
+  botNickname: string | null;
   resignedBy: Player | null;
   tournamentMatch: { tournamentId: string; round: number; index: number } | null;
 }

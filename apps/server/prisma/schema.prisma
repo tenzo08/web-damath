@@ -69,6 +69,9 @@ model Game {
   blackPlayerId   String?
   opponentType    String
   botTier         String?
+  /// A friendly display name (game/botNames.ts), never "Computer" -- opponentType/botTier
+  /// above still carry the real, tracked fact that this is a bot game. Null for a human game.
+  botNickname     String?
   /// Move<V>[], JSON-boundary typed the same way the file store's `moveHistory: readonly
   /// unknown[]` already is — see game/store.ts.
   moveHistory     Json

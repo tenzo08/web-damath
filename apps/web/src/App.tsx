@@ -28,6 +28,7 @@ import { MatchHistoryScreen } from './components/MatchHistoryScreen';
 import { SpectateScreen } from './components/SpectateScreen';
 import { PuzzleScreen } from './components/PuzzleScreen';
 import { playerLabel } from './lib/notation';
+import { randomBotNickname } from './lib/botNicknames';
 import { verifyEmail } from './lib/authClient';
 import { LocaleProvider } from './lib/i18n';
 import { SettingsProvider, useSettings } from './lib/settings';
@@ -52,6 +53,7 @@ function GameShellView<V>({
   format,
   opponentPanel,
   blockInteraction,
+  thinkingLabel,
   scoreLabelOverrides,
   flipped,
   onFlip,
@@ -62,6 +64,8 @@ function GameShellView<V>({
   format: (value: V) => string;
   opponentPanel: ReactNode;
   blockInteraction: boolean;
+  /** Shown as the status line while `blockInteraction` is true — a friendly nickname's "is thinking…", not "Computer is thinking…" (never named "Computer" here, per direct product decision). */
+  thinkingLabel?: string | undefined;
   scoreLabelOverrides?: Partial<Record<'white' | 'black', string>> | undefined;
   flipped: boolean;
   onFlip: () => void;
@@ -151,7 +155,7 @@ function GameShellView<V>({
   });
 
   const lastMove = (viewIndex !== null ? (ledger[viewIndex - 1] ?? null) : (ledger.at(-1) ?? null))?.move ?? null;
-  const statusLine = gameOver ? announcement : blockInteraction ? 'Computer is thinking…' : `${playerLabel(game.turn)} to move`;
+  const statusLine = gameOver ? announcement : blockInteraction ? (thinkingLabel ?? 'Opponent is thinking…') : `${playerLabel(game.turn)} to move`;
 
   return (
     <main
@@ -255,7 +259,13 @@ function GameShell<V>({
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
   useComputerOpponent(gameApi.game, tier, 'black', gameApi.playMove);
 
-  const scoreLabelOverrides = tier ? { black: `Computer (${tier})` } : undefined;
+  // Picked once per mount (this component remounts on every new match, via the
+  // `key={variant.id}-${matchNonce}` at the call site — a fresh key on rematch too),
+  // so it's stable for the whole game but genuinely varies match to match. Never
+  // "Computer (tier)" — the opponent's actual identity as a bot is still tracked
+  // internally (opponentType/tier stay real facts for local practice mode's own
+  // bookkeeping), just never displayed.
+  const [opponentName] = useState(() => (tier ? randomBotNickname() : null));
 
   return (
     <GameShellView
@@ -263,11 +273,12 @@ function GameShell<V>({
       gameApi={gameApi}
       format={variant.arithmetic.format}
       blockInteraction={computersTurn}
-      scoreLabelOverrides={scoreLabelOverrides}
+      thinkingLabel={opponentName ? `${opponentName} is thinking…` : undefined}
+      scoreLabelOverrides={opponentName ? { black: opponentName } : undefined}
       flipped={flipped}
       onFlip={onFlip}
       nav={nav}
-      opponentPanel={<OpponentStatus tier={tier} thinking={computersTurn} />}
+      opponentPanel={<OpponentStatus opponentName={opponentName} thinking={computersTurn} />}
     />
   );
 }

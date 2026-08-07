@@ -7,6 +7,8 @@ export interface GameHistoryEntry {
   variantId: VariantId;
   opponentType: 'human' | 'bot';
   botTier: string | null;
+  /** A friendly display name, never "Computer" -- null for a human game. */
+  botNickname: string | null;
   opponentName: string | null;
   opponentUserId: string | null;
   myColor: Player | null;

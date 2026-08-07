@@ -37,6 +37,8 @@ export interface PublicGameView {
   readonly players: { readonly white: string | null; readonly black: string | null };
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
+  /** A friendly display name (game/botNames.ts), never "Computer" -- null for a human game. */
+  readonly botNickname: string | null;
   readonly resignedBy: Player | null;
   /** A real draw the players agreed to, distinct from a score-tie or resignation — see `computeWinner`. */
   readonly drawnByAgreement: boolean;
@@ -56,6 +58,7 @@ export interface RoomHandle {
   readonly variantId: VariantId;
   readonly opponentType: OpponentType;
   readonly botTier: string | null;
+  readonly botNickname: string | null;
   readonly tournamentMatch: TournamentMatchRef | null;
   readonly players: { readonly white: string | null; readonly black: string | null };
   colorOf(userId: string): Player | null;
@@ -83,6 +86,7 @@ export interface CreateRoomParams<V> {
   players: { white: string | null; black: string | null };
   opponentType: OpponentType;
   botTier: string | null;
+  botNickname: string | null;
   tournamentMatch: TournamentMatchRef | null;
   initialMoveHistory: readonly Move<V>[];
   initialResignedBy: Player | null;
@@ -165,6 +169,7 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
       players,
       opponentType: params.opponentType,
       botTier: params.botTier,
+      botNickname: params.botNickname,
       resignedBy,
       drawnByAgreement,
       drawOfferedBy,
@@ -242,6 +247,7 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
     variantId: params.variant.id,
     opponentType: params.opponentType,
     botTier: params.botTier,
+    botNickname: params.botNickname,
     tournamentMatch: params.tournamentMatch,
     get players() {
       return players;

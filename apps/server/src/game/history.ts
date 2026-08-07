@@ -12,6 +12,8 @@ export interface GameHistoryEntry {
   variantId: VariantId;
   opponentType: 'human' | 'bot';
   botTier: string | null;
+  /** A friendly display name (game/botNames.ts), never "Computer" -- null for a human game. */
+  botNickname: string | null;
   /** The human opponent's current display name, or `null` for a bot game or if that account no longer exists. */
   opponentName: string | null;
   /** The human opponent's user id — `null` for a bot game, or an unseated color. Lets the client offer Report/Block against a real account. */
@@ -72,6 +74,7 @@ async function summarize(game: PersistedGame, userId: string, variant: AnyVarian
     variantId: game.variantId,
     opponentType: game.opponentType,
     botTier: game.botTier,
+    botNickname: game.botNickname,
     opponentName: opponent?.displayName ?? null,
     opponentUserId: game.opponentType === 'human' ? opponentId : null,
     myColor,

@@ -1,8 +1,6 @@
-import { TIERS } from '@damath/ai';
-import type { DifficultyTier } from '@damath/ai';
-
 interface OpponentStatusProps {
-  tier: DifficultyTier | null;
+  /** `null` for hot-seat local play; a friendly nickname (lib/botNicknames.ts) when the opponent is the computer -- never "Computer" or the difficulty tier, by direct product decision (docs/AI_OPPONENT.md §9's own reasoning still applies to the underlying tracking, just not to what's displayed). */
+  opponentName: string | null;
   thinking: boolean;
 }
 
@@ -10,10 +8,9 @@ interface OpponentStatusProps {
  * Read-only — the opponent (friend vs. computer, and at what tier) is chosen once,
  * before the game starts, via `GameSetupModal`. There is deliberately no control here
  * to flip it mid-game: "the values for the AI should not be changeable whenever the
- * game already started." docs/AI_OPPONENT.md §9's labelling requirement (never a
- * human-looking handle for the bot) still applies, just as a status line now.
+ * game already started."
  */
-export function OpponentStatus({ tier, thinking }: OpponentStatusProps) {
+export function OpponentStatus({ opponentName, thinking }: OpponentStatusProps) {
   return (
     <section
       aria-label="Opponent"
@@ -35,14 +32,12 @@ export function OpponentStatus({ tier, thinking }: OpponentStatusProps) {
       >
         Opponent
       </h2>
-      {tier === null ? (
+      {opponentName === null ? (
         <p style={{ margin: 0, fontSize: 'var(--fs-body)', color: 'var(--text-secondary)' }}>Local player — pass and play.</p>
       ) : (
         <>
-          <p style={{ margin: 0, fontSize: 'var(--fs-body)', color: 'var(--text-secondary)' }}>
-            Computer ({tier} — depth {TIERS[tier].maxDepth})
-          </p>
-          {thinking && <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--accent)' }}>Computer is thinking…</p>}
+          <p style={{ margin: 0, fontSize: 'var(--fs-body)', color: 'var(--text-secondary)' }}>{opponentName}</p>
+          {thinking && <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--accent)' }}>{opponentName} is thinking…</p>}
         </>
       )}
     </section>

@@ -341,7 +341,7 @@ export function OnlineGameScreen({ token, user, onBackToLobby, onOpenLogin, init
                   {online.color === null
                     ? 'Spectating'
                     : `You're ${online.color === 'white' ? 'Light' : 'Dark'}`}{' '}
-                  · {online.view.opponentType === 'bot' ? `vs Computer (${online.view.botTier ?? '?'})` : 'vs a player'}
+                  · {online.view.opponentType === 'bot' ? `vs ${online.view.botNickname ?? 'Unknown'}` : 'vs a player'}
                 </p>
                 <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-label)' }}>
                   Light {online.view.scores.white} — Dark {online.view.scores.black}

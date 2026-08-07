@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { App } from './App';
+import { BOT_NICKNAMES } from './lib/botNicknames';
 
 /**
  * Every game-behavior test needs to get past the lobby first — App now starts there,
@@ -99,8 +100,12 @@ describe('the lobby', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
 
     expect(screen.getByRole('grid', { name: 'Damath board' })).toBeInTheDocument();
-    // Shown in both the score panel's label and the opponent status card — two matches by design.
-    expect(screen.getAllByText(/Computer \(sharp/).length).toBeGreaterThan(0);
+    // Never "Computer (tier)" -- a friendly nickname instead (lib/botNicknames.ts),
+    // randomized, but the exact same one shown in both the score panel's label and the
+    // opponent status card — two matches by design.
+    const nicknamePattern = new RegExp(`^(${BOT_NICKNAMES.join('|')})$`);
+    expect(screen.getAllByText(nicknamePattern).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/computer/i)).not.toBeInTheDocument();
     // The choice is now locked in — no control anywhere lets it change mid-game.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
@@ -258,8 +263,11 @@ describe('playing the computer', () => {
     const user = userEvent.setup();
     await enterComputerGame(user, 'Learner');
 
-    // Shown in both the score panel's label and the opponent status card — two matches by design.
-    expect(screen.getAllByText(/Computer \(learner/).length).toBeGreaterThan(0);
+    // Never "Computer (tier)" -- a friendly nickname (lib/botNicknames.ts) instead,
+    // shown identically in both the score panel's label and the opponent status card.
+    const nicknamePattern = new RegExp(`^(${BOT_NICKNAMES.join('|')})$`);
+    expect(screen.getAllByText(nicknamePattern).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/computer/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });

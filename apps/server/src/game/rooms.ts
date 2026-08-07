@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DifficultyTier } from '@damath/ai';
 import type { AnyVariant, Move, Player, Variant, VariantId } from '@damath/engine';
 import { botThinkDelayMs, computeBotMove } from './bot.js';
+import { randomBotNickname } from './botNames.js';
 import { createRoomHandle, type MoveOutcome, type PublicGameView, type RoomHandle, type TournamentMatchRef } from './room.js';
 import { BOT_PLAYER_ID, type GameStore, type PersistedGame } from './store.js';
 import { findVariant } from './variants.js';
@@ -329,6 +330,7 @@ export class RoomManager {
       players,
       opponentType: 'human',
       botTier: null,
+      botNickname: null,
       moveHistory: [],
       status: 'active',
       resignedBy: null,
@@ -352,6 +354,7 @@ export class RoomManager {
       players: { white: humanUserId, black: BOT_PLAYER_ID },
       opponentType: 'bot',
       botTier: tier,
+      botNickname: randomBotNickname(),
       moveHistory: [],
       status: 'active',
       resignedBy: null,
@@ -392,6 +395,7 @@ export class RoomManager {
       players: persisted.players,
       opponentType: 'human',
       botTier: null,
+      botNickname: null,
       tournamentMatch: persisted.tournamentMatch,
       initialMoveHistory: persisted.moveHistory as Move<V>[],
       initialResignedBy: persisted.resignedBy,
@@ -420,6 +424,7 @@ export class RoomManager {
       players: persisted.players,
       opponentType: 'bot',
       botTier: tier,
+      botNickname: persisted.botNickname,
       tournamentMatch: null,
       initialMoveHistory: persisted.moveHistory as Move<V>[],
       initialResignedBy: persisted.resignedBy,

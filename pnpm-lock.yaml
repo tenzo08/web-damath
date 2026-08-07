@@ -140,6 +140,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^2.1.9
         version: 2.1.9(supports-color@7.2.0)(vitest@2.1.9(@types/node@20.19.43)(jsdom@25.0.1(supports-color@7.2.0))(supports-color@7.2.0)(terser@5.49.1))
+      tsx:
+        specifier: ^4.16.2
+        version: 4.23.5
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

@@ -6,6 +6,18 @@ coverage/
 
 # local file-backed user store (apps/server) — never real persistence, never committed
 /apps/server/data/
+
+# generated NNUE self-play data and Python training checkpoints — large, regeneratable
+# from packages/ai/training/generate-selfplay.ts and train.py; only the final exported
+# weight JSON under packages/ai/src/nnue-weights/ is committed.
+/packages/ai/training/data/
+/packages/ai/training/checkpoints/
+*.pt
+
+# Python venv/cache for packages/ai/training/'s offline-only training tooling
+/packages/ai/training/.venv/
+__pycache__/
+*.pyc
 .env
 .env.*
 !.env.example

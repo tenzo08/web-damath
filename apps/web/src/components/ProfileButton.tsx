@@ -42,7 +42,6 @@ export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonP
     <button
       type="button"
       onClick={onOpenSettings}
-      aria-label={`Open profile for ${user.displayName}`}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -54,6 +53,12 @@ export function ProfileButton({ user, onOpenSettings, onSignIn }: ProfileButtonP
         cursor: 'pointer',
       }}
     >
+      {/* A visually-hidden prefix, not `aria-label` on the button -- an `aria-label`
+          replaces the accessible name entirely, which used to drop the visible
+          "Rating N"/"Provisional" text from it (axe's label-content-name-mismatch,
+          caught by a real Lighthouse audit). Prefixing real (if hidden) text keeps the
+          accessible name a superset of everything actually on screen instead. */}
+      <span className="visually-hidden">Open profile for </span>
       <Avatar size={32} imageUrl={user.avatarImage} emoji={user.avatarEmoji} fallbackLetter={user.displayName.charAt(0).toUpperCase()} />
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
         <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-primary)', fontWeight: 700 }}>{user.displayName}</span>

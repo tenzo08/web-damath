@@ -20,7 +20,11 @@
 
   --text-primary: #eaeaef;
   --text-secondary: #9a9aa5;
-  --text-muted: #62626d;
+  /* WCAG AA needs 4.5:1 for normal-size text -- the original #62626d measured 3.18:1
+     against --surface-page, caught by a real Lighthouse audit, not assumed. #7e7e89
+     measures 4.77:1, comfortably over the line while staying visibly more muted than
+     --text-secondary. Same fix pattern as --square-op below. */
+  --text-muted: #7e7e89;
   --text-disabled: #43434c;
 
   --accent: #e3b341;
@@ -103,7 +107,9 @@
 
   --text-primary: #17171c;
   --text-secondary: #55555f;
-  --text-muted: #8a8a94;
+  /* Same WCAG AA fix as the dark theme's --text-muted above -- #8a8a94 measured 3.14:1
+     against --surface-page here. #6e6e78 measures 4.63:1. */
+  --text-muted: #6e6e78;
   --text-disabled: #b8b8c0;
 
   --accent: #9c6b0a;

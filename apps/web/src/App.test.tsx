@@ -112,13 +112,13 @@ describe('the lobby', () => {
     render(<App />);
 
     expect(screen.getByRole('button', { name: /^Play a Friend/ })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Switch language to FIL' }));
+    await user.click(screen.getByRole('button', { name: 'EN — switch language to FIL' }));
 
     expect(screen.getByRole('button', { name: /^Laro Kasama ang Kaibigan/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Play a Friend/ })).not.toBeInTheDocument();
     expect(localStorage.getItem('damath.locale')).toBe('fil');
 
-    await user.click(screen.getByRole('button', { name: 'Switch language to EN' }));
+    await user.click(screen.getByRole('button', { name: 'FIL — switch language to EN' }));
     expect(screen.getByRole('button', { name: /^Play a Friend/ })).toBeInTheDocument();
   });
 

@@ -60,7 +60,6 @@ function LocaleSwitcher() {
     <button
       type="button"
       onClick={() => setLocale(other)}
-      aria-label={`Switch language to ${LOCALE_LABEL[other]}`}
       style={{
         background: 'transparent',
         border: '1px solid var(--border)',
@@ -73,6 +72,11 @@ function LocaleSwitcher() {
       }}
     >
       {LOCALE_LABEL[locale]}
+      {/* Visually-hidden suffix, not `aria-label` -- an `aria-label` here used to
+          replace the accessible name with text that didn't contain the visible "EN"/
+          "FIL" label at all (axe's label-content-name-mismatch, caught by a real
+          Lighthouse audit). This keeps the accessible name a superset instead. */}
+      <span className="visually-hidden"> — switch language to {LOCALE_LABEL[other]}</span>
     </button>
   );
 }

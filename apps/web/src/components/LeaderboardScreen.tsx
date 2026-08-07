@@ -99,7 +99,7 @@ export function LeaderboardScreen({ token, myUserId, onBackToLobby }: Leaderboar
                   background: entry.id === myUserId ? 'var(--accent-bg)' : 'transparent',
                 }}
               >
-                <span style={{ width: 32, textAlign: 'center', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                <span aria-label={`Rank ${String(entry.rank)}`} style={{ width: 32, textAlign: 'center', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   {RANK_MEDAL[entry.rank] ?? entry.rank}
                 </span>
                 <Avatar size={32} imageUrl={entry.avatarImage} emoji={entry.avatarEmoji} fallbackLetter={entry.displayName.charAt(0).toUpperCase()} />

@@ -90,7 +90,7 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
   // `useGameReview` (a hook) must run unconditionally on every render, before the `!variant`
   // early return below -- when `variant` is genuinely invalid, this analyzes a harmless
   // placeholder (Whole Damath) whose result is simply never rendered.
-  const { reviews, analyzing, total } = useGameReview(variant ?? fallbackVariant, typedMoveHistory);
+  const { reviews, analyzing, error, total } = useGameReview(variant ?? fallbackVariant, typedMoveHistory);
   // `null` means "show the final position" -- the natural default once the review has
   // (or is still) loading in ply by ply.
   const [selectedPly, setSelectedPly] = useState<number | null>(null);
@@ -156,9 +156,14 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
 
           <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <div style={cardStyle}>
-              {analyzing && (
+              {analyzing && !error && (
                 <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
                   Analyzing move {reviews.length} of {total}…
+                </p>
+              )}
+              {error && (
+                <p role="alert" style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
+                  {error} {reviews.length > 0 ? `Showing the ${reviews.length} move(s) analyzed so far.` : ''}
                 </p>
               )}
               {currentReview ? (
@@ -211,6 +216,7 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
                       key={r.ply}
                       type="button"
                       onClick={() => setSelectedPly(r.ply)}
+                      aria-label={`Ply ${String(r.ply)}, ${playerLabel(r.mover)} ${squareName(r.playedMove.from)} to ${squareName(r.playedMove.to)}, ${meta.label}`}
                       style={{
                         textAlign: 'left',
                         display: 'flex',
@@ -226,10 +232,12 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
                         fontSize: 'var(--fs-meta)',
                       }}
                     >
-                      <span>
+                      <span aria-hidden="true">
                         {r.ply}. {playerLabel(r.mover)} {squareName(r.playedMove.from)}→{squareName(r.playedMove.to)}
                       </span>
-                      <span style={{ color: meta.color, fontWeight: 700 }}>{meta.icon}</span>
+                      <span aria-hidden="true" style={{ color: meta.color, fontWeight: 700 }}>
+                        {meta.icon}
+                      </span>
                     </button>
                   );
                 })}

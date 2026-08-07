@@ -10,6 +10,12 @@ coverage/
 .env.*
 !.env.example
 
+# Android signing keystore (apps/twa/README.md's one-time setup) — a real production
+# signing key must never be committed; the CI workflow only ever reads it from GitHub
+# Actions secrets (ANDROID_KEYSTORE_BASE64), never from a file in the repo.
+*.keystore
+*.jks
+
 # editor metadata
 .vscode/
 .idea/

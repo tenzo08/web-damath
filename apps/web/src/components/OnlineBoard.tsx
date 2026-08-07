@@ -86,8 +86,12 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
                   keyed by `piece.id` so a move animates as a slide (see Board.tsx's
                   PieceLayer for the identical local-play reasoning) — this glyph is
                   rendered unconditionally and simply gets visually covered when a piece
-                  occupies the square. */}
-              <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
+                  occupies the square. `clamp()` instead of a flat token for the same
+                  reason Square.tsx's identical glyph uses it: the covering piece shrinks
+                  with the board on a narrow viewport (it's a percentage of the cell), so
+                  the glyph has to shrink with it too or a fixed-size glyph can eventually
+                  peek out from under a small enough piece. */}
+              <span aria-hidden="true" style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-title))', fontWeight: 500, color: 'var(--square-op)' }}>
                 {operationGlyph(operationAt(pos))}
               </span>
             </button>

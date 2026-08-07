@@ -95,7 +95,16 @@ export function Square<V>({
           overlay (a separate absolutely-positioned layer, keyed by piece id so a move
           animates instead of snapping — see PieceLayer.tsx), which visually covers this
           glyph by stacking on top whenever a piece actually occupies the square. */}
-      <span aria-hidden="true" style={{ fontSize: 'var(--fs-title)', fontWeight: 500, color: 'var(--square-op)' }}>
+      {/* `clamp(10px, 2.5vw, var(--fs-title))`, not a flat `var(--fs-title)` — the piece
+          covering this glyph (Board.tsx's PieceLayer overlay, Piece.tsx) is sized as a
+          *percentage* of the cell, so it shrinks with the board on a narrow viewport;
+          a fixed-size glyph doesn't, and on a small enough phone width the piece can
+          shrink to where it no longer fully covers a 20px glyph underneath it. Scaling
+          the glyph down together with the viewport keeps the same "piece comfortably
+          covers glyph" ratio at any size instead of just at the desktop cap this token
+          was tuned for. Ceilings out at the original `var(--fs-title)` from roughly
+          tablet width up, so desktop rendering is pixel-identical to before. */}
+      <span aria-hidden="true" style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-title))', fontWeight: 500, color: 'var(--square-op)' }}>
         {operationGlyph(operation)}
       </span>
     </button>

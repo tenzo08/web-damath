@@ -34,6 +34,8 @@ const FIRST_PUZZLE_BADGE = {
 function Badge({ icon, title, description, unlocked }: { icon: string; title: string; description: string; unlocked: boolean }) {
   return (
     <div
+      role="group"
+      aria-label={`${title}: ${unlocked ? 'unlocked' : 'locked'}`}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -48,7 +50,10 @@ function Badge({ icon, title, description, unlocked }: { icon: string; title: st
         {icon}
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span style={{ fontWeight: 700, color: unlocked ? 'var(--accent)' : 'var(--text-primary)' }}>{title}</span>
+        <span style={{ fontWeight: 700, color: unlocked ? 'var(--accent)' : 'var(--text-primary)' }}>
+          {title}
+          {!unlocked && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · Locked</span>}
+        </span>
         <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>{description}</span>
       </div>
     </div>

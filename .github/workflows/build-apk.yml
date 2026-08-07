@@ -28,9 +28,16 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # Secrets are passed via `env:` rather than interpolated straight into the `run:`
+      # command line on every step below — defense in depth on top of GitHub's own log
+      # masking (which already redacts these values wherever they'd appear in output):
+      # an env var never shows up in the literal command a process was launched with,
+      # unlike a CLI argument.
       - name: Decode signing keystore
         working-directory: apps/twa
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android.keystore
 
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
@@ -41,12 +48,15 @@ jobs:
 
       - name: Build the signed APK
         working-directory: apps/twa
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           bubblewrap build \
             --skipPwaValidation \
-            --password "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --password "$ANDROID_KEYSTORE_PASSWORD" \
             --alias damath \
-            --aliasPassword "${{ secrets.ANDROID_KEY_PASSWORD }}"
+            --aliasPassword "$ANDROID_KEY_PASSWORD"
 
       - name: Rename to a stable asset filename
         working-directory: apps/twa

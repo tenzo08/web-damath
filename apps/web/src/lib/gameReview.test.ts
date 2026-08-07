@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, legalMoves, WHOLE_DAMATH } from '@damath/engine';
-import type { Move } from '@damath/engine';
+import type { Move, Piece } from '@damath/engine';
 import type { SearchResult } from '@damath/ai';
-import { classifyDelta, reviewPly } from './gameReview';
+import { classifyDelta, isSameMove, reviewPly } from './gameReview';
+
+function fakePiece(overrides: Partial<Piece<number>> = {}): Piece<number> {
+  return { id: 'p1', value: 3, owner: 'black', isDama: false, ...overrides };
+}
 
 describe('classifyDelta', () => {
   it.each([
@@ -24,6 +28,50 @@ describe('classifyDelta', () => {
 
   it('clamps a negative delta to the "best" band rather than throwing or going out of range', () => {
     expect(classifyDelta(-5)).toBe('best');
+  });
+});
+
+describe('isSameMove', () => {
+  const from = { row: 2, col: 1 };
+  const to = { row: 4, col: 3 };
+
+  it('treats two quiet moves with the same from/to as the same move', () => {
+    const a: Move<number> = { from, to, captures: [] };
+    const b: Move<number> = { from, to, captures: [] };
+    expect(isSameMove(a, b)).toBe(true);
+  });
+
+  it('treats two capture sequences with the same from/to but different captured squares as different moves', () => {
+    // The exact scenario the delta computation depends on getting right: a Dama's
+    // multi-direction captures can share a start and end square while taking different
+    // pieces along different paths (moves.ts's maximal-capture rule only constrains
+    // sequence length, not which squares are captured) — from/to alone can't tell them
+    // apart, but the review's "was this the best move" claim depends on it doing so.
+    const a: Move<number> = {
+      from,
+      to,
+      captures: [{ capturedPiece: fakePiece(), capturedAt: { row: 3, col: 2 }, landedAt: to }],
+    };
+    const b: Move<number> = {
+      from,
+      to,
+      captures: [{ capturedPiece: fakePiece({ id: 'p2' }), capturedAt: { row: 3, col: 0 }, landedAt: to }],
+    };
+    expect(isSameMove(a, b)).toBe(false);
+  });
+
+  it('treats two moves with a different number of capture steps as different moves', () => {
+    const oneCapture: Move<number> = { from, to, captures: [{ capturedPiece: fakePiece(), capturedAt: { row: 3, col: 2 }, landedAt: to }] };
+    const quiet: Move<number> = { from, to, captures: [] };
+    expect(isSameMove(oneCapture, quiet)).toBe(false);
+  });
+
+  it('treats identical capture sequences as the same move', () => {
+    const a: Move<number> = { from, to, captures: [{ capturedPiece: fakePiece(), capturedAt: { row: 3, col: 2 }, landedAt: to }] };
+    const b: Move<number> = { from, to, captures: [{ capturedPiece: fakePiece({ id: 'different-object' }), capturedAt: { row: 3, col: 2 }, landedAt: to }] };
+    // Deliberately different `capturedPiece` object identity/id -- position is what
+    // identifies the captured piece for this comparison, not the piece object itself.
+    expect(isSameMove(a, b)).toBe(true);
   });
 });
 

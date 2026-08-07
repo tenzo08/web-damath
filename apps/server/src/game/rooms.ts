@@ -58,15 +58,38 @@ export class RoomManager {
   private readonly queue = new Map<string, QueueEntry>();
   /** `${tournamentId}:${round}:${index}` → roomId, so a second "play this match" click (or a page reload) returns the same room instead of spawning a duplicate. In-memory only — same scope as the file-backed stores (KNOWLEDGE.md), fine for a single dev server instance. */
   private readonly tournamentRoomIndex = new Map<string, string>();
+  /**
+   * `getRoom`'s cold-cache hydration in flight, keyed by roomId — without this, two
+   * concurrent `getRoom` calls for a room not yet in `this.rooms` (e.g. right after a
+   * server restart, before anyone's touched it again) each independently read the
+   * persisted game and call `hydrate()`, and the second `hydrate()`'s `this.rooms.set()`
+   * silently clobbers the first's — any caller still holding a reference to the first
+   * `RoomHandle` (e.g. a `move`/`resign` already in progress against it) would then be
+   * mutating a closure nothing else can ever see again. Concrete trigger this session
+   * made more likely: two players disconnecting from the same untouched room around the
+   * same moment, each independently calling `getRoom` from their own disconnect-forfeit
+   * timer (`ws.ts`'s `scheduleDisconnectForfeit`).
+   */
+  private readonly hydrating = new Map<string, Promise<RoomHandle | null>>();
 
   constructor(private readonly options: RoomManagerOptions) {}
 
   async getRoom(roomId: string): Promise<RoomHandle | null> {
     const active = this.rooms.get(roomId);
     if (active) return active;
-    const persisted = await this.options.gameStore.findById(roomId);
-    if (!persisted) return null;
-    return this.hydrate(persisted);
+    const inFlight = this.hydrating.get(roomId);
+    if (inFlight) return inFlight;
+    const promise = (async () => {
+      const persisted = await this.options.gameStore.findById(roomId);
+      if (!persisted) return null;
+      return this.hydrate(persisted);
+    })();
+    this.hydrating.set(roomId, promise);
+    try {
+      return await promise;
+    } finally {
+      this.hydrating.delete(roomId);
+    }
   }
 
   /** A direct, invite-link room — the creator sits `white`, `black` waits for `joinRoom`. Distinct from matchmaking. */

@@ -184,6 +184,30 @@ describe('persistence and reconnection by replay', () => {
     const reloaded = await restarted.getRoom(room.id);
     expect(reloaded?.getView()).toEqual(before);
   });
+
+  it('concurrent getRoom calls on a cold cache hydrate exactly once and return the same handle', async () => {
+    // Regression test: getRoom used to have no in-flight deduplication, so two
+    // concurrent calls for a room not yet in the in-memory cache (a real server-restart
+    // scenario -- e.g. two players' disconnect-forfeit timers both firing for the same
+    // untouched room around the same moment) each independently hydrated a *separate*
+    // RoomHandle closure, and the second one's `this.rooms.set()` silently clobbered the
+    // first. A caller still holding the first handle would then be acting on a closure
+    // nothing else could ever see again.
+    const manager = makeManager();
+    const room = await manager.createRoom('whole', 'white-user');
+    await manager.joinRoom(room.id, 'black-user');
+
+    const restarted = makeManager(); // fresh manager, same on-disk store -- cold cache
+    const [a, b, c] = await Promise.all([restarted.getRoom(room.id), restarted.getRoom(room.id), restarted.getRoom(room.id)]);
+    expect(a).not.toBeNull();
+    expect(a).toBe(b); // same object reference, not just equal content
+    expect(b).toBe(c);
+
+    // And the handle actually registered in the manager's cache is that exact same
+    // instance -- a subsequent call must never re-hydrate a fourth, different object.
+    const afterward = await restarted.getRoom(room.id);
+    expect(afterward).toBe(a);
+  });
 });
 
 describe('resign', () => {

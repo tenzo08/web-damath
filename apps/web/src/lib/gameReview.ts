@@ -2,6 +2,7 @@ import { applyMove, legalMoves } from '@damath/engine';
 import type { GameState, Move, Player, Variant } from '@damath/engine';
 import { DEFAULT_WEIGHTS, evaluate, toNumberFor } from '@damath/ai';
 import type { SearchOptions, SearchResult } from '@damath/ai';
+import { samePosition } from './board';
 
 export type MoveClassification = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
 
@@ -51,8 +52,25 @@ export interface PlyReview<V> {
   classification: MoveClassification;
 }
 
-function isSameMove<V>(a: Move<V>, b: Move<V>): boolean {
-  return a.from.row === b.from.row && a.from.col === b.from.col && a.to.row === b.to.row && a.to.col === b.to.col;
+/**
+ * Two moves count as "the same" only if they capture exactly the same squares in the
+ * same order, not just share the same `from`/`to`. A Dama's multi-direction captures can
+ * legitimately produce distinct maximal-length sequences that start and land on the same
+ * two squares while capturing different pieces along different paths (moves.ts's
+ * maximal-capture rule only constrains sequence *length*, not which squares are taken) —
+ * comparing `from`/`to` alone would let a genuinely worse capture path get scored as
+ * "best" just because it happened to start and end in the same place as the real best
+ * move. Comparing `captures.length` first is a cheap short-circuit; `capturedAt` (not
+ * `capturedPiece`) is the actual identity check per step, since a square uniquely
+ * identifies which piece was captured there without needing to compare piece values.
+ */
+export function isSameMove<V>(a: Move<V>, b: Move<V>): boolean {
+  if (!samePosition(a.from, b.from) || !samePosition(a.to, b.to)) return false;
+  if (a.captures.length !== b.captures.length) return false;
+  return a.captures.every((step, i) => {
+    const other = b.captures[i];
+    return other !== undefined && samePosition(step.capturedAt, other.capturedAt) && samePosition(step.landedAt, other.landedAt);
+  });
 }
 
 /**

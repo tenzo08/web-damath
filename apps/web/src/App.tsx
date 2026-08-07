@@ -457,6 +457,16 @@ function AppShell() {
     setReviewContext({ variantId, moveHistory });
     navigate('review');
   }
+  // `reviewContext` is in-memory only, never derivable from the URL alone — reaching
+  // `/review` any other way (a page reload, a bookmark, the back-forward cache, a
+  // shared link) leaves it `null` and would otherwise render a completely blank content
+  // area (GameReviewScreen never mounts) with no landmark and no way back except the
+  // browser's own Back button. Bounce to the lobby instead, the same "there's nothing
+  // here to show" fallback every other context-carrying screen effectively gets for
+  // free by requiring its own setup step first.
+  useEffect(() => {
+    if (screen === 'review' && !reviewContext) navigate('lobby');
+  }, [screen, reviewContext]);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

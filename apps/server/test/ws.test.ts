@@ -255,6 +255,78 @@ describe('disconnect forfeiture', () => {
     // unhandled rejection.
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
+
+  it('a user seated in two simultaneously-active rooms forfeits both independently when both sockets drop', async () => {
+    // Regression test: the timer used to be keyed by userId alone, so a user seated in
+    // two active human rooms at once (two tabs -- one direct invite-link room, one
+    // tournament match, say) only ever had *one* pending forfeit timer, no matter how
+    // many rooms they were actually in. Whichever socket happened to close last "won"
+    // the timer for whatever room *it* was subscribed to; the other room's opponent
+    // never got a scheduled forfeit at all and the game hung forever.
+    testApp = makeTestApp({ disconnectForfeitMs: 30 });
+    await testApp.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = testApp.app.server.address();
+    if (address === null || typeof address === 'string') throw new Error('expected a real TCP address');
+    baseUrl = `ws://127.0.0.1:${String(address.port)}`;
+
+    // Signed up sequentially, not via Promise.all -- FileGameStore/FileUserStore is a
+    // JSON file with a read-modify-write `create()` (KNOWLEDGE.md: "not safe for
+    // concurrent writers"), and three truly concurrent signups against it can race: two
+    // signups both read the file before either has written back, and whichever writes
+    // last silently drops the other's new user from disk even though that signup's own
+    // HTTP response reported success. Caught for real running this test — the second
+    // account intermittently vanished from the store, and the login step below failed
+    // with a genuine 401 depending on timing, not a bug in the disconnect-forfeit logic
+    // itself. Every other test in this file either signs up one user or exactly two
+    // concurrently, apparently narrow enough a window to not reproduce this in practice;
+    // three was enough to expose it reliably.
+    const tokenA1 = await signupToken('multiroom-a@example.com');
+    const tokenB = await signupToken('multiroom-b@example.com');
+    const tokenC = await signupToken('multiroom-c@example.com');
+    // A second token for the *same* account (a fresh login, not a second signup) --
+    // simulates a second open tab for the same user, seated in a second room.
+    const loginRes = await testApp.app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'multiroom-a@example.com', password: 'a-long-enough-password' },
+    });
+    const tokenA2 = (loginRes.json() as { token: string }).token;
+
+    const socketA1 = await connect(tokenA1); // A's tab on room 1, with B
+    const socketA2 = await connect(tokenA2); // A's tab on room 2, with C
+    const socketB = await connect(tokenB);
+    const socketC = await connect(tokenC);
+
+    socketA1.send(JSON.stringify({ type: 'create_room', variantId: 'whole' }));
+    const room1 = (await nextMessage(socketA1)).roomId as string;
+    socketB.send(JSON.stringify({ type: 'join_room', roomId: room1 }));
+    await Promise.all([nextMessage(socketB), nextMessage(socketA1)]);
+
+    socketA2.send(JSON.stringify({ type: 'create_room', variantId: 'whole' }));
+    const room2 = (await nextMessage(socketA2)).roomId as string;
+    socketC.send(JSON.stringify({ type: 'join_room', roomId: room2 }));
+    await Promise.all([nextMessage(socketC), nextMessage(socketA2)]);
+
+    const room1Finished = waitFor(socketB, (m) => m.type === 'state' && (m as { view: { status: string } }).view.status === 'finished');
+    const room2Finished = waitFor(socketC, (m) => m.type === 'state' && (m as { view: { status: string } }).view.status === 'finished');
+
+    // Both of A's sockets drop at once -- a real full network loss, not a deliberate
+    // per-room leave.
+    socketA1.close();
+    socketA2.close();
+
+    const [finished1, finished2] = (await Promise.all([room1Finished, room2Finished])) as {
+      view: { status: string; winner: string };
+    }[];
+    expect(finished1.view.status).toBe('finished');
+    expect(finished1.view.winner).toBe('black'); // B, the non-forfeiting side of room1
+    expect(finished2.view.status).toBe('finished');
+    expect(finished2.view.winner).toBe('black'); // C, the non-forfeiting side of room2
+
+    socketB.close();
+    socketC.close();
+    await new Promise((resolve) => setTimeout(resolve, 60)); // drain, same reasoning as the tests above
+  });
 });
 
 describe('the online-user count', () => {

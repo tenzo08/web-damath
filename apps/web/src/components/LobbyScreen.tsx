@@ -13,6 +13,8 @@ interface LobbyScreenProps {
   onLearn: () => void;
   onTournaments: () => void;
   onPuzzles: () => void;
+  /** `null` when signed out — the card is omitted entirely rather than shown disabled, same reasoning as `onMatchHistory`/`onSpectate` (the leaderboard route itself requires sign-in). */
+  onLeaderboard: (() => void) | null;
   /** `null` when signed out — the card is omitted entirely rather than shown disabled. */
   onMatchHistory: (() => void) | null;
   /** `null` when signed out, same reasoning as `onMatchHistory`. */
@@ -86,6 +88,7 @@ export function LobbyScreen({
   onLearn,
   onTournaments,
   onPuzzles,
+  onLeaderboard,
   onMatchHistory,
   onSpectate,
   onlineCount,
@@ -174,6 +177,9 @@ export function LobbyScreen({
           <ModeCard icon="🎓" title={t('lobby.learn.title')} description={t('lobby.learn.description')} onClick={onLearn} />
           <ModeCard icon="🧩" title={t('lobby.puzzles.title')} description={t('lobby.puzzles.description')} onClick={onPuzzles} />
           <ModeCard icon="🏆" title={t('lobby.tournaments.title')} description={t('lobby.tournaments.description')} onClick={onTournaments} />
+          {onLeaderboard && (
+            <ModeCard icon="📊" title={t('lobby.leaderboard.title')} description={t('lobby.leaderboard.description')} onClick={onLeaderboard} />
+          )}
           {onMatchHistory && (
             <ModeCard icon="📜" title={t('lobby.matchHistory.title')} description={t('lobby.matchHistory.description')} onClick={onMatchHistory} />
           )}

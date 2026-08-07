@@ -42,6 +42,8 @@ export interface UserStore {
   findByResetTokenHash(hash: string): Promise<User | null>;
   /** Finds the one user (if any) whose `verifyTokenHash` matches — see auth/actionTokens.ts. */
   findByVerifyTokenHash(hash: string): Promise<User | null>;
+  /** Every account ordered by rating (rating/elo.ts), highest first — the leaderboard's data source. `limit` bounds it the same way `GameStore.listForUser`/`listActive` do; this app has no real pagination need at classroom/tournament scale. */
+  listTopByRating(limit: number): Promise<User[]>;
 }
 
 /**
@@ -111,6 +113,14 @@ export class FileUserStore implements UserStore {
   async findByVerifyTokenHash(hash: string): Promise<User | null> {
     const users = await this.readAll();
     return users.find((u) => u.verifyTokenHash === hash) ?? null;
+  }
+
+  async listTopByRating(limit: number): Promise<User[]> {
+    const users = await this.readAll();
+    return users
+      .slice()
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, limit);
   }
 }
 
@@ -197,6 +207,11 @@ export class PrismaUserStore implements UserStore {
   async findByVerifyTokenHash(hash: string): Promise<User | null> {
     const row = await this.prisma.user.findFirst({ where: { verifyTokenHash: hash } });
     return row ? toUser(row) : null;
+  }
+
+  async listTopByRating(limit: number): Promise<User[]> {
+    const rows = await this.prisma.user.findMany({ orderBy: { rating: 'desc' }, take: limit });
+    return rows.map(toUser);
   }
 }
 

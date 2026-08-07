@@ -8,6 +8,8 @@ interface GameControlsProps {
   onStepBack: () => void;
   onStepForward: () => void;
   onFlip: () => void;
+  /** Hidden in local pass-and-play, where the board already auto-flips to whichever side is on move — a manual flip there would just get overridden by the very next move. Defaults to true (every other mode keeps the manual toggle). */
+  showFlipButton?: boolean;
 }
 
 function ControlButton({
@@ -61,6 +63,7 @@ export function GameControls({
   onStepBack,
   onStepForward,
   onFlip,
+  showFlipButton = true,
 }: GameControlsProps) {
   return (
     <section
@@ -82,12 +85,16 @@ export function GameControls({
         <ControlButton label="◂ Back" onClick={onStepBack} disabled={!canUndo} />
         <ControlButton label="Forward ▸" onClick={onStepForward} disabled={!isViewingHistory} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+      {showFlipButton ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+          <ControlButton label="Undo move" onClick={onUndo} disabled={!canUndo} />
+          <ControlButton label="Flip board" onClick={onFlip} disabled={false} />
+        </div>
+      ) : (
         <ControlButton label="Undo move" onClick={onUndo} disabled={!canUndo} />
-        <ControlButton label="Flip board" onClick={onFlip} disabled={false} />
-      </div>
+      )}
       <ControlButton label="Resign" onClick={onResign} disabled={!canResign} danger />
-      {flipped && (
+      {showFlipButton && flipped && (
         <p style={{ margin: 0, fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>Board flipped to Dark&apos;s view.</p>
       )}
     </section>

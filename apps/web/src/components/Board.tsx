@@ -43,9 +43,15 @@ export function Board<V>({
 }: BoardProps<V>) {
   const refs = useRef(new Map<string, HTMLButtonElement | HTMLDivElement>());
 
+  // Also re-runs on `flipped`, not just `cursor`: reversing the row/col traversal order
+  // (friend mode's auto-flip to whichever side is on move) makes React recreate the
+  // reordered grid cells rather than just repositioning them, which silently drops
+  // keyboard focus from the cursor square on every flip if this only depended on
+  // `cursor` itself — found by a real DOM node going `isConnected: false` after a move
+  // triggered a flip.
   useEffect(() => {
     refs.current.get(positionKey(cursor))?.focus();
-  }, [cursor]);
+  }, [cursor, flipped]);
 
   const rows = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];

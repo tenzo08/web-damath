@@ -11,6 +11,12 @@ import { BOT_NICKNAMES } from './lib/botNicknames';
  * already used, instead of starting immediately with whatever variant was selected
  * last — the chip type is chosen up front and locked for the match.
  */
+/** Clicks through the in-game "Ready to start?" confirmation (StartConfirmModal) — the clock and board stay inert until this is pressed, distinct from GameSetupModal's own "Start game" (same label, a different dialog by its accessible name). */
+async function confirmReady(user: UserEvent) {
+  const readyDialog = screen.getByRole('dialog', { name: 'Ready to start' });
+  await user.click(within(readyDialog).getByRole('button', { name: 'Start game' }));
+}
+
 async function enterFriendGame(user: UserEvent, variantName?: RegExp) {
   render(<App />);
   await user.click(screen.getByRole('button', { name: /^Play a Friend/ }));
@@ -19,6 +25,7 @@ async function enterFriendGame(user: UserEvent, variantName?: RegExp) {
     await user.click(within(dialog).getByRole('button', { name: variantName }));
   }
   await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
+  await confirmReady(user);
 }
 
 /** "Play the Computer" now opens the setup modal — the player must choose a tier before the game exists at all. */
@@ -28,6 +35,7 @@ async function enterComputerGame(user: UserEvent, tier: 'Learner' | 'Steady' | '
   const dialog = screen.getByRole('dialog', { name: 'New game' });
   await user.click(within(dialog).getByRole('button', { name: new RegExp(`^${tier}`, 'i') }));
   await user.click(within(dialog).getByRole('button', { name: 'Start game' }));
+  await confirmReady(user);
 }
 
 describe('the lobby', () => {
@@ -154,7 +162,13 @@ describe('local play (Play a Friend)', () => {
 
     expect(screen.queryByText('No moves yet.')).not.toBeInTheDocument();
     expect(screen.getByText('Dark to move')).toBeInTheDocument();
-    expect(destination).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    // Re-queried, not the stale `destination` reference: the board auto-flips to
+    // whichever side is on move in friend mode (Dark, now), which reorders the grid's
+    // row/col traversal and makes React recreate the reordered cells rather than just
+    // reposition them — a real DOM detail, not a test bug, so the assertion below
+    // reflects what a user actually sees (the a4 square, wherever it now sits, showing
+    // the piece that just moved there) rather than a detached old node.
+    expect(screen.getByRole('gridcell', { name: /^a4, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
   it('the Menu button offers Rematch, New game, and Back to lobby', async () => {
@@ -257,6 +271,43 @@ describe('local play (Play a Friend)', () => {
     expect(screen.getByText('20:00')).toBeInTheDocument();
     expect(screen.getByText('1:00')).toBeInTheDocument();
   });
+
+  it('auto-flips the board to whichever side is on move, and hides the manual flip button', async () => {
+    const user = userEvent.setup();
+    await enterFriendGame(user);
+
+    // Not flipped, Light to move: the first grid cell in document order is a8
+    // (Board.tsx's own not-flipped row/col order).
+    const grid = screen.getByRole('grid', { name: 'Damath board' });
+    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^a8,/));
+    expect(screen.queryByRole('button', { name: 'Flip board' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^a4, /i }));
+
+    // Dark to move now — auto-flipped, so the first cell is h1 instead.
+    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^h1,/));
+  });
+
+  it('gates the clock and board behind a "Ready to start?" confirmation before the match itself', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: /^Play a Friend/ }));
+    await user.click(within(screen.getByRole('dialog', { name: 'New game' })).getByRole('button', { name: 'Start game' }));
+
+    // The board exists (so the match summary reads correctly against it), but the
+    // clock hasn't started and a click on it does nothing until confirmed.
+    const readyDialog = screen.getByRole('dialog', { name: 'Ready to start' });
+    expect(within(readyDialog).getByText(/Pass-and-play with a friend/)).toBeInTheDocument();
+    expect(screen.getByText('20:00')).toBeInTheDocument();
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    expect(screen.queryByRole('gridcell', { name: /^b3, /i })).not.toHaveAttribute('aria-selected', 'true');
+
+    await confirmReady(user);
+    expect(screen.queryByRole('dialog', { name: 'Ready to start' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('gridcell', { name: /^b3, /i }));
+    expect(screen.getByRole('gridcell', { name: /^b3, /i })).toHaveAttribute('aria-selected', 'true');
+  });
 });
 
 describe('playing the computer', () => {
@@ -271,6 +322,12 @@ describe('playing the computer', () => {
     expect(screen.queryByText(/computer/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('keeps the manual "Flip board" button — only friend mode auto-flips', async () => {
+    const user = userEvent.setup();
+    await enterComputerGame(user, 'Learner');
+    expect(screen.getByRole('button', { name: 'Flip board' })).toBeInTheDocument();
   });
 });
 

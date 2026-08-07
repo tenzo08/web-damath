@@ -17,6 +17,7 @@ import { GameControls } from './components/GameControls';
 import { GameMenu } from './components/GameMenu';
 import { GameSetupModal, type OpponentChoice } from './components/GameSetupModal';
 import { GameOverModal } from './components/GameOverModal';
+import { StartConfirmModal } from './components/StartConfirmModal';
 import { TutorialModal } from './components/TutorialModal';
 import { LoginModal } from './components/LoginModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
@@ -54,8 +55,10 @@ function GameShellView<V>({
   blockInteraction,
   thinkingLabel,
   scoreLabelOverrides,
+  opponentSummary,
   flipped,
   onFlip,
+  allowManualFlip,
   nav,
 }: {
   variant: Variant<V>;
@@ -65,8 +68,12 @@ function GameShellView<V>({
   /** Shown as the status line while `blockInteraction` is true — a friendly nickname's "is thinking…", not "Computer is thinking…" (never named "Computer" here, per direct product decision). */
   thinkingLabel?: string | undefined;
   scoreLabelOverrides?: Partial<Record<'white' | 'black', string>> | undefined;
+  /** The match summary shown on the pre-start confirmation panel, e.g. "Pass-and-play with a friend" or "vs Kalabasa (steady)". */
+  opponentSummary: string;
   flipped: boolean;
   onFlip: () => void;
+  /** Friend mode auto-flips to whichever side is on move instead (GameShell computes `flipped` for that case) — the manual "Flip board" button would just get overridden on the next move, so it's hidden rather than shown-but-ineffective. */
+  allowManualFlip: boolean;
   nav: GameNavigation;
 }) {
   const {
@@ -100,6 +107,13 @@ function GameShellView<V>({
   } = gameApi;
 
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
+  // Gates the clock and board interaction until the player explicitly confirms on
+  // `StartConfirmModal` — entering this screen straight from `GameSetupModal`'s "Start
+  // game" used to begin the clock immediately, before pass-and-play's second player
+  // had even looked at the board. `useState(false)` is enough (no reset needed): this
+  // whole component remounts fresh on every new match, via `key={variant.id}-${matchNonce}`
+  // at GameShell's own call site.
+  const [started, setStarted] = useState(false);
   const { effectiveVolume } = useSettings();
 
   // A capture/move sound per new ply actually played — `ledger` only grows on a real
@@ -143,7 +157,7 @@ function GameShellView<V>({
   const moveClockWaived = allLegalMoves.some((m) => m.captures.length > 0);
   const clock = useGameClock({
     moveKey: game.moveHistory.length,
-    paused: gameOver || isViewingHistory || blockInteraction,
+    paused: !started || gameOver || isViewingHistory || blockInteraction,
     moveClockWaived,
     onMoveTimeout: () => {
       const pick = allLegalMoves[Math.floor(Math.random() * allLegalMoves.length)];
@@ -205,12 +219,12 @@ function GameShellView<V>({
               lastMove={lastMove}
               flipped={flipped}
               onActivateSquare={(pos) => {
-                if (gameOver || blockInteraction || isViewingHistory) return;
+                if (!started || gameOver || blockInteraction || isViewingHistory) return;
                 activateSquare(pos);
               }}
               onMoveCursor={moveCursor}
               onActivateCursor={() => {
-                if (gameOver || blockInteraction || isViewingHistory) return;
+                if (!started || gameOver || blockInteraction || isViewingHistory) return;
                 activateCursor();
               }}
               onClearSelection={clearSelection}
@@ -229,6 +243,7 @@ function GameShellView<V>({
               onStepBack={stepBack}
               onStepForward={stepForward}
               onFlip={onFlip}
+              showFlipButton={allowManualFlip}
             />
             {/* The one section that's meant to scroll internally, per request — a fixed
                 max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
@@ -250,6 +265,14 @@ function GameShellView<V>({
         winner={winner}
         onRematch={nav.onRematch}
         onNewGame={nav.onNewGame}
+        onBackToLobby={nav.onBackToLobby}
+      />
+
+      <StartConfirmModal
+        open={!started}
+        variantName={variant.name}
+        opponentSummary={opponentSummary}
+        onStart={() => setStarted(true)}
         onBackToLobby={nav.onBackToLobby}
       />
     </main>
@@ -282,6 +305,16 @@ function GameShell<V>({
   // bookkeeping), just never displayed.
   const [opponentName] = useState(() => (tier ? randomBotNickname() : null));
 
+  // Friend mode (no computer opponent) auto-flips to whichever side is actually on
+  // move, so the player about to act always sees their own pieces at the bottom —
+  // the whole point of sharing one screen. Computer mode keeps the manual toggle: the
+  // human sits in one seat for the whole match, so there's a real fixed preference to
+  // remember, not a turn to track (GameShellView hides the button otherwise, since a
+  // manual flip there would just get overridden by the very next move).
+  const isFriendMode = tier === null;
+  const effectiveFlipped = isFriendMode ? gameApi.game.turn === 'black' : flipped;
+  const opponentSummary = opponentName ? `vs ${opponentName} (${tier})` : 'Pass-and-play with a friend';
+
   return (
     <GameShellView
       variant={variant}
@@ -290,8 +323,10 @@ function GameShell<V>({
       blockInteraction={computersTurn}
       thinkingLabel={opponentName ? `${opponentName} is thinking…` : undefined}
       scoreLabelOverrides={opponentName ? { black: opponentName } : undefined}
-      flipped={flipped}
+      opponentSummary={opponentSummary}
+      flipped={effectiveFlipped}
       onFlip={onFlip}
+      allowManualFlip={!isFriendMode}
       nav={nav}
     />
   );

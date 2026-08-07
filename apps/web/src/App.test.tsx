@@ -38,6 +38,36 @@ async function enterComputerGame(user: UserEvent, tier: 'Learner' | 'Steady' | '
   await confirmReady(user);
 }
 
+describe('browser back/forward navigation', () => {
+  it('pushes a real history entry when navigating, so the back button returns to the lobby', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(window.location.pathname).toBe('/');
+
+    await user.click(screen.getByRole('button', { name: /^Play Online/ }));
+    // findBy*, not getBy*: OnlineGameScreen is code-split.
+    expect(await screen.findByRole('heading', { name: 'Play Online' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/online');
+
+    window.history.back();
+    // jsdom dispatches `popstate` asynchronously, same as a real browser.
+    expect(await screen.findByRole('heading', { name: 'Damath' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('a direct visit to a screen URL (e.g. a refresh) lands on that screen instead of always the lobby', async () => {
+    window.history.replaceState(null, '', '/puzzles');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Puzzles' })).toBeInTheDocument();
+  });
+
+  it('an unrecognised path falls back to the lobby rather than a blank screen', () => {
+    window.history.replaceState(null, '', '/not-a-real-route');
+    render(<App />);
+    expect(screen.getByRole('heading', { name: 'Damath' })).toBeInTheDocument();
+  });
+});
+
 describe('the lobby', () => {
   it('is the landing screen, with mode cards and no board', () => {
     render(<App />);

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
 import type { AnyVariant, Player, Variant } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
@@ -349,6 +349,29 @@ function GameShell<V>({
 
 type Screen = 'lobby' | 'game' | 'online' | 'tournaments' | 'history' | 'spectate' | 'puzzles';
 
+/**
+ * Real URL paths for each screen, and the browser's own back/forward — there was no
+ * client router at all before this (every "go back" was purely an in-memory state
+ * change), so pressing the phone's/browser's back button just left the site entirely
+ * instead of returning to the previous screen. `vercel.json`'s rewrite already serves
+ * `index.html` for any path, so a direct visit or refresh on e.g. `/puzzles` works
+ * once the client reads the path back into `screen` on mount, below.
+ */
+const SCREEN_PATHS: Record<Screen, string> = {
+  lobby: '/',
+  game: '/game',
+  online: '/online',
+  tournaments: '/tournaments',
+  history: '/history',
+  spectate: '/spectate',
+  puzzles: '/puzzles',
+};
+
+function screenFromPath(pathname: string): Screen {
+  const entry = (Object.entries(SCREEN_PATHS) as [Screen, string][]).find(([, path]) => path === pathname);
+  return entry?.[0] ?? 'lobby';
+}
+
 function AppShell() {
   const defaultVariant = ALL_VARIANTS.find((v) => v.id === 'whole');
   if (!defaultVariant) {
@@ -358,7 +381,35 @@ function AppShell() {
   const [tier, setTier] = useState<DifficultyTier | null>(null);
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [screen, setScreen] = useState<Screen>('lobby');
+  const [screen, setScreenState] = useState<Screen>(() => screenFromPath(window.location.pathname));
+  // Every existing in-app "go to this screen" call site becomes `navigate(...)`
+  // instead of a bare state set, so each one also pushes a real history entry —
+  // that's what makes the browser's/phone's back button return to the previous
+  // screen instead of leaving the site. `setScreenState` itself stays private to this
+  // effect pair; nothing else should call it directly and skip the history push.
+  const navigate = useCallback((next: Screen) => {
+    setScreenState((current) => {
+      if (current === next) return current;
+      window.history.pushState({ screen: next }, '', SCREEN_PATHS[next]);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    // The current entry needs a state object too, or the *first* back-press (nothing
+    // pushed yet this session) has nothing to restore from — this also folds in a URL
+    // that was reached by direct visit/refresh rather than in-app navigation.
+    window.history.replaceState({ screen }, '', SCREEN_PATHS[screen]);
+    function onPopState(event: PopStateEvent) {
+      const state = event.state as { screen?: Screen } | null;
+      setScreenState(state?.screen ?? screenFromPath(window.location.pathname));
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+    // Deliberately mount-only (`screen` read once, not a dependency): this wires up
+    // browser history plumbing a single time. `navigate()` already pushes a fresh
+    // entry on every subsequent screen change; re-running this per change would just
+    // stomp the entry `navigate()` just pushed with a duplicate replace.
+  }, []);
   // Carries a tournament id + the room created for one of its matches across the
   // TournamentScreen → OnlineGameScreen → TournamentScreen round trip. Both screens are
   // conditionally rendered (unmounted while off-screen), so their own local state
@@ -419,7 +470,7 @@ function AppShell() {
     setVariant(newVariant);
     setTier(opponent.kind === 'computer' ? opponent.tier : null);
     setMatchNonce((n) => n + 1);
-    setScreen('game');
+    navigate('game');
   }
 
   function openSetupForComputer() {
@@ -444,7 +495,7 @@ function AppShell() {
   const nav: GameNavigation = {
     onRematch: () => setMatchNonce((n) => n + 1),
     onNewGame: openSetupForNewGame,
-    onBackToLobby: () => setScreen('lobby'),
+    onBackToLobby: () => navigate('lobby'),
   };
 
   // A live game screen fits the viewport height instead of scrolling the page on a
@@ -467,12 +518,12 @@ function AppShell() {
           onSignIn={() => setLoginOpen(true)}
           onPlayFriend={openSetupForFriend}
           onPlayComputer={openSetupForComputer}
-          onPlayOnline={() => setScreen('online')}
+          onPlayOnline={() => navigate('online')}
           onLearn={() => setTutorialOpen(true)}
-          onTournaments={() => setScreen('tournaments')}
-          onPuzzles={() => setScreen('puzzles')}
-          onMatchHistory={auth.user ? () => setScreen('history') : null}
-          onSpectate={auth.user ? () => setScreen('spectate') : null}
+          onTournaments={() => navigate('tournaments')}
+          onPuzzles={() => navigate('puzzles')}
+          onMatchHistory={auth.user ? () => navigate('history') : null}
+          onSpectate={auth.user ? () => navigate('spectate') : null}
           onlineCount={live.onlineCount}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -480,7 +531,7 @@ function AppShell() {
 
       {screen === 'puzzles' && (
         <Suspense fallback={<ScreenFallback />}>
-          <PuzzleScreen onBackToLobby={() => setScreen('lobby')} />
+          <PuzzleScreen onBackToLobby={() => navigate('lobby')} />
         </Suspense>
       )}
 
@@ -496,15 +547,15 @@ function AppShell() {
             onBackToLobby={() => {
               if (historyRoomId) {
                 setHistoryRoomId(null);
-                setScreen('history');
+                navigate('history');
                 return;
               }
               if (spectateRoomId) {
                 setSpectateRoomId(null);
-                setScreen('spectate');
+                navigate('spectate');
                 return;
               }
-              setScreen(tournamentContext ? 'tournaments' : 'lobby');
+              navigate(tournamentContext ? 'tournaments' : 'lobby');
               setTournamentContext((ctx) => (ctx ? { tournamentId: ctx.tournamentId, roomId: null } : null));
             }}
             onOpenLogin={() => setLoginOpen(true)}
@@ -516,10 +567,10 @@ function AppShell() {
         <Suspense fallback={<ScreenFallback />}>
           <SpectateScreen
             token={auth.token}
-            onBackToLobby={() => setScreen('lobby')}
+            onBackToLobby={() => navigate('lobby')}
             onWatch={(roomId) => {
               setSpectateRoomId(roomId);
-              setScreen('online');
+              navigate('online');
             }}
           />
         </Suspense>
@@ -529,10 +580,10 @@ function AppShell() {
         <Suspense fallback={<ScreenFallback />}>
           <MatchHistoryScreen
             token={auth.token}
-            onBackToLobby={() => setScreen('lobby')}
+            onBackToLobby={() => navigate('lobby')}
             onViewGame={(roomId) => {
               setHistoryRoomId(roomId);
-              setScreen('online');
+              navigate('online');
             }}
           />
         </Suspense>
@@ -548,11 +599,11 @@ function AppShell() {
             onlineCount={live.onlineCount}
             onPlayMatch={(tournamentId, roomId) => {
               setTournamentContext({ tournamentId, roomId });
-              setScreen('online');
+              navigate('online');
             }}
             onBackToLobby={() => {
               setTournamentContext(null);
-              setScreen('lobby');
+              navigate('lobby');
             }}
             onOpenLogin={() => setLoginOpen(true)}
           />

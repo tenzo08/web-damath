@@ -127,3 +127,41 @@
   --square-last: rgba(63, 111, 150, 0.12);
   --square-movable: rgba(47, 158, 91, 0.14);
 }
+
+/**
+ * Board themes — a board's own square/piece color set, picked independently of the
+ * light/dark UI theme above (settings.tsx's `BoardTheme`, applied via `<html
+ * data-board-theme>`). `'classic'` is `:root`'s own default set (no attribute needed);
+ * these are the "couple of alternates" a picker in SettingsModal switches between.
+ * Every `--square-op` value here keeps a large, deliberate lightness gap against its own
+ * `--square-play` — the same WCAG-AA-driven approach the two comments above already
+ * used, not independently re-measured with a contrast tool for each new pair, but chosen
+ * with the same margin of safety.
+ */
+:root[data-board-theme='forest'] {
+  --square-void: #12160f;
+  --square-play: #223019;
+  --square-op: #b7c9a6;
+  --square-legal: rgba(201, 168, 76, 0.18);
+  --square-last: rgba(139, 175, 122, 0.16);
+  --square-movable: rgba(99, 179, 96, 0.18);
+
+  --piece-light: #dcc98f;
+  --piece-light-on: #2b2410;
+  --piece-dark: #3f7a3a;
+  --piece-dark-on: #eef7e8;
+}
+
+:root[data-board-theme='ocean'] {
+  --square-void: #0a1420;
+  --square-play: #12283a;
+  --square-op: #9dc4de;
+  --square-legal: rgba(94, 197, 214, 0.18);
+  --square-last: rgba(127, 166, 201, 0.16);
+  --square-movable: rgba(79, 191, 150, 0.18);
+
+  --piece-light: #7fd8e0;
+  --piece-light-on: #062226;
+  --piece-dark: #e0904f;
+  --piece-dark-on: #2a1405;
+}

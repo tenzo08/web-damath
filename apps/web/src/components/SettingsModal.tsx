@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
 import { Avatar } from './Avatar';
-import { useSettings, type ThemePreference } from '../lib/settings';
+import { useSettings, type BoardTheme, type ThemePreference } from '../lib/settings';
 import { playMoveSound } from '../lib/sound';
 import { AVATAR_OPTIONS, fileToAvatarDataUrl } from '../lib/avatars';
 import type { AuthUser } from '../lib/authClient';
@@ -30,6 +30,12 @@ const THEME_OPTIONS: readonly { value: ThemePreference; label: string; icon: str
   { value: 'dark', label: 'Dark', icon: '🌙' },
   { value: 'light', label: 'Light', icon: '☀️' },
   { value: 'system', label: 'System', icon: '🖥️' },
+];
+
+const BOARD_THEME_OPTIONS: readonly { value: BoardTheme; label: string; swatches: readonly [string, string, string] }[] = [
+  { value: 'classic', label: 'Classic', swatches: ['#1c1c23', '#e3b341', '#7fa6c9'] },
+  { value: 'forest', label: 'Forest', swatches: ['#223019', '#dcc98f', '#3f7a3a'] },
+  { value: 'ocean', label: 'Ocean', swatches: ['#12283a', '#7fd8e0', '#e0904f'] },
 ];
 
 interface SettingsModalProps {
@@ -339,7 +345,7 @@ function ProfileSection({
 
 /** The account's own profile (avatar, display name) plus per-browser personalization: theme (dark/light/system) and sound effect volume. Sign-in-gated — the top-left profile button (ProfileButton.tsx) is the only way in, no separate settings icon. Sign out is pinned at the very bottom, the last action on the account. Music isn't offered here — no audio asset pipeline exists in this codebase, and a toggle with nothing to toggle would just be a broken control (see TASK.md). */
 export function SettingsModal({ open, onClose, user, onUpdateProfile, token, onSignOut }: SettingsModalProps) {
-  const { theme, setTheme, soundEnabled, setSoundEnabled, soundVolume, setSoundVolume } = useSettings();
+  const { theme, setTheme, boardTheme, setBoardTheme, soundEnabled, setSoundEnabled, soundVolume, setSoundVolume } = useSettings();
 
   return (
     <Modal open={open} onClose={onClose} title="Profile" width={480}>
@@ -359,6 +365,27 @@ export function SettingsModal({ open, onClose, user, onUpdateProfile, token, onS
             {THEME_OPTIONS.map((opt) => (
               <button key={opt.value} type="button" style={cardButton(theme === opt.value)} onClick={() => setTheme(opt.value)}>
                 <span aria-hidden="true">{opt.icon}</span> {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 style={sectionHeading}>Board theme</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--gap-sm)' }}>
+            {BOARD_THEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                style={{ ...cardButton(boardTheme === opt.value), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                onClick={() => setBoardTheme(opt.value)}
+              >
+                <span aria-hidden="true" style={{ display: 'flex', gap: 3 }}>
+                  {opt.swatches.map((color, i) => (
+                    <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,0.2)' }} />
+                  ))}
+                </span>
+                {opt.label}
               </button>
             ))}
           </div>

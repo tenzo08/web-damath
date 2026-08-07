@@ -1,14 +1,22 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
+/** A board's own square/piece color set — independent of `ThemePreference` (light/dark UI), same reasoning `--piece-light`/`--piece-dark` already use for staying constant across the UI theme: these identify the board, not the surrounding chrome. `'classic'` is the default and needs no `data-board-theme` attribute at all, matching how `'dark'` needs no `data-theme` attribute. */
+export type BoardTheme = 'classic' | 'forest' | 'ocean';
 
 const THEME_KEY = 'damath.theme';
+const BOARD_THEME_KEY = 'damath.boardTheme';
 const SOUND_ENABLED_KEY = 'damath.sound.enabled';
 const SOUND_VOLUME_KEY = 'damath.sound.volume';
 
 function readStoredTheme(): ThemePreference {
   const stored = localStorage.getItem(THEME_KEY);
   return stored === 'light' || stored === 'system' ? stored : 'dark';
+}
+
+function readStoredBoardTheme(): BoardTheme {
+  const stored = localStorage.getItem(BOARD_THEME_KEY);
+  return stored === 'forest' || stored === 'ocean' ? stored : 'classic';
 }
 
 function readStoredSoundEnabled(): boolean {
@@ -36,6 +44,8 @@ interface SettingsContextValue {
   setTheme: (theme: ThemePreference) => void;
   /** "system" resolved to an actual value — this is what's applied to `<html data-theme>` right now. */
   effectiveTheme: 'dark' | 'light';
+  boardTheme: BoardTheme;
+  setBoardTheme: (theme: BoardTheme) => void;
   soundEnabled: boolean;
   setSoundEnabled: (enabled: boolean) => void;
   soundVolume: number;
@@ -54,6 +64,7 @@ const SettingsContext = createContext<SettingsContextValue | null>(null);
  */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemePreference>(readStoredTheme);
+  const [boardTheme, setBoardThemeState] = useState<BoardTheme>(readStoredBoardTheme);
   const [systemIsLight, setSystemIsLight] = useState(systemPrefersLight);
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(readStoredSoundEnabled);
   const [soundVolume, setSoundVolumeState] = useState<number>(readStoredSoundVolume);
@@ -77,9 +88,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     else delete document.documentElement.dataset.theme;
   }, [effectiveTheme]);
 
+  // Same "attribute only for a non-default value" convention as the theme effect above
+  // — tokens.css's `:root` is already the 'classic' board palette, so 'classic' needs
+  // no attribute at all.
+  useEffect(() => {
+    if (boardTheme !== 'classic') document.documentElement.dataset.boardTheme = boardTheme;
+    else delete document.documentElement.dataset.boardTheme;
+  }, [boardTheme]);
+
   function setTheme(next: ThemePreference) {
     localStorage.setItem(THEME_KEY, next);
     setThemeState(next);
+  }
+
+  function setBoardTheme(next: BoardTheme) {
+    localStorage.setItem(BOARD_THEME_KEY, next);
+    setBoardThemeState(next);
   }
 
   function setSoundEnabled(next: boolean) {
@@ -96,6 +120,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     theme,
     setTheme,
     effectiveTheme,
+    boardTheme,
+    setBoardTheme,
     soundEnabled,
     setSoundEnabled,
     soundVolume,

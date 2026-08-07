@@ -42,6 +42,31 @@ describe('SettingsProvider / useSettings', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
+  it('defaults to classic (no data-board-theme attribute)', () => {
+    const { result } = setup();
+    expect(result.current.boardTheme).toBe('classic');
+    expect(document.documentElement.dataset.boardTheme).toBeUndefined();
+  });
+
+  it('switching to a board theme sets <html data-board-theme> and persists it', () => {
+    const { result } = setup();
+
+    act(() => result.current.setBoardTheme('forest'));
+    expect(document.documentElement.dataset.boardTheme).toBe('forest');
+    expect(localStorage.getItem('damath.boardTheme')).toBe('forest');
+
+    act(() => result.current.setBoardTheme('classic'));
+    expect(document.documentElement.dataset.boardTheme).toBeUndefined();
+    expect(localStorage.getItem('damath.boardTheme')).toBe('classic');
+  });
+
+  it('a fresh provider picks up a previously persisted board theme', () => {
+    localStorage.setItem('damath.boardTheme', 'ocean');
+    const { result } = setup();
+    expect(result.current.boardTheme).toBe('ocean');
+    expect(document.documentElement.dataset.boardTheme).toBe('ocean');
+  });
+
   it('turning sound off persists the preference and zeroes effectiveVolume', () => {
     const { result } = setup();
     expect(result.current.effectiveVolume).toBeGreaterThan(0);

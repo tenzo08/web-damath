@@ -38,8 +38,7 @@ function ModeCard({ icon, title, description, onClick }: { icon: ReactNode; titl
         flexDirection: 'column',
         gap: 'var(--gap-sm)',
         minHeight: 160,
-        flex: '0 1 260px',
-        minWidth: 220,
+        minWidth: 0,
       }}
     >
       <span aria-hidden="true" style={{ fontSize: 'var(--fs-display)' }}>
@@ -124,7 +123,6 @@ export function LobbyScreen({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', minWidth: 0 }}>
           <ProfileButton user={user} onOpenSettings={onOpenSettings} onSignIn={onSignIn} />
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em' }}>Damath</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', justifyContent: narrow ? 'space-between' : 'flex-start' }}>
           {onlineCount !== null && (
@@ -149,19 +147,17 @@ export function LobbyScreen({
           gap: 'var(--gap-xl)',
         }}
       >
+        <h1 style={{ margin: 0, fontSize: 'var(--fs-display)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center' }}>Damath</h1>
         <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 560, textAlign: 'center' }}>{t('lobby.tagline')}</p>
 
-        {/* Wrapping flexbox, not CSS grid — a grid's `justifyContent: center` only
-            centers the whole column-track block, not an incomplete last row (found by
-            actually rendering seven cards in a four-column grid: the fifth/sixth cards
-            sat left-aligned under the first row instead of centered as their own pair,
-            reading as more dead space). Flex-wrap centers every row independently, the
-            fifth/sixth/seventh cards included. */}
+        {/* Fixed 4-column, 2-row grid — up to eight mode cards (six always shown, plus
+            Match History and Spectate once signed in) fill it exactly. Drops to 2
+            columns below NARROW_QUERY, where 4 across would squeeze each card under
+            100px wide. */}
         <div
           style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
+            display: 'grid',
+            gridTemplateColumns: narrow ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: 'var(--gap-lg)',
             width: '100%',
           }}

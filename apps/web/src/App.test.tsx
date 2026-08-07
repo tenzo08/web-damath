@@ -256,7 +256,7 @@ describe('local play (Play a Friend)', () => {
     await user.click(screen.getByRole('button', { name: 'Resign' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Game over' });
-    expect(within(dialog).getByText('Dark wins!')).toBeInTheDocument();
+    expect(within(dialog).getByText('🏆 Dark wins!')).toBeInTheDocument();
     expect(within(dialog).getByText(/Light resigns\. Dark wins\./)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /^Rematch/ })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /^New game/ })).toBeInTheDocument();

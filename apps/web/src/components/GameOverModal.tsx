@@ -1,6 +1,7 @@
 import type { Player, Variant } from '@damath/engine';
 import { Modal } from './Modal';
 import { playerLabel } from '../lib/notation';
+import { CONFETTI_PIECES } from '../lib/confetti';
 
 interface GameOverModalProps<V> {
   open: boolean;
@@ -18,6 +19,14 @@ interface GameOverModalProps<V> {
   onRematch: () => void;
   onNewGame: () => void;
   onBackToLobby: () => void;
+  /**
+   * How to display a side's name — defaults to the generic `playerLabel` ("Light"/
+   * "Dark"), but callers that already have a real nickname to show (a signed-in
+   * player's display name, a bot's friendly name) pass it here so the winner headline
+   * matches whatever the board/score panel is already showing, instead of falling back
+   * to the generic label the rest of the screen has moved past.
+   */
+  labelFor?: ((side: Player) => string) | undefined;
 }
 
 const actionButton = (primary: boolean) =>
@@ -42,13 +51,24 @@ export function GameOverModal<V>({
   onRematch,
   onNewGame,
   onBackToLobby,
+  labelFor = playerLabel,
 }: GameOverModalProps<V>) {
   return (
     <Modal open={open} onClose={onDismiss} title="Game over" width={420}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <p style={{ margin: 0, fontSize: 'var(--fs-title)', fontWeight: 700, color: 'var(--accent)' }}>
-          {winner ? `${playerLabel(winner)} wins!` : 'Draw'}
-        </p>
+        <div style={{ position: 'relative' }}>
+          {winner &&
+            CONFETTI_PIECES.map((piece, i) => (
+              <span
+                key={i}
+                className="confetti-piece"
+                style={{ left: piece.left, animationDelay: piece.delay, background: piece.color }}
+              />
+            ))}
+          <p className="winner-announcement" style={{ margin: 0, fontSize: 'var(--fs-title)', fontWeight: 700, color: 'var(--accent)' }}>
+            {winner ? `🏆 ${labelFor(winner)} wins!` : 'Draw'}
+          </p>
+        </div>
         <p style={{ margin: 0, fontSize: 'var(--fs-body)', color: 'var(--text-secondary)' }}>{announcement}</p>
 
         {finalScores && (
@@ -66,7 +86,7 @@ export function GameOverModal<V>({
               >
                 <span style={{ color: winner === player ? 'var(--accent)' : 'var(--text-secondary)' }}>
                   {winner === player && '🏆 '}
-                  {playerLabel(player)}
+                  {labelFor(player)}
                 </span>
                 <span style={{ fontWeight: 700 }}>{variant.arithmetic.format(finalScores[player])}</span>
               </div>

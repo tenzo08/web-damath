@@ -87,6 +87,51 @@ select {
   animation: match-intro-slide-in calc(var(--dur-base) * 4) var(--ease);
 }
 
+/* GameOverModal's winner announcement — a restrained pop-in with a slight overshoot,
+   plus a handful of confetti pieces for an actual win (never for a draw). Durations
+   reference the shared `--dur-*` tokens, so `prefers-reduced-motion: reduce` (zeroed in
+   tokens.css) disables both automatically, same as the match-intro animation above. */
+@keyframes winner-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.winner-announcement {
+  animation: winner-pop-in calc(var(--dur-base) * 3) var(--ease);
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(48px) rotate(180deg);
+  }
+}
+.confetti-piece {
+  position: absolute;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confetti-fall calc(var(--dur-base) * 6) var(--ease) forwards;
+  pointer-events: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

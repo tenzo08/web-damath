@@ -15,6 +15,7 @@ import { SERVER_HTTP_URL } from '../lib/serverConfig';
 import type { PublicGameView } from '../lib/onlineProtocol';
 import { useSettings } from '../lib/settings';
 import { playCaptureSound, playErrorSound, playLossSound, playMoveSound, playWinSound } from '../lib/sound';
+import { CONFETTI_PIECES } from '../lib/confetti';
 import type { AuthUser } from '../lib/authClient';
 
 interface OnlineGameScreenProps {
@@ -467,8 +468,12 @@ export function OnlineGameScreen({
 
               <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
                 {online.view.status === 'finished' && (
-                  <div style={cardStyle}>
-                    <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                  <div style={{ ...cardStyle, position: 'relative' }}>
+                    {online.view.winner &&
+                      CONFETTI_PIECES.map((piece, i) => (
+                        <span key={i} className="confetti-piece" style={{ left: piece.left, animationDelay: piece.delay, background: piece.color }} />
+                      ))}
+                    <p className={online.view.winner ? 'winner-announcement' : undefined} style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
                       {online.disconnectForfeitedBy
                         ? `${online.disconnectForfeitedBy === 'white' ? 'Light' : 'Dark'} disconnected — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
                         : online.view.resignedBy

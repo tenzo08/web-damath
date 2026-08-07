@@ -281,6 +281,7 @@ function GameShellView<V>({
         onRematch={nav.onRematch}
         onNewGame={nav.onNewGame}
         onBackToLobby={nav.onBackToLobby}
+        labelFor={labelFor}
       />
 
       <StartConfirmModal
@@ -301,12 +302,15 @@ function GameShell<V>({
   flipped,
   onFlip,
   nav,
+  playerName,
 }: {
   variant: Variant<V>;
   tier: DifficultyTier | null;
   flipped: boolean;
   onFlip: () => void;
   nav: GameNavigation;
+  /** The signed-in player's display name, if any — only ever used for the human seat in vs-AI mode (`useComputerOpponent` always seats the bot black, so the human is always white there). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
+  playerName: string | null;
 }) {
   const gameApi = useGame(variant);
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
@@ -329,6 +333,10 @@ function GameShell<V>({
   const isFriendMode = tier === null;
   const effectiveFlipped = isFriendMode ? gameApi.game.turn === 'black' : flipped;
   const opponentSummary = opponentName ? `vs ${opponentName} (${tier})` : 'Pass-and-play with a friend';
+  const scoreLabelOverrides = {
+    ...(!isFriendMode && playerName ? { white: playerName } : {}),
+    ...(opponentName ? { black: opponentName } : {}),
+  };
 
   return (
     <GameShellView
@@ -337,7 +345,7 @@ function GameShell<V>({
       format={variant.arithmetic.format}
       blockInteraction={computersTurn}
       thinkingLabel={opponentName ? `${opponentName} is thinking…` : undefined}
-      scoreLabelOverrides={opponentName ? { black: opponentName } : undefined}
+      scoreLabelOverrides={Object.keys(scoreLabelOverrides).length > 0 ? scoreLabelOverrides : undefined}
       opponentSummary={opponentSummary}
       flipped={effectiveFlipped}
       onFlip={onFlip}
@@ -623,6 +631,7 @@ function AppShell() {
             flipped={flipped}
             onFlip={() => setFlipped((f) => !f)}
             nav={nav}
+            playerName={auth.user?.displayName ?? null}
           />
         </>
       )}

@@ -27,6 +27,14 @@ export interface RoomManagerOptions {
   /** Fires when a queued player is matched by an event they didn't themselves trigger (paired by someone else's `enqueue`, or the bot-fallback timer firing). The player who *called* `enqueue` gets their own match result as that call's return value instead. */
   onMatched: (userId: string, color: Player, view: PublicGameView) => void;
   /**
+   * Decides which color the human gets in a fresh bot game — the computer opponent
+   * should sometimes move first rather than always sitting in Black waiting on the
+   * human. Injectable purely so tests can force a deterministic seat instead of
+   * asserting against a coin flip; production (`ws.ts`) leaves this unset and gets the
+   * real `Math.random()` default in `persistAndInstantiateBot`.
+   */
+  assignHumanColor?: () => Player;
+  /**
    * Fires once, the moment a tournament-linked room's game ends with a clear winner (not
    * a draw) — `app.ts` wires this to `TournamentManager.reportResult`, replacing the
    * manual "X won" report for rooms created via `createTournamentMatchRoom`. Awaited by
@@ -165,7 +173,8 @@ export class RoomManager {
       const variant = findVariant(variantId);
       if (!variant) throw new Error(`unknown variant id ${variantId}`);
       const room = await this.persistAndInstantiateBot(variant, userId, PLACEMENT_TIER);
-      return { status: 'matched', room, color: 'white' };
+      this.scheduleBotReplyIfNeeded(room); // the coin flip may have seated the bot White, so it could owe the opening move
+      return { status: 'matched', room, color: room.colorOf(userId) ?? 'white' };
     }
 
     for (const [otherUserId, entry] of this.queue) {
@@ -318,7 +327,8 @@ export class RoomManager {
     if (!entry || entry.declined) return;
     this.queue.delete(userId);
     const room = await this.persistAndInstantiateBot(variant, userId);
-    this.options.onMatched(userId, 'white', room.getView());
+    this.scheduleBotReplyIfNeeded(room); // the coin flip may have seated the bot White, so it could owe the opening move
+    this.options.onMatched(userId, room.colorOf(userId) ?? 'white', room.getView());
   }
 
   private scheduleBotReplyIfNeeded(room: RoomHandle): void {
@@ -371,10 +381,11 @@ export class RoomManager {
   private async persistAndInstantiateBot(variant: AnyVariant, humanUserId: string, tier: DifficultyTier = this.options.queueBotTier): Promise<RoomHandle> {
     const id = randomUUID();
     const now = new Date().toISOString();
+    const humanColor = (this.options.assignHumanColor ?? (() => (Math.random() < 0.5 ? 'white' : 'black')))();
     const persisted: PersistedGame = {
       id,
       variantId: variant.id,
-      players: { white: humanUserId, black: BOT_PLAYER_ID },
+      players: humanColor === 'white' ? { white: humanUserId, black: BOT_PLAYER_ID } : { white: BOT_PLAYER_ID, black: humanUserId },
       opponentType: 'bot',
       botTier: tier,
       botNickname: randomBotNickname(),

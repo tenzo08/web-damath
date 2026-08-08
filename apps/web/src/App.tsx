@@ -315,17 +315,24 @@ function GameShell<V>({
   flipped: boolean;
   onFlip: () => void;
   nav: GameNavigation;
-  /** The signed-in player's display name, if any — only ever used for the human seat in vs-AI mode (`useComputerOpponent` always seats the bot black, so the human is always white there). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
+  /** The signed-in player's display name, if any — only ever used for the human's own seat in vs-AI mode (`computerPlayer` below decides which color that is, randomized per match). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
   playerName: string | null;
   onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[]) => void;
 }) {
   const gameApi = useGame(variant);
-  const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === 'black';
-  useComputerOpponent(gameApi.game, tier, 'black', gameApi.playMove);
 
   // Picked once per mount (this component remounts on every new match, via the
-  // `key={variant.id}-${matchNonce}` at the call site — a fresh key on rematch too),
-  // so it's stable for the whole game but genuinely varies match to match. Never
+  // `key={variant.id}-${matchNonce}` at the call site — a fresh key on rematch too), so
+  // it's stable for the whole game but genuinely varies match to match: the computer
+  // shouldn't sit in Black every single game, always waiting on the human to move
+  // first. Board.tsx/the engine always starts `turn: 'white'`, so whichever side this
+  // lands on determines who actually opens the game.
+  const [computerPlayer] = useState<Player>(() => (Math.random() < 0.5 ? 'white' : 'black'));
+  const humanPlayer: Player = computerPlayer === 'white' ? 'black' : 'white';
+  const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === computerPlayer;
+  useComputerOpponent(gameApi.game, tier, computerPlayer, gameApi.playMove);
+
+  // Same "picked once per mount" reasoning as `computerPlayer` above. Never
   // "Computer (tier)" — the opponent's actual identity as a bot is still tracked
   // internally (opponentType/tier stay real facts for local practice mode's own
   // bookkeeping), just never displayed.
@@ -333,16 +340,18 @@ function GameShell<V>({
 
   // Friend mode (no computer opponent) auto-flips to whichever side is actually on
   // move, so the player about to act always sees their own pieces at the bottom —
-  // the whole point of sharing one screen. Computer mode keeps the manual toggle: the
-  // human sits in one seat for the whole match, so there's a real fixed preference to
-  // remember, not a turn to track (GameShellView hides the button otherwise, since a
-  // manual flip there would just get overridden by the very next move).
+  // the whole point of sharing one screen. Computer mode keeps the manual toggle, but
+  // its baseline orientation now follows `computerPlayer`: the human should see their
+  // own pieces at the bottom by default regardless of which color the coin flip gave
+  // them, and the manual "Flip board" toggle (`flipped`) still works as a preference on
+  // top of that baseline rather than against a hardcoded assumption that the human is
+  // always White.
   const isFriendMode = tier === null;
-  const effectiveFlipped = isFriendMode ? gameApi.game.turn === 'black' : flipped;
+  const effectiveFlipped = isFriendMode ? gameApi.game.turn === 'black' : flipped !== (computerPlayer === 'white');
   const opponentSummary = opponentName ? `vs ${opponentName} (${tier})` : 'Pass-and-play with a friend';
   const scoreLabelOverrides = {
-    ...(!isFriendMode && playerName ? { white: playerName } : {}),
-    ...(opponentName ? { black: opponentName } : {}),
+    ...(!isFriendMode && playerName ? { [humanPlayer]: playerName } : {}),
+    ...(opponentName ? { [computerPlayer]: opponentName } : {}),
   };
 
   return (

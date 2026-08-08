@@ -18,6 +18,35 @@ if (!window.matchMedia) {
     }) as MediaQueryList;
 }
 
+// jsdom doesn't implement `Worker` at all -- `useComputerOpponent`/`useGameReview`
+// construct one in an effect the instant it's the computer's turn, which can now
+// happen immediately on mount (GameShell randomizes which color the computer plays,
+// instead of always seating it Black behind the human's own guaranteed-first move).
+// A no-op stub is enough: no test in this suite asserts on an actual bot reply arriving
+// (that would need a real minimax search, which is exactly why it runs in a worker
+// instead of on the render thread) -- `postMessage`/`terminate` simply do nothing and
+// `onmessage` is never invoked.
+if (typeof Worker === 'undefined') {
+  class NoopWorker {
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: ((event: ErrorEvent) => void) | null = null;
+    postMessage(): void {
+      // intentionally inert -- see comment above
+    }
+    terminate(): void {
+      // intentionally inert -- see comment above
+    }
+    addEventListener(): void {
+      // intentionally inert -- see comment above
+    }
+    removeEventListener(): void {
+      // intentionally inert -- see comment above
+    }
+  }
+  // @ts-expect-error -- test-only stub, not a spec-complete Worker
+  globalThis.Worker = NoopWorker;
+}
+
 afterEach(() => {
   cleanup();
   // Real localStorage writes now happen in tests (auth token, locale preference) —

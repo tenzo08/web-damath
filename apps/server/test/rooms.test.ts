@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { Player } from '@damath/engine';
 import type { PublicGameView } from '../src/game/room.js';
 import { RoomManager } from '../src/game/rooms.js';
 import { BOT_NICKNAMES } from '../src/game/botNames.js';
@@ -30,7 +31,7 @@ let moderationStore: ModerationStore;
 let updates: PublicGameView[];
 let matched: { userId: string; color: string; view: PublicGameView }[];
 
-function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEnabled: boolean }> = {}) {
+function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEnabled: boolean; assignHumanColor: () => Player }> = {}) {
   return new RoomManager({
     gameStore,
     userStore,
@@ -38,6 +39,11 @@ function makeManager(overrides: Partial<{ queueBotTimeoutMs: number; queueBotEna
     queueBotTimeoutMs: overrides.queueBotTimeoutMs ?? 24 * 60 * 60 * 1000,
     queueBotEnabled: overrides.queueBotEnabled ?? true,
     queueBotTier: 'learner',
+    // Deterministic White-for-the-human by default so the rest of this suite (largely
+    // written before bot seating was randomized) doesn't have to know or care about the
+    // coin flip — the dedicated 'the computer sometimes moves first' test below is the
+    // one place that actually exercises `assignHumanColor` producing 'black'.
+    assignHumanColor: overrides.assignHumanColor ?? (() => 'white'),
     onRoomUpdate: (view) => updates.push(view),
     onMatched: (userId, color, view) => matched.push({ userId, color, view }),
   });
@@ -422,6 +428,24 @@ describe('the bot opponent', () => {
     expect(updates.at(-1)?.moveCount).toBe(2);
   });
 
+  it('sometimes seats the human Black and lets the bot make the opening move on its own', async () => {
+    const manager = makeManager({ queueBotTimeoutMs: 20, assignHumanColor: () => 'black' });
+    await manager.enqueue('human-user', 'integer');
+    await waitFor(() => matched.length === 1);
+
+    expect(matched[0]).toMatchObject({ userId: 'human-user', color: 'black' });
+    expect(matched[0]?.view.players.white).toBe('bot');
+    expect(matched[0]?.view.players.black).toBe('human-user');
+
+    // Nobody played a move -- the bot owes the opening move purely because it's seated
+    // White, and `scheduleBotReplyIfNeeded` must fire right after room creation for
+    // that to happen (unlike an ordinary bot reply, which only used to get scheduled
+    // after the human's own `playMove`).
+    await waitFor(() => updates.length > 0, 5000);
+    expect(updates.at(-1)?.moveCount).toBe(1);
+    expect(updates.at(-1)?.turn).toBe('black');
+  });
+
   it('does not block an unrelated room while a bot move is being computed (worker-thread offload)', async () => {
     // 'tournament' tier's 3s search time budget (tiers.ts) would, run synchronously on
     // the main thread, visibly stall every other room's message handling for as long as
@@ -435,6 +459,7 @@ describe('the bot opponent', () => {
       queueBotTimeoutMs: 20,
       queueBotEnabled: true,
       queueBotTier: 'tournament',
+      assignHumanColor: () => 'white',
       onRoomUpdate: (view) => updates.push(view),
       onMatched: (userId, color, view) => matched.push({ userId, color, view }),
     });

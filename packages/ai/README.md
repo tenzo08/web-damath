@@ -40,12 +40,19 @@ state = applyMove(state, result.move);
   (`learner`/`steady`/`sharp`/`tournament`): depth, time budget, and blunder rate.
   Difficulty is depth and deliberate imperfection, never cheating — every tier sees
   exactly what `legalMoves()` returns.
-- **`handleAiRequest(request): AiWorkerResponse`** — the Web Worker's actual logic, as
-  a plain function (testable without a real Worker or DOM). `src/worker.ts` is the
-  thin adapter Vite bundles as the real worker entry — see `apps/web`'s
-  `ai-worker-entry.ts` and `useComputerOpponent` hook for how the browser side wires
-  it up (§3, §9 "Practice mode": runs entirely client-side, never blocks the UI
-  thread, works offline).
+- **`NNUE_BLEND_WEIGHTS`** — a second, per-tier difficulty axis: how much each tier
+  trusts the trained NNUE evaluator (`nnueEval.ts`) blended into `evaluate`'s
+  heuristic. `learner` is `0` (pure heuristic, deliberately); the other three tiers
+  trust it progressively more, so a stronger tier also has better trained
+  pattern-recognition, not just deeper calculation. See KNOWLEDGE.md's "Per-variant
+  NNUE evaluator" entry for the training methodology and why this stays additive.
+- **`handleAiRequest(request): Promise<AiWorkerResponse>`** — the Web Worker's actual
+  logic, as a plain function (testable without a real Worker or DOM). `async` only for
+  the one-time NNUE weight load — `chooseMove` and the search tree underneath stay
+  fully synchronous. `src/worker.ts` is the thin adapter Vite bundles as the real
+  worker entry — see `apps/web`'s `ai-worker-entry.ts` and `useComputerOpponent` hook
+  for how the browser side wires it up (§3, §9 "Practice mode": runs entirely
+  client-side, never blocks the UI thread, works offline).
 - **`createRng(seed)`** — the deterministic PRNG (mulberry32) every source of search
   randomness (tie-break shuffling, blunder selection) runs through.
 

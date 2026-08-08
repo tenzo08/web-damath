@@ -8,5 +8,5 @@ import { handleAiRequest, type AiWorkerRequest } from './worker-protocol.js';
  * "Practice mode").
  */
 self.onmessage = (event: MessageEvent<AiWorkerRequest<unknown>>) => {
-  self.postMessage(handleAiRequest(event.data));
+  void handleAiRequest(event.data).then((response) => self.postMessage(response));
 };

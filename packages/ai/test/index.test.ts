@@ -18,9 +18,9 @@ describe('public API surface', () => {
     expect(typeof ai.randomInt(rng, 10)).toBe('number');
   });
 
-  it('exports the four tiers and the worker request handler', () => {
+  it('exports the four tiers and the worker request handler', async () => {
     expect(Object.keys(ai.TIERS)).toEqual(['learner', 'steady', 'sharp', 'tournament']);
-    const response = ai.handleAiRequest({ id: 'x', state: createGame(WHOLE_DAMATH), tier: 'learner', seed: 1 });
+    const response = await ai.handleAiRequest({ id: 'x', state: createGame(WHOLE_DAMATH), tier: 'learner', seed: 1 });
     expect(response.id).toBe('x');
   });
 });

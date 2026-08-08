@@ -49,9 +49,16 @@ export function MiniPieceView({ owner, isDama, label }: MiniPieceSpec) {
 export interface MiniSquareSpec {
   operation?: '+' | '−' | '×' | '÷' | null;
   piece?: MiniPieceSpec | null;
-  highlight?: 'legal' | 'last' | 'selected' | null;
+  /**
+   * `'best-from'`/`'best-to'` mark the recommended move (GameReviewScreen's "highlight
+   * the piece that should've moved, and the best cell to move it to") — a gold ring on
+   * the origin square, a gold fill plus a star badge on the destination. `'played-from'`/
+   * `'played-to'` mark the move actually played, in a muted red, only meaningfully
+   * distinct from the `'best-*'` pair when the two differ (a mistake/blunder ply).
+   */
+  highlight?: 'legal' | 'last' | 'selected' | 'best-from' | 'best-to' | 'played-from' | 'played-to' | null;
   playable?: boolean;
-  /** A short caption drawn over the square corner — the tutorial uses this for step numbers/arrows ("1", "2", "→"). */
+  /** A short caption drawn over the square corner — the tutorial uses this for step numbers/arrows ("1", "2", "→"). `'best-to'` squares get an automatic centered star instead (see below), independent of this prop. */
   badge?: string;
 }
 
@@ -62,6 +69,12 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
   let background = 'var(--square-play)';
   if (highlight === 'legal') background = 'var(--square-legal)';
   else if (highlight === 'last') background = 'var(--square-last)';
+  else if (highlight === 'best-to') background = 'color-mix(in srgb, var(--accent) 35%, var(--square-play))';
+  else if (highlight === 'best-from') background = 'color-mix(in srgb, var(--accent) 16%, var(--square-play))';
+  else if (highlight === 'played-from' || highlight === 'played-to') {
+    background = 'color-mix(in srgb, var(--danger, #e35b5b) 22%, var(--square-play))';
+  }
+  const ring = highlight === 'selected' ? '2px' : highlight === 'best-from' || highlight === 'best-to' ? '3px' : null;
 
   return (
     <div
@@ -72,7 +85,7 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
         aspectRatio: '1',
         position: 'relative',
         background,
-        boxShadow: highlight === 'selected' ? 'inset 0 0 0 2px var(--accent)' : undefined,
+        boxShadow: ring ? `inset 0 0 0 ${ring} var(--accent)` : undefined,
       }}
     >
       {piece ? (
@@ -82,6 +95,31 @@ export function MiniSquareView({ operation, piece, highlight, playable = true, b
           {operation}
         </span>
       ) : null}
+      {highlight === 'best-to' && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            bottom: '6%',
+            right: '6%',
+            width: '30%',
+            height: '30%',
+            minWidth: 12,
+            minHeight: 12,
+            borderRadius: '50%',
+            background: 'var(--accent)',
+            color: 'var(--accent-on)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '70%',
+            lineHeight: 1,
+            boxShadow: '0 0 0 2px var(--square-play)',
+          }}
+        >
+          ★
+        </span>
+      )}
       {badge && (
         <span
           aria-hidden="true"
@@ -162,10 +200,19 @@ export function MiniBoard({
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
           >
             <defs>
-              <marker id={`${markerIdBase}-move`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+              {/*
+                `markerWidth`/`markerHeight` scale with `strokeWidth` by default (SVG's
+                `markerUnits="strokeWidth"`) — at the old 4.5 with a 2.5 stroke, the
+                arrowhead worked out to 11.25 user units against an ~12.5-unit-wide cell
+                on this 100x100 viewBox, i.e. very nearly a full square (the bug in the
+                user-supplied screenshot). 2.2 at a 1.4 stroke instead comes out to ~3.1
+                units, a proportionate chess.com-style head instead of one swallowing
+                the destination square.
+              */}
+              <marker id={`${markerIdBase}-move`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="2.2" markerHeight="2.2" orient="auto-start-reverse">
                 <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)" />
               </marker>
-              <marker id={`${markerIdBase}-capture`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+              <marker id={`${markerIdBase}-capture`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="2.2" markerHeight="2.2" orient="auto-start-reverse">
                 <path d="M0,0 L10,5 L0,10 z" fill="var(--danger, #e35b5b)" />
               </marker>
             </defs>
@@ -203,7 +250,7 @@ export function MiniBoard({
                   d={`M${String(x1)},${String(y1)} Q${String(controlX)},${String(controlY)} ${String(x2)},${String(y2)}`}
                   fill="none"
                   stroke={capture ? 'var(--danger, #e35b5b)' : 'var(--accent)'}
-                  strokeWidth={2.5}
+                  strokeWidth={1.4}
                   strokeLinecap="round"
                   markerEnd={`url(#${markerIdBase}-${capture ? 'capture' : 'move'})`}
                 />

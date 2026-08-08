@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ALL_VARIANTS, operationAt, pieceAt, replayMoves } from '@damath/engine';
 import type { Move, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniArrowSpec, type MiniSquareSpec } from './diagram/MiniBoard';
-import { isPlayable } from '../lib/board';
+import { isPlayable, samePosition } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useGameReview } from '../hooks/useGameReview';
 import type { MoveClassification, PlyReview } from '../lib/gameReview';
@@ -34,8 +34,19 @@ function squareName(pos: Position): string {
   return `${String.fromCharCode(97 + pos.col)}${String(pos.row + 1)}`;
 }
 
-/** Builds a read-only diagram of one ply's board state for `MiniBoard`. */
-function buildRows<V>(state: ReturnType<typeof replayMoves<V>>, variant: Variant<V>, flipped: boolean): (MiniSquareSpec | null)[][] {
+/**
+ * Builds a read-only diagram of one ply's board state for `MiniBoard`, highlighting the
+ * recommended move (gold ring on the piece that should've moved, gold star on where it
+ * should land) and, when they differ, the move actually played (muted red) — chess.com's
+ * own Game Review convention (review.png). `review` is `undefined` for the starting
+ * position, where there's nothing yet to highlight.
+ */
+function buildRows<V>(
+  state: ReturnType<typeof replayMoves<V>>,
+  variant: Variant<V>,
+  flipped: boolean,
+  review: PlyReview<V> | undefined,
+): (MiniSquareSpec | null)[][] {
   const rowOrder = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const colOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
   const rows: (MiniSquareSpec | null)[][] = [];
@@ -48,15 +59,48 @@ function buildRows<V>(state: ReturnType<typeof replayMoves<V>>, variant: Variant
         continue;
       }
       const piece = pieceAt(state.board, pos);
+      let highlight: MiniSquareSpec['highlight'] = null;
+      if (review) {
+        // Precedence: the recommended move's own squares always win (that's the
+        // actionable teaching point), the played move's squares only show up in their
+        // own muted color where they *don't* already coincide with the recommendation
+        // — e.g. the right piece but the wrong destination still rings the origin gold.
+        if (samePosition(pos, review.bestMove.to)) highlight = 'best-to';
+        else if (samePosition(pos, review.bestMove.from)) highlight = 'best-from';
+        else if (!review.isBest && samePosition(pos, review.playedMove.to)) highlight = 'played-to';
+        else if (!review.isBest && samePosition(pos, review.playedMove.from)) highlight = 'played-from';
+      }
       cols.push({
         operation: operationGlyph(operationAt(pos)) as '+' | '−' | '×' | '÷',
         piece: piece ? { owner: piece.owner, isDama: piece.isDama, label: variant.arithmetic.format(piece.value) } : null,
-        highlight: null,
+        highlight,
       });
     }
     rows.push(cols);
   }
   return rows;
+}
+
+/**
+ * A one-line, concrete explanation of *why* the played move fell short — chess.com
+ * shows a short prose caption under its classification badge (review.png); this is the
+ * same idea, templated from data `reviewPly` already computes (no new engine/AI work
+ * needed) rather than free-form generation.
+ */
+function describeInsight<V>(review: PlyReview<V>): string {
+  if (review.isBest) return "This was the engine's top choice in this position.";
+  const bestFrom = squareName(review.bestMove.from);
+  const bestTo = squareName(review.bestMove.to);
+  const bestCaptures = review.bestMove.captures.length;
+  const playedCaptures = review.playedMove.captures.length;
+  const delta = review.delta.toFixed(1);
+  if (bestCaptures > playedCaptures) {
+    return `${playerLabel(review.mover)} missed a capture — ${bestFrom}→${bestTo} wins material instead, worth about ${delta} points.`;
+  }
+  if (playedCaptures > bestCaptures) {
+    return `That capture backfires — ${bestFrom}→${bestTo} holds the advantage instead, worth about ${delta} points more.`;
+  }
+  return `${bestFrom}→${bestTo} was stronger here, worth about ${delta} points more than the move played.`;
 }
 
 const cardStyle = {
@@ -72,6 +116,16 @@ const secondaryButton = {
   borderRadius: 'var(--radius)',
   color: 'var(--text-secondary)',
   padding: 'var(--pad-sm) var(--pad-lg)',
+  cursor: 'pointer',
+} as const;
+
+const primaryButton = {
+  background: 'var(--accent)',
+  color: 'var(--accent-on)',
+  border: 'none',
+  borderRadius: 'var(--radius)',
+  padding: 'var(--pad-sm) var(--pad-lg)',
+  fontWeight: 700,
   cursor: 'pointer',
 } as const;
 
@@ -121,7 +175,11 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
         ]
       : [];
 
-  const rows = buildRows(boardState, variant, flipped);
+  const rows = buildRows(boardState, variant, flipped, currentReview);
+  const canStepBack = activePly > 0;
+  const canStepForward = activePly < reviews.length;
+  const stepBack = () => setSelectedPly(Math.max(0, activePly - 1));
+  const stepForward = () => setSelectedPly(Math.min(reviews.length, activePly + 1));
 
   const counts = reviews.reduce<Record<MoveClassification, number>>(
     (acc, r) => ({ ...acc, [r.classification]: acc[r.classification] + 1 }),
@@ -181,10 +239,22 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
                       </>
                     )}
                   </p>
+                  {/* The "why" — chess.com's own short prose caption under its classification badge (review.png). */}
+                  <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>{describeInsight(currentReview)}</p>
                 </>
               ) : (
-                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>Starting position.</p>
+                <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+                  Starting position. {reviews.length > 0 ? 'Step through the game to see how each move was judged.' : ''}
+                </p>
               )}
+              <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginTop: 'var(--pad-md)' }}>
+                <button type="button" onClick={stepBack} disabled={!canStepBack} style={secondaryButton} aria-label="Previous move">
+                  ◂ Prev
+                </button>
+                <button type="button" onClick={stepForward} disabled={!canStepForward} style={{ ...primaryButton, flex: 1 }} aria-label="Next move">
+                  Next ▸
+                </button>
+              </div>
             </div>
 
             <div style={{ ...cardStyle, maxHeight: 360, overflowY: 'auto' }} className="scroll-hidden">

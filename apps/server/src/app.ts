@@ -9,7 +9,7 @@ import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
 import { registerSpectateRoutes } from './game/spectate.js';
-import { registerLeaderboardRoutes } from './rating/routes.js';
+import { registerLeaderboardRoutes, registerUserProfileRoutes } from './rating/routes.js';
 import type { GameStore } from './game/store.js';
 import { redactTokenFromUrl } from './log.js';
 import type { RoomManager } from './game/rooms.js';
@@ -131,6 +131,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     registerSpectateRoutes(app, options.gameStore, options.userStore);
     registerModerationRoutes(app, options.moderationStore, options.userStore);
     registerLeaderboardRoutes(app, options.userStore);
+    registerUserProfileRoutes(app, options.userStore);
 
     app.get('/health', async () => ({ status: 'ok' }));
 

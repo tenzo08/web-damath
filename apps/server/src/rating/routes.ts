@@ -55,3 +55,43 @@ export function registerLeaderboardRoutes(app: FastifyInstance, userStore: UserS
     return reply.send({ entries });
   });
 }
+
+/** Same public fields `LeaderboardEntry` already exposes for every *other* row on the leaderboard, minus `rank` — nothing here is more sensitive than what the leaderboard already shows a signed-in user about a stranger. */
+export interface PublicUserProfile {
+  id: string;
+  displayName: string;
+  rating: number;
+  avatarEmoji: string | null;
+  avatarImage: string | null;
+  provisional: boolean;
+}
+
+/**
+ * `GET /users/:id` — a human opponent's own name/rating for the online game screen
+ * (`PublicGameView.players` only ever carries a user id — see room.ts's `getView()`
+ * doc comment — so the client resolves the display fields itself, the same
+ * "no userStore lookup inside the room's own synchronous getView()" boundary
+ * `games/live`'s per-game `userStore.findById` calls already establish). Requires
+ * sign-in like the rest of this app's online-play surface; a 404 for an unknown id is
+ * expected and harmless (e.g. the special `BOT_PLAYER_ID` seat), never a hard failure.
+ */
+export function registerUserProfileRoutes(app: FastifyInstance, userStore: UserStore): void {
+  app.get('/users/:id', async (request, reply) => {
+    const userId = await requireUserId(request, reply);
+    if (!userId) return;
+
+    const { id } = request.params as { id: string };
+    const user = await userStore.findById(id);
+    if (!user) return reply.code(404).send({ error: 'user not found' });
+
+    const profile: PublicUserProfile = {
+      id: user.id,
+      displayName: user.displayName,
+      rating: user.rating,
+      avatarEmoji: user.avatarEmoji,
+      avatarImage: user.avatarImage,
+      provisional: user.placementGamesPlayed < PLACEMENT_GAMES_REQUIRED,
+    };
+    return reply.send(profile);
+  });
+}

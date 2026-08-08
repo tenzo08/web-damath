@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, applyMove, createGame, legalMoves, pieceAt, replayMoves } from '@damath/engine';
 import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
-import { positionKey } from '../lib/board';
+import { positionKey, samePosition } from '../lib/board';
 import { useMediaQuery, NARROW_QUERY } from '../hooks/useMediaQuery';
 import { useOnlineGame } from '../hooks/useOnlineGame';
 import { OnlineBoard } from './OnlineBoard';
@@ -17,6 +17,7 @@ import { useSettings } from '../lib/settings';
 import { playCaptureSound, playErrorSound, playLossSound, playMoveSound, playWinSound } from '../lib/sound';
 import { CONFETTI_PIECES } from '../lib/confetti';
 import type { AuthUser } from '../lib/authClient';
+import { fetchUserProfile, type PublicUserProfile } from '../lib/userProfileClient';
 
 interface OnlineGameScreenProps {
   token: string | null;
@@ -134,6 +135,25 @@ export function OnlineGameScreen({
   // uses for local play. Browsing history is read-only: it moves the *board* shown, not
   // the live game, so a move made elsewhere while browsing never gets lost or reverted.
   const [viewIndex, setViewIndex] = useState<number | null>(null);
+  // The move the local player just clicked, applied instantly client-side while the
+  // server round-trip is still in flight — otherwise the mover's own piece only moves
+  // once the `state` broadcast comes back, which reads as a perceptible delay compared
+  // to local play's instant feedback (found by tracing the click -> `online.move` ->
+  // WS round-trip -> `state` path: there was no optimistic step anywhere in it). Still
+  // fully server-authoritative: this is pure display prediction, cleared the moment the
+  // real `state` catches up (`moveCount` advances) or the move is rejected (`error`)
+  // below, same "client-side prediction is a UX nicety, server state is truth" rule
+  // CLAUDE.md's absolute rules already require. Keyed to the live `moveCount` at the
+  // moment it was sent so a stale prediction from an earlier ply is never reapplied.
+  const [pendingMove, setPendingMove] = useState<{ from: Position; to: Position; moveCount: number } | null>(null);
+  // Human opponents' real display name/rating (server room state only ever carries a
+  // user id — room.ts's `getView()` doc comment) — keyed by user id so both a live
+  // player's opponent and a spectator's two watched players resolve independently.
+  // `requestedProfileIdsRef` is a dedupe set, separate from the `profiles` state itself,
+  // so the fetch effect below doesn't need `profiles` in its own dependency array (which
+  // would re-run it, harmlessly but pointlessly, on every fetch it just completed).
+  const [profiles, setProfiles] = useState<Record<string, PublicUserProfile | null>>({});
+  const requestedProfileIdsRef = useRef<Set<string>>(new Set());
 
   // Deliberately keyed on `token` alone, not `online.connect`/`online.disconnect` — both
   // are re-created every render (they close over `token` themselves), and including them
@@ -159,8 +179,44 @@ export function OnlineGameScreen({
   useEffect(() => setSelected(null), [online.view?.moveCount]);
   // A genuinely new game (a fresh roomId) always starts back at the live position.
   useEffect(() => setViewIndex(null), [online.view?.roomId]);
+  useEffect(() => setPendingMove(null), [online.view?.roomId]);
+  // The real state has caught up with (or overtaken) the prediction -- drop it so the
+  // server's own broadcast, not the guess, drives the board from here on.
+  useEffect(() => {
+    if (pendingMove && online.view && online.view.moveCount > pendingMove.moveCount) setPendingMove(null);
+  }, [online.view?.moveCount, pendingMove]);
+  // The move was rejected (illegal, not your turn, game already over, ...) -- the
+  // server never broadcasts a `state` for a rejected move, only this `error`, so this
+  // is the only signal that tells the prediction to roll back.
+  useEffect(() => {
+    if (online.error) setPendingMove(null);
+  }, [online.error]);
 
   const variant = online.view ? findVariant(online.view.variantId) : null;
+
+  // Fetches once per user id and caches for the component's lifetime -- re-runs only
+  // when the seated players actually change (a fresh room), not on every `state`
+  // broadcast a move produces.
+  useEffect(() => {
+    if (!token || !online.view) return undefined;
+    const ids = [online.view.players.white, online.view.players.black].filter(
+      (id): id is string => id !== null && !requestedProfileIdsRef.current.has(id),
+    );
+    if (ids.length === 0) return undefined;
+    for (const id of ids) requestedProfileIdsRef.current.add(id);
+    let cancelled = false;
+    void Promise.all(ids.map(async (id) => [id, await fetchUserProfile(token, id)] as const)).then((results) => {
+      if (cancelled) return;
+      setProfiles((prev) => {
+        const next = { ...prev };
+        for (const [id, profile] of results) next[id] = profile;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, online.view?.players.white, online.view?.players.black]);
   // The other seat's user id, from a real player's own point of view -- `null` for a
   // spectator (no single "opponent" to name) or an unseated color.
   const opponentUserId =
@@ -221,8 +277,36 @@ export function OnlineGameScreen({
     return () => clearTimeout(timer);
   }, [online.status]);
 
+  // Applies the pending move to the live position purely for display -- the server's
+  // own reply either confirms it (the "moveCount caught up" effect above then drops the
+  // prediction) or rejects it (the `error` effect drops it instead). Never consulted
+  // while browsing history (`viewIndex !== null`), which already shows a fully replayed
+  // board below and never has a pending move of its own.
+  const optimisticState = useMemo(() => {
+    if (!pendingMove || !online.view || !variant || viewIndex !== null) return null;
+    if (online.view.moveCount !== pendingMove.moveCount) return null;
+    const liveState = replayMoves(variant, online.view.moveHistory as Move<AnyValue>[]);
+    const match = legalMoves(liveState).find((m) => samePosition(m.from, pendingMove.from) && samePosition(m.to, pendingMove.to));
+    if (!match) return null;
+    return applyMove(liveState, match, variant, { checkGameOver: false });
+  }, [pendingMove, online.view, variant, viewIndex]);
+
   const displayBoard =
-    online.view && variant && viewIndex !== null ? replayedWireBoard(variant, online.view.moveHistory, viewIndex) : online.view?.board;
+    online.view && variant && viewIndex !== null
+      ? replayedWireBoard(variant, online.view.moveHistory, viewIndex)
+      : optimisticState && variant
+        ? optimisticState.board.map((row) =>
+            row.map((piece) =>
+              piece ? { id: piece.id, owner: piece.owner, isDama: piece.isDama, value: variant.arithmetic.format(piece.value) } : null,
+            ),
+          )
+        : online.view?.board;
+
+  // Handed to `OnlineBoard`/`playerCardFor` in place of `online.view` while a move is
+  // in-flight -- board *and* turn flip together so the "to move" badge feels as
+  // responsive as the piece itself, not one beat behind it.
+  const effectiveView: PublicGameView | null =
+    online.view && displayBoard ? { ...online.view, board: displayBoard, turn: optimisticState ? optimisticState.turn : online.view.turn } : online.view;
 
   // Squares holding a piece the seated player can legally move right now -- empty for a
   // spectator, off-turn, mid-history-browse, or a finished game, same conditions
@@ -245,8 +329,11 @@ export function OnlineGameScreen({
   function activateSquare(pos: Position) {
     // Board clicks only ever act on the live position — browsing history is view-only,
     // same rule local play's `useGame` enforces (jump back to Live first to move again).
-    // Also disabled while reconnecting: the socket that would carry the move isn't open yet.
-    if (!online.view || online.color === null || isViewingHistory || online.status !== 'in_game') return;
+    // Also disabled while reconnecting: the socket that would carry the move isn't open
+    // yet, and while a previous move is still in flight (`pendingMove`) -- the server
+    // hasn't confirmed it, so `online.view` doesn't reflect it yet either, and a second
+    // click before then would race the first move's own optimistic prediction.
+    if (!online.view || online.color === null || isViewingHistory || online.status !== 'in_game' || pendingMove) return;
     const piece = online.view.board[pos.row]?.[pos.col] ?? null;
     if (selected) {
       if (piece && piece.owner === online.color) {
@@ -254,6 +341,7 @@ export function OnlineGameScreen({
         return;
       }
       online.move(selected, pos);
+      setPendingMove({ from: selected, to: pos, moveCount: online.view.moveCount });
       setSelected(null);
       return;
     }
@@ -267,20 +355,34 @@ export function OnlineGameScreen({
   const topColor: Player = flipped ? 'white' : 'black';
   const bottomColor: Player = flipped ? 'black' : 'white';
 
+  // Shared by `playerCardFor` (which also needs the raw `profile` for avatar/rating)
+  // and the finished-game announcement text below, which used to hardcode "Light"/
+  // "Dark" instead of a real name for either side.
+  function nameFor(side: Player, view: PublicGameView): string {
+    const isMe = online.color === side;
+    if (isMe) return user?.displayName ?? playerLabel(side);
+    if (view.opponentType === 'bot') return view.botNickname ?? 'Unknown';
+    const seatUserId = view.players[side];
+    const profile = seatUserId ? (profiles[seatUserId] ?? null) : null;
+    return profile?.displayName ?? playerLabel(side);
+  }
+
   function playerCardFor(side: Player, view: PublicGameView) {
     const isMe = online.color === side;
-    // No opponent name/avatar/rating resolution for a human opponent yet -- PublicGameView
-    // only carries their user id, and room.ts's getView() is synchronous (see KNOWLEDGE.md
-    // for why threading a userStore lookup through it is out of scope here) -- so a human
-    // opponent gets the same generic Light/Dark label the old info card showed.
-    const label = isMe ? (user?.displayName ?? playerLabel(side)) : view.opponentType === 'bot' ? (view.botNickname ?? 'Unknown') : playerLabel(side);
+    // A human opponent's real rating comes from `profiles` (fetched via the new
+    // `GET /users/:id`, keyed by `view.players[side]`) -- bot games never reach that
+    // fetch with a resolvable id (the bot's seat holds the literal 'bot' placeholder,
+    // which 404s harmlessly and just leaves `profile` undefined).
+    const seatUserId = view.players[side];
+    const profile = !isMe && seatUserId ? (profiles[seatUserId] ?? null) : null;
+    const label = nameFor(side, view);
     return (
       <PlayerCard
         side={side}
         label={label}
-        avatarEmoji={isMe ? (user?.avatarEmoji ?? null) : null}
-        avatarImage={isMe ? (user?.avatarImage ?? null) : null}
-        rating={isMe ? (user?.rating ?? null) : null}
+        avatarEmoji={isMe ? (user?.avatarEmoji ?? null) : (profile?.avatarEmoji ?? null)}
+        avatarImage={isMe ? (user?.avatarImage ?? null) : (profile?.avatarImage ?? null)}
+        rating={isMe ? (user?.rating ?? null) : (profile?.rating ?? null)}
         score={view.scores[side]}
         isTurn={view.status !== 'finished' && view.turn === side}
       />
@@ -458,15 +560,15 @@ export function OnlineGameScreen({
                   Below the wrap breakpoint the row wraps and the controls column drops
                   beneath the board instead of beside it. */}
               <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-                {playerCardFor(topColor, online.view)}
+                {playerCardFor(topColor, effectiveView ?? online.view)}
                 <OnlineBoard
-                  view={displayBoard ? { ...online.view, board: displayBoard } : online.view}
+                  view={effectiveView ?? online.view}
                   selected={selected}
                   myColor={online.color}
                   legalFrom={legalFrom}
                   onActivateSquare={activateSquare}
                 />
-                {playerCardFor(bottomColor, online.view)}
+                {playerCardFor(bottomColor, effectiveView ?? online.view)}
               </div>
 
               <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
@@ -478,13 +580,13 @@ export function OnlineGameScreen({
                       ))}
                     <p className={online.view.winner ? 'winner-announcement' : undefined} style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
                       {online.disconnectForfeitedBy
-                        ? `${online.disconnectForfeitedBy === 'white' ? 'Light' : 'Dark'} disconnected — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                        ? `${nameFor(online.disconnectForfeitedBy, online.view)} disconnected — ${online.view.winner ? nameFor(online.view.winner, online.view) : ''} wins.`
                         : online.view.resignedBy
-                          ? `${online.view.resignedBy === 'white' ? 'Light' : 'Dark'} resigned — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                          ? `${nameFor(online.view.resignedBy, online.view)} resigned — ${online.view.winner ? nameFor(online.view.winner, online.view) : ''} wins.`
                           : online.view.drawnByAgreement
                             ? 'Draw by agreement.'
                             : online.view.winner
-                              ? `Game over — ${online.view.winner === 'white' ? 'Light' : 'Dark'} wins.`
+                              ? `Game over — ${nameFor(online.view.winner, online.view)} wins.`
                               : 'Game over — draw.'}
                     </p>
                     <div style={{ display: 'flex', gap: 'var(--gap-sm)', flexWrap: 'wrap', marginTop: 'var(--pad-md)' }}>

@@ -1,6 +1,21 @@
 import { finalScores, legalMoves } from '@damath/engine';
 import type { GameState, Player, Variant } from '@damath/engine';
 import type { ToNumber } from './valueScale.js';
+import { evaluateWithNnue, type NnueWeights } from './nnueEval.js';
+
+/**
+ * Blends a trained NNUE value network's output into `evaluate`'s heuristic score —
+ * strictly additive and opt-in (see `evaluate`'s own doc comment): omitted entirely by
+ * every one of the four shipped difficulty tiers today, so production behavior is
+ * unchanged unless a caller explicitly passes one. `weights` are already-loaded
+ * (`nnueEval.ts`'s `loadNnueWeights`, awaited once *before* a search starts, never
+ * inside it) — nothing about the blend itself is async.
+ */
+export interface NnueBlend {
+  readonly weights: NnueWeights;
+  /** How much the network's [-1, 1] output contributes, in the same units as `EvaluationWeights.score` (both compared against the score-differential term for scale). */
+  readonly blendWeight: number;
+}
 
 export interface EvaluationWeights {
   /** Banked score differential — the actual win condition (§8.3). Must dominate. */
@@ -88,10 +103,13 @@ export function evaluate<V>(
   variant: Variant<V>,
   toNumber: ToNumber<V>,
   weights: EvaluationWeights = DEFAULT_WEIGHTS,
+  nnue?: NnueBlend,
 ): number {
   const opponent = opponentOf(player);
 
   if (legalMoves(state).length === 0) {
+    // No NNUE blend here, deliberately -- the exact final score is already known and
+    // used directly; a learned approximation has nothing to add over exact information.
     const totals = finalScores(state, variant.arithmetic);
     return weights.score * (toNumber(totals[player]) - toNumber(totals[opponent]));
   }
@@ -114,11 +132,13 @@ export function evaluate<V>(
     }
   }
 
-  return (
+  const heuristic =
     weights.score * scoreDiff +
     weights.onBoardValue * onBoardValue +
     weights.promotionProximity * promotionProximity -
     weights.exposure * exposure(state, player, toNumber) +
-    weights.mobility * mobility(state, player)
-  );
+    weights.mobility * mobility(state, player);
+
+  if (!nnue) return heuristic;
+  return heuristic + nnue.blendWeight * evaluateWithNnue(nnue.weights, state, player, toNumber);
 }

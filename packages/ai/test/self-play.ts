@@ -1,13 +1,15 @@
 import { applyMove, createGame, finalScores, isGameOver } from '@damath/engine';
 import type { Player, Variant } from '@damath/engine';
 import { chooseMove } from '../src/search.js';
-import type { EvaluationWeights } from '../src/evaluate.js';
+import type { EvaluationWeights, NnueBlend } from '../src/evaluate.js';
 import type { SearchOptions } from '../src/types.js';
 import { toNumberFor } from '../src/valueScale.js';
 
 export interface Contestant {
   readonly opts: SearchOptions;
   readonly weights?: EvaluationWeights;
+  /** Opt-in NNUE blend (already-loaded weights) — `test/nnue-tier-ordering.test.ts` uses this; every other existing caller omits it. */
+  readonly nnue?: NnueBlend;
 }
 
 export interface GameOutcome {
@@ -29,7 +31,7 @@ export function playGame<V>(variant: Variant<V>, white: Contestant, black: Conte
   let plies = 0;
   while (!isGameOver(state, variant) && plies < maxPlies) {
     const mover = state.turn === 'white' ? white : black;
-    const result = chooseMove(state, mover.opts, undefined, mover.weights);
+    const result = chooseMove(state, mover.opts, undefined, mover.weights, mover.nnue);
     state = applyMove(state, result.move, variant);
     plies++;
   }

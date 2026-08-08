@@ -1,6 +1,6 @@
 import { applyMove, legalMoves } from '@damath/engine';
 import type { GameState, Move, Variant } from '@damath/engine';
-import { DEFAULT_WEIGHTS, evaluate, type EvaluationWeights } from './evaluate.js';
+import { DEFAULT_WEIGHTS, evaluate, type EvaluationWeights, type NnueBlend } from './evaluate.js';
 import { orderMoves } from './ordering.js';
 import { createRng } from './rng.js';
 import type { Clock, SearchOptions, SearchResult } from './types.js';
@@ -22,6 +22,7 @@ const QUIESCENCE_BUDGET = 6;
 
 interface SearchContext<V> {
   readonly weights: EvaluationWeights;
+  readonly nnue: NnueBlend | undefined;
   readonly clock: Clock;
   readonly deadline: number;
   readonly rng: () => number;
@@ -37,7 +38,7 @@ function isForcedCapture<V>(moves: readonly Move<V>[]): boolean {
 
 function leaf<V>(state: GameState<V>, ctx: SearchContext<V>, player: GameState<V>['turn']): number {
   ctx.nodesEvaluated++;
-  return evaluate(state, player, ctx.variant, ctx.toNumber, ctx.weights);
+  return evaluate(state, player, ctx.variant, ctx.toNumber, ctx.weights, ctx.nnue);
 }
 
 /**
@@ -148,12 +149,20 @@ const defaultClock: Clock = () => Date.now();
  * docs/AI_OPPONENT.md's given interface exactly) — it's exposed only so
  * `test/self-play-weights.test.ts` can run the F1 comparison against
  * `MATERIAL_HEAVY_WEIGHTS` without a second copy of the search.
+ *
+ * `nnue` is the same kind of override, for the same reason: an optional, opt-in blend
+ * (`evaluate.ts`'s `NnueBlend`) that `test/nnue-tier-ordering.test.ts` passes to compare
+ * search depths with the trained evaluator, without a second copy of the search either.
+ * Every existing caller omits it, so behavior is unchanged unless a caller opts in —
+ * already-loaded weights only (`nnueEval.ts`'s `loadNnueWeights`, awaited by the
+ * caller); nothing inside this function or its recursion ever awaits anything.
  */
 export function chooseMove<V>(
   state: GameState<V>,
   opts: SearchOptions,
   clock: Clock = defaultClock,
   weights: EvaluationWeights = DEFAULT_WEIGHTS,
+  nnue?: NnueBlend,
 ): SearchResult<V> {
   const start = clock();
   const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
@@ -163,6 +172,7 @@ export function chooseMove<V>(
   const { variant, toNumber } = resolveVariant<V>(state.variant);
   const ctx: SearchContext<V> = {
     weights,
+    nnue,
     clock,
     deadline: start + opts.timeBudgetMs,
     rng,
@@ -177,7 +187,7 @@ export function chooseMove<V>(
     throw new Error('chooseMove: no legal moves in this position');
   }
   if (only) {
-    return { move: only, score: evaluate(state, state.turn, variant, toNumber, ctx.weights), depth: 0, nodesEvaluated: 0, timeMs: clock() - start };
+    return { move: only, score: evaluate(state, state.turn, variant, toNumber, ctx.weights, ctx.nnue), depth: 0, nodesEvaluated: 0, timeMs: clock() - start };
   }
 
   let bestRanked: RankedMove<V>[] = orderMoves(state, rootMoves, variant, toNumber, rng, null).map((move) => ({ move, value: 0 }));

@@ -1,8 +1,11 @@
 export type { Clock, SearchOptions, SearchResult } from './types.js';
 export { chooseMove } from './search.js';
 export { evaluate, DEFAULT_WEIGHTS, MATERIAL_HEAVY_WEIGHTS } from './evaluate.js';
-export type { EvaluationWeights } from './evaluate.js';
-export { TIERS, tierOptions } from './tiers.js';
+export type { EvaluationWeights, NnueBlend } from './evaluate.js';
+export { evaluateWithNnue, loadNnueWeights, nnueEvaluate, nnueForward } from './nnueEval.js';
+export type { NnueWeights } from './nnueEval.js';
+export { encodeNnueFeatures, NNUE_INPUT_SIZE, NNUE_SQUARES } from './nnueFeatures.js';
+export { NNUE_BLEND_WEIGHTS, TIERS, tierOptions } from './tiers.js';
 export type { DifficultyTier } from './tiers.js';
 export { createRng, randomInt } from './rng.js';
 export { handleAiRequest } from './worker-protocol.js';

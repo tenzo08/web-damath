@@ -44,8 +44,17 @@ type ClientMessage =
   | { type: 'offer_draw' }
   | { type: 'respond_draw'; accept: boolean };
 
+/** Every board is 8x8 (docs/DAMATH_RULES.md §1.1) across every variant -- a bound the wire boundary should enforce itself, not rely on `legalMoves().find(...)` incidentally rejecting an out-of-range value later. */
+const BOARD_SIZE = 8;
+
+function isBoardCoordinate(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value < BOARD_SIZE;
+}
+
 function isPosition(value: unknown): value is Position {
-  return typeof value === 'object' && value !== null && typeof (value as Position).row === 'number' && typeof (value as Position).col === 'number';
+  if (typeof value !== 'object' || value === null) return false;
+  const { row, col } = value as Position;
+  return typeof row === 'number' && typeof col === 'number' && isBoardCoordinate(row) && isBoardCoordinate(col);
 }
 
 function parseClientMessage(raw: unknown): ClientMessage | null {
@@ -114,6 +123,26 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
   // connection, since a fresh socket doesn't prove presence in any particular room
   // until it actually (re)joins one.
   const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // `@fastify/rate-limit` (app.ts) only guards the HTTP-level `/ws` upgrade itself, once
+  // per connection -- every gameplay message sent afterward over an already-open socket
+  // (move, resign, queue, ...) was previously unthrottled. A buggy or malicious client
+  // spamming `move` messages costs real work per message (legalMoves(), a store write),
+  // so this bounds it per socket, independent of the room/user it's acting on.
+  const MESSAGE_RATE_LIMIT = 40;
+  const MESSAGE_RATE_WINDOW_MS = 10_000;
+  const messageRateState = new Map<WebSocket, { count: number; windowStart: number }>();
+
+  function exceedsRateLimit(socket: WebSocket): boolean {
+    const now = Date.now();
+    const state = messageRateState.get(socket);
+    if (!state || now - state.windowStart >= MESSAGE_RATE_WINDOW_MS) {
+      messageRateState.set(socket, { count: 1, windowStart: now });
+      return false;
+    }
+    state.count += 1;
+    return state.count > MESSAGE_RATE_LIMIT;
+  }
 
   function timerKey(userId: string, roomId: string): string {
     return `${userId}:${roomId}`;
@@ -246,6 +275,10 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
 
       socket.on('message', (raw: Buffer) => {
         void (async () => {
+          if (exceedsRateLimit(socket)) {
+            send(socket, { type: 'error', message: 'too many messages, slow down' });
+            return;
+          }
           let parsed: unknown;
           try {
             parsed = JSON.parse(raw.toString());
@@ -365,6 +398,7 @@ export function registerGameSocket(app: FastifyInstance, options: GameSocketOpti
       });
 
       socket.on('close', () => {
+        messageRateState.delete(socket);
         const roomId = roomBySocket.get(socket);
         const userSockets = socketsByUser.get(userId);
         userSockets?.delete(socket);

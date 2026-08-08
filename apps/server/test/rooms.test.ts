@@ -73,7 +73,7 @@ async function makeUser(id: string, rating = STARTING_RATING, placementGamesPlay
 
 beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'damath-server-rooms-'));
-  gameStore = new FileGameStore(path.join(dir, 'games.json'));
+  gameStore = new FileGameStore(path.join(dir, 'games'));
   userStore = new FileUserStore(path.join(dir, 'users.json'));
   moderationStore = new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json'));
   updates = [];
@@ -420,6 +420,43 @@ describe('the bot opponent', () => {
     expect(updates).toHaveLength(0);
     await waitFor(() => updates.length > 0, 5000);
     expect(updates.at(-1)?.moveCount).toBe(2);
+  });
+
+  it('does not block an unrelated room while a bot move is being computed (worker-thread offload)', async () => {
+    // 'tournament' tier's 3s search time budget (tiers.ts) would, run synchronously on
+    // the main thread, visibly stall every other room's message handling for as long as
+    // it took. bot-pool.ts moves that search into a Node worker_thread specifically so
+    // this can't happen — this test is the regression guard for that property, not just
+    // "the bot eventually replies" (already covered above).
+    const manager = new RoomManager({
+      gameStore,
+      userStore,
+      moderationStore,
+      queueBotTimeoutMs: 20,
+      queueBotEnabled: true,
+      queueBotTier: 'tournament',
+      onRoomUpdate: (view) => updates.push(view),
+      onMatched: (userId, color, view) => matched.push({ userId, color, view }),
+    });
+
+    await manager.enqueue('human-user', 'integer');
+    await waitFor(() => matched.length === 1);
+    const botRoomId = matched[0]?.view.roomId;
+    // Kicks off the bot's (slow) reply in the background.
+    await manager.playMove(botRoomId!, 'human-user', { row: 2, col: 1 }, { row: 3, col: 0 });
+
+    const humanRoom = await manager.createRoom('whole', 'user-a');
+    await manager.joinRoom(humanRoom.id, 'user-b');
+    const start = Date.now();
+    const outcome = await manager.playMove(humanRoom.id, 'user-a', { row: 2, col: 1 }, { row: 3, col: 0 });
+    const elapsedMs = Date.now() - start;
+
+    // A genuinely blocking synchronous search would make this wait out most of
+    // 'tournament' tier's 3s time budget (tiers.ts) -- 2s leaves a wide margin below
+    // that while still comfortably absorbing CPU contention from the rest of the suite
+    // running in parallel (other test files spawning their own worker-thread pools).
+    expect(outcome.ok).toBe(true);
+    expect(elapsedMs).toBeLessThan(2000);
   });
 
   it('gets a friendly nickname, never "Computer" or the tier, even though opponentType/botTier still track the real fact', async () => {

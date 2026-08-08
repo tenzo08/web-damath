@@ -102,9 +102,10 @@ export interface CreateRoomParams<V> {
    * Only ever supplied for a bot room, where the caller (`rooms.ts`) already knows `V`
    * is `number` because it picked one of the three AI-supported variants — so this
    * closure unifies `V = number` at that one call site with no cast anywhere. A human
-   * room simply omits it.
+   * room simply omits it. Async: the search runs in a worker thread (`bot-pool.ts`),
+   * never on the server's main event loop.
    */
-  chooseBotMove?: (game: GameState<V>) => Move<V>;
+  chooseBotMove?: (game: GameState<V>) => Promise<Move<V>>;
 }
 
 /**
@@ -239,7 +240,12 @@ export function createRoomHandle<V>(params: CreateRoomParams<V>): RoomHandle {
 
   async function applyBotMove(): Promise<MoveOutcome> {
     if (!isBotTurn() || !params.chooseBotMove) return { ok: false, error: "not the bot's turn" };
-    return commit(applyMove(game, params.chooseBotMove(game), params.variant));
+    const move = await params.chooseBotMove(game);
+    // Re-check after the await -- the search can take up to `tiers.ts`'s 3s tournament
+    // budget, during which the human could have resigned or the room could otherwise
+    // have ended; committing a move onto an already-finished game would resurrect it.
+    if (isOver()) return { ok: false, error: 'game is over' };
+    return commit(applyMove(game, move, params.variant));
   }
 
   return {

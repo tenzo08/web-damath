@@ -46,7 +46,7 @@ if (process.env.DATABASE_URL) {
 } else {
   const dataDir = process.env.DATA_DIR ?? fileURLToPath(new URL('../data', import.meta.url));
   userStore = new FileUserStore(path.join(dataDir, 'users.json'));
-  gameStore = new FileGameStore(path.join(dataDir, 'games.json'));
+  gameStore = new FileGameStore(path.join(dataDir, 'games'));
   tournamentStore = new FileTournamentStore(path.join(dataDir, 'tournaments.json'));
   moderationStore = new FileModerationStore(path.join(dataDir, 'reports.json'), path.join(dataDir, 'blocks.json'));
 }
@@ -74,6 +74,15 @@ const app = buildApp({
   googleClientId: process.env.GOOGLE_CLIENT_ID,
 });
 const port = Number(process.env.PORT ?? 3001);
+
+// `corsOrigin` (app.ts) defaults to reflecting whatever origin sent the request --
+// documented as fine for a demo/dev server behind auth on every meaningful route, not
+// something a real public deployment should silently inherit. `CORS_ORIGIN` unset here
+// means that default is in effect; only worth flagging once, at startup, and only in
+// production, where a deployer who forgot to set it needs to actually notice.
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
+  app.log.warn('CORS_ORIGIN is not set in production -- the API is reflecting any request origin. Set CORS_ORIGIN to your deployed web app\'s real origin.');
+}
 
 app
   .listen({ port, host: '0.0.0.0' })

@@ -55,7 +55,7 @@ describe('unhandled errors never reach the client (security -- never leak DB/inf
     app = buildApp({
       jwtSecret: 'test-secret',
       userStore: new ThrowingUserStore(),
-      gameStore: new FileGameStore(path.join(dir, 'games.json')),
+      gameStore: new FileGameStore(path.join(dir, 'games')),
       tournamentStore: new FileTournamentStore(path.join(dir, 'tournaments.json')),
       moderationStore: new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json')),
     });

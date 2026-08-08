@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { Player, VariantId } from '@damath/engine';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -52,45 +52,69 @@ export interface GameStore {
 }
 
 /**
- * A JSON file, same scope decision as `auth/store.ts`'s `FileUserStore` and for the
- * same reason (KNOWLEDGE.md) — not safe for concurrent writers across processes, fine
- * for a single dev server instance. Real persistence (Postgres+Prisma) is Milestone 6.
+ * One JSON file per game in `gamesDir`, not one growing array in a single file — the
+ * earlier single-file design meant `update` (called on every move, `room.ts`'s `commit`,
+ * awaited before the move is broadcast) read-parsed and re-serialized-and-rewrote every
+ * game ever played on this server, on every single move of every active game: an O(total
+ * games) cost sitting directly in the per-move latency path, and one that only grew as a
+ * deployment aged. Per-game files make `create`/`findById`/`update` — the hot,
+ * per-move-and-per-game-start operations — O(1) against that game's own (small) history
+ * instead. `listForUser`/`listActive` (match history, the spectator list) still scan
+ * every file, same cost as before, but those aren't in the move-latency path.
+ *
+ * Same concurrency scope decision as `auth/store.ts`'s `FileUserStore` (KNOWLEDGE.md) —
+ * not safe for concurrent writers across processes, fine for a single dev server
+ * instance. Real persistence (Postgres+Prisma, `PrismaGameStore` below) doesn't have
+ * either limitation and is what a real deployment should set `DATABASE_URL` for.
  */
 export class FileGameStore implements GameStore {
-  constructor(private readonly filePath: string) {}
+  constructor(private readonly gamesDir: string) {}
 
-  private async readAll(): Promise<PersistedGame[]> {
+  private pathFor(id: string): string {
+    return path.join(this.gamesDir, `${id}.json`);
+  }
+
+  private async readOne(id: string): Promise<PersistedGame | null> {
     try {
-      const raw = await readFile(this.filePath, 'utf-8');
-      return JSON.parse(raw) as PersistedGame[];
+      const raw = await readFile(this.pathFor(id), 'utf-8');
+      return JSON.parse(raw) as PersistedGame;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;
     }
   }
 
-  private async writeAll(games: PersistedGame[]): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, JSON.stringify(games, null, 2), 'utf-8');
+  private async writeOne(game: PersistedGame): Promise<void> {
+    await mkdir(this.gamesDir, { recursive: true });
+    await writeFile(this.pathFor(game.id), JSON.stringify(game, null, 2), 'utf-8');
+  }
+
+  private async readAll(): Promise<PersistedGame[]> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.gamesDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw err;
+    }
+    const raw = await Promise.all(
+      entries.filter((name) => name.endsWith('.json')).map((name) => readFile(path.join(this.gamesDir, name), 'utf-8')),
+    );
+    return raw.map((json) => JSON.parse(json) as PersistedGame);
   }
 
   async create(game: PersistedGame): Promise<void> {
-    const games = await this.readAll();
-    games.push(game);
-    await this.writeAll(games);
+    await this.writeOne(game);
   }
 
   async findById(id: string): Promise<PersistedGame | null> {
-    const games = await this.readAll();
-    return games.find((g) => g.id === id) ?? null;
+    return this.readOne(id);
   }
 
   async update(game: PersistedGame): Promise<void> {
-    const games = await this.readAll();
-    const index = games.findIndex((g) => g.id === game.id);
-    if (index === -1) throw new Error(`no persisted game with id ${game.id}`);
-    games[index] = game;
-    await this.writeAll(games);
+    const existing = await this.readOne(game.id);
+    if (!existing) throw new Error(`no persisted game with id ${game.id}`);
+    await this.writeOne(game);
   }
 
   async listForUser(userId: string, limit: number): Promise<PersistedGame[]> {

@@ -28,7 +28,7 @@ export function makeTestApp(
   const app = buildApp({
     jwtSecret: 'test-secret',
     userStore,
-    gameStore: new FileGameStore(path.join(dir, 'games.json')),
+    gameStore: new FileGameStore(path.join(dir, 'games')),
     tournamentStore: new FileTournamentStore(path.join(dir, 'tournaments.json')),
     moderationStore: new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json')),
     // Tests that don't care about matchmaking timing get an effectively-never-fires

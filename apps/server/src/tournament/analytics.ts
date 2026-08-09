@@ -1,4 +1,4 @@
-import { applyMove, createGame, operationAt, pieceAt, scoreCapture } from '@damath/engine';
+import { applyMove, createGame, operationAt, pieceAt, scoreCaptureAt } from '@damath/engine';
 import type { AnyVariant, Move, Operation, Variant } from '@damath/engine';
 import { toNumberFor } from '@damath/ai';
 import type { PersistedGame } from '../game/store.js';
@@ -44,7 +44,7 @@ function emptyOperationStats(): Record<Operation, { capturesMade: number; totalV
  * named as a use case but nothing previously aggregated. Deliberately doesn't touch
  * the AI (`packages/ai`'s search) at all: running a real minimax review over every
  * move of every tournament game synchronously in one HTTP request would be far too
- * slow, and the *actual* points a capture won or cost — `scoreCapture`, the same
+ * slow, and the *actual* points a capture won or cost — `scoreCaptureAt`, the same
  * exact function `applyMove`/`ledger.ts` already use to compute it — is a purely
  * mechanical replay, no search needed. `toNumberFor` (packages/ai's own value-scale
  * bridge, already used the identical way in gameReview.ts) turns a variant-typed
@@ -82,7 +82,7 @@ export function computeTournamentAnalytics(
       const moverId = mover.owner === 'white' ? white : black;
       for (const step of move.captures) {
         const operation = operationAt(step.landedAt);
-        const value = toNumber(scoreCapture(mover, step.capturedPiece, operation, arithmetic));
+        const value = toNumber(scoreCaptureAt(mover, step.capturedPiece, step.landedAt, arithmetic));
         const captureeId = step.capturedPiece.owner === 'white' ? white : black;
         if (moverId) {
           const stats = opStats.get(moverId)?.[operation];

@@ -55,6 +55,30 @@ function evaluateAtOne(p: Polynomial): Fraction {
   return p.reduce((sum, term) => fractionArithmetic.add(sum, term.coefficient), fractionArithmetic.zero);
 }
 
+/**
+ * `coefficient * x^xExp * y^yExp`, exact — `x`/`y` are always non-negative board
+ * coordinates (0-7) and `xExp`/`yExp` are always non-negative (docs/VARIANTS.md's
+ * printed values never carry a negative exponent; only `div` can produce one, and a
+ * capture's own operands are always printed chip values, never a mid-division
+ * result), so plain `**` stays an exact integer here — no float artefact risk.
+ */
+function evaluateTermAt(term: PolynomialTerm, x: number, y: number): Fraction {
+  const scalar = x ** term.xExp * y ** term.yExp;
+  return fractionArithmetic.mul(term.coefficient, reduceFraction(scalar, 1));
+}
+
+/**
+ * The house-rule scoring substitution (KNOWLEDGE.md-style documented interpretation,
+ * not a rulebook fact — see `Arithmetic<V>.substituteAt`'s own doc comment): evaluates
+ * every term at the given `(x, y)` and sums them into a single whole-number constant
+ * term. `polynomial()`'s own zero-coefficient collapse means evaluating to 0 correctly
+ * yields the empty polynomial, same as any other zero value.
+ */
+function substituteAt(p: Polynomial, x: number, y: number): Polynomial {
+  const total = p.reduce((sum, term) => fractionArithmetic.add(sum, evaluateTermAt(term, x, y)), fractionArithmetic.zero);
+  return polynomial(total);
+}
+
 const SUPERSCRIPT_DIGITS: Readonly<Record<string, string>> = {
   '0': '⁰',
   '1': '¹',
@@ -133,6 +157,7 @@ export const polynomialArithmetic: Arithmetic<Polynomial> = {
   },
   zero: [],
   finalizeScore: (a) => a,
+  substituteAt,
 };
 
 /** docs/VARIANTS.md's printed values: [coefficient, xExp, yExp]. */

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { scoreCapture } from '../src/scoring.js';
+import { scoreCapture, scoreCaptureAt, substituteValueAt } from '../src/scoring.js';
 import { numberArithmetic } from '../src/arithmetic.js';
-import type { Piece, Player } from '../src/types.js';
+import { fraction } from '../src/data/fraction.js';
+import { polynomial, polynomialArithmetic } from '../src/data/polynomial.js';
+import type { Polynomial } from '../src/data/polynomial.js';
+import type { Piece, Player, Position } from '../src/types.js';
 
 function ordinary(owner: Player, value: number): Piece<number> {
   return { id: `${owner}-test`, value, owner, isDama: false };
@@ -49,5 +52,44 @@ describe('division truncation (KNOWLEDGE.md, "Division truncation")', () => {
 
   it('otherwise truncates toward zero', () => {
     expect(scoreCapture(ordinary('white', -7), ordinary('black', 2), '/', numberArithmetic)).toBe(-3);
+  });
+});
+
+function polyPiece(owner: Player, value: Polynomial, isDama = false): Piece<Polynomial> {
+  return { id: `${owner}-poly-test`, value, owner, isDama };
+}
+
+// (2,5) is a real '+' square (OPERATION_LAYOUT row 2), i.e. x=5 (col), y=2 (row) —
+// the house rule's own "x is horizontal" convention.
+const PLUS_SQUARE: Position = { row: 2, col: 5 };
+
+describe('substituteValueAt', () => {
+  it('delegates to Arithmetic.substituteAt when the variant defines one', () => {
+    const sixX = polynomial(fraction(6), 1, 0);
+    expect(substituteValueAt(sixX, PLUS_SQUARE, polynomialArithmetic)).toEqual(polynomial(fraction(30))); // 6*5
+  });
+
+  it('returns the value unchanged for a variant with no substituteAt', () => {
+    expect(substituteValueAt(7, PLUS_SQUARE, numberArithmetic)).toBe(7);
+  });
+});
+
+describe('scoreCaptureAt (coordinate-substitution house rule — deliberate variant addition, not from the rulebook itself)', () => {
+  it('evaluates both operands at the landing square, then applies the landing operation — 6x + 10y at (5,2) = 6*5 + 10*2 = 50', () => {
+    const taker = polyPiece('white', polynomial(fraction(6), 1, 0)); // 6x
+    const taken = polyPiece('black', polynomial(fraction(10), 0, 1)); // 10y
+    expect(scoreCaptureAt(taker, taken, PLUS_SQUARE, polynomialArithmetic)).toEqual(polynomial(fraction(50)));
+  });
+
+  it('still applies the Dama multiplier on top of the substituted, already-numeric result', () => {
+    const taker = polyPiece('white', polynomial(fraction(6), 1, 0), true); // dama 6x
+    const taken = polyPiece('black', polynomial(fraction(10), 0, 1)); // 10y
+    expect(scoreCaptureAt(taker, taken, PLUS_SQUARE, polynomialArithmetic)).toEqual(polynomial(fraction(100))); // (30+20)*2
+  });
+
+  it('is exactly scoreCapture(..., operationAt(landedAt), ...) for every variant without substituteAt', () => {
+    const taker = ordinary('white', 3);
+    const taken = ordinary('black', 5);
+    expect(scoreCaptureAt(taker, taken, PLUS_SQUARE, numberArithmetic)).toBe(scoreCapture(taker, taken, '+', numberArithmetic));
   });
 });

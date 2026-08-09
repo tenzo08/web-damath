@@ -1,4 +1,4 @@
-import { operationAt, pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCapture } from '@damath/engine';
+import { pieceAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7, scoreCaptureAt } from '@damath/engine';
 import type { GameState, Move, Player, Variant } from '@damath/engine';
 import { randomInt } from './rng.js';
 import type { ToNumber } from './valueScale.js';
@@ -23,7 +23,7 @@ function orderingScore<V>(state: GameState<V>, move: Move<V>, variant: Variant<V
   if (!mover) return 0;
   let captureScore = variant.arithmetic.zero;
   for (const step of move.captures) {
-    captureScore = variant.arithmetic.add(captureScore, scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), variant.arithmetic));
+    captureScore = variant.arithmetic.add(captureScore, scoreCaptureAt(mover, step.capturedPiece, step.landedAt, variant.arithmetic));
   }
   const promotes = !mover.isDama && isPromotionSquare(move, mover.owner);
   return toNumber(captureScore) * 10 + (promotes ? 5 : 0);

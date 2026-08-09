@@ -4,6 +4,9 @@ import { legalMoves } from '../src/moves.js';
 import { applyMove, finalScores, isGameOver, replayMoves } from '../src/game.js';
 import { numberArithmetic } from '../src/arithmetic.js';
 import { INTEGER_DAMATH, WHOLE_DAMATH } from '../src/data/variants.js';
+import { fraction } from '../src/data/fraction.js';
+import { polynomial, polynomialArithmetic, POLYNOMIAL_DAMATH } from '../src/data/polynomial.js';
+import type { Polynomial } from '../src/data/polynomial.js';
 import type { GameState, Move, Piece, Player, Position } from '../src/types.js';
 
 /** A mostly-empty 8x8 board with only the given pieces placed, for testing one rule in isolation. */
@@ -122,6 +125,65 @@ describe('dama long-range capture, landing square determines the score (§6.4, �
       const next = applyMove(state, move, INTEGER_DAMATH);
       expect(next.scores.white).toBe(expected[key]);
     }
+  });
+});
+
+describe('Polynomial Damath scoring substitutes the landing/resting square\'s coordinates for x,y (house rule, not from the rulebook)', () => {
+  function polyState(placements: readonly [Position, Piece<Polynomial>][], turn: Player = 'white'): GameState<Polynomial> {
+    const board: (Piece<Polynomial> | null)[][] = Array.from({ length: 8 }, () => new Array(8).fill(null));
+    for (const [pos, piece] of placements) {
+      board[pos.row]![pos.col] = piece;
+    }
+    return {
+      board,
+      turn,
+      scores: { white: polynomialArithmetic.zero, black: polynomialArithmetic.zero },
+      moveHistory: [],
+      status: 'active',
+      variant: 'polynomial',
+    };
+  }
+
+  it('a capture scores the taker/taken evaluated at the landing square, not their printed symbolic terms', () => {
+    // white 6x at (1,4) jumps black 10y at (2,5), landing at (3,6) -- a real '+' square
+    // (OPERATION_LAYOUT row 3). x=6 (col), y=3 (row): 6*6 + 10*3 = 36 + 30 = 66.
+    const taker: Piece<Polynomial> = { id: 'w', value: polynomial(fraction(6), 1, 0), owner: 'white', isDama: false };
+    const taken: Piece<Polynomial> = { id: 'b', value: polynomial(fraction(10), 0, 1), owner: 'black', isDama: false };
+    const state = polyState([
+      [{ row: 1, col: 4 }, taker],
+      [{ row: 2, col: 5 }, taken],
+    ]);
+    const move: Move<Polynomial> = {
+      from: { row: 1, col: 4 },
+      to: { row: 3, col: 6 },
+      captures: [{ capturedPiece: taken, capturedAt: { row: 2, col: 5 }, landedAt: { row: 3, col: 6 } }],
+    };
+
+    const next = applyMove(state, move, POLYNOMIAL_DAMATH, { checkGameOver: false });
+    expect(next.scores.white).toEqual(polynomial(fraction(66)));
+    // The piece's own on-board value stays the printed symbolic term -- only the
+    // *scoring* substitutes, never the chip itself.
+    expect(pieceAt(next.board, { row: 3, col: 6 })).toMatchObject({ value: polynomial(fraction(6), 1, 0) });
+  });
+
+  it('a remaining chip at game end is evaluated at its own resting square', () => {
+    // white 36x²y left at (2,1): x=1 (col), y=2 (row) -> 36 * 1² * 2 = 72.
+    const remaining: Piece<Polynomial> = { id: 'w', value: polynomial(fraction(36), 2, 1), owner: 'white', isDama: false };
+    const state = polyState([[{ row: 2, col: 1 }, remaining]], 'black');
+    expect(finalScores(state, polynomialArithmetic)).toEqual({
+      white: polynomial(fraction(72)),
+      black: polynomialArithmetic.zero,
+    });
+  });
+
+  it('a remaining Dama chip is doubled after the same coordinate substitution', () => {
+    // white dama 6x at (3,5): x=5, y=3 -> 6*5=30, doubled for Dama -> 60.
+    const remaining: Piece<Polynomial> = { id: 'w', value: polynomial(fraction(6), 1, 0), owner: 'white', isDama: true };
+    const state = polyState([[{ row: 3, col: 5 }, remaining]], 'black');
+    expect(finalScores(state, polynomialArithmetic)).toEqual({
+      white: polynomial(fraction(60)),
+      black: polynomialArithmetic.zero,
+    });
   });
 });
 

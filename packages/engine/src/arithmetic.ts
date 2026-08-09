@@ -34,6 +34,18 @@ export interface Arithmetic<V> {
    * arithmetic required" says the opposite.
    */
   finalizeScore(a: V): V;
+  /**
+   * Board-position-dependent scoring, for Polynomial Damath only — a deliberate house
+   * rule (not in the rulebook itself, which never mentions coordinate substitution;
+   * see scoring.ts's `scoreCaptureAt`), evaluating a chip's polynomial at `x` (the
+   * landing square's column) and `y` (its row) into a plain whole number before that
+   * capture's score is computed, and likewise for a remaining chip at its own resting
+   * square when the game ends (`finalScores`). Optional and absent for every other
+   * variant — `scoreCaptureAt`/`finalScores` fall back to the value unchanged whenever
+   * this isn't defined, so the six variants without a notion of "coordinates as
+   * values" are completely unaffected.
+   */
+  substituteAt?(a: V, x: number, y: number): V;
 }
 
 export interface Variant<V> {

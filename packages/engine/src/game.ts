@@ -1,8 +1,8 @@
 import type { Arithmetic, Variant } from './arithmetic.js';
 import { createGame, pieceAt } from './board.js';
-import { operationAt, PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7 } from './data/operation-layout.js';
+import { PROMOTION_SQUARES_ROW_0, PROMOTION_SQUARES_ROW_7 } from './data/operation-layout.js';
 import { legalMoves } from './moves.js';
-import { scoreCapture } from './scoring.js';
+import { scoreCaptureAt, substituteValueAt } from './scoring.js';
 import type { Board, GameState, Move, Piece, Player, Position } from './types.js';
 
 function cloneBoard<V>(board: Board<V>): (Piece<V> | null)[][] {
@@ -42,7 +42,7 @@ function applyMoveCore<V>(state: GameState<V>, move: Move<V>, arithmetic: Arithm
   const board = cloneBoard(state.board);
   let scoreDelta = arithmetic.zero;
   for (const step of move.captures) {
-    scoreDelta = arithmetic.add(scoreDelta, scoreCapture(piece, step.capturedPiece, operationAt(step.landedAt), arithmetic));
+    scoreDelta = arithmetic.add(scoreDelta, scoreCaptureAt(piece, step.capturedPiece, step.landedAt, arithmetic));
     setSquare(board, step.capturedAt, null);
   }
 
@@ -154,13 +154,22 @@ export function replayMoves<V>(variant: Variant<V>, moves: readonly Move<V>[]): 
   return state;
 }
 
-/** Accumulated capture score plus remaining chips, Dama doubled (§8.1-8.2). */
+/**
+ * Accumulated capture score plus remaining chips, Dama doubled (§8.1-8.2). A remaining
+ * chip is substituted at its own resting square first when the variant defines
+ * `Arithmetic<V>.substituteAt` (Polynomial's house rule) — identical to every other
+ * variant's behavior when it doesn't.
+ */
 export function finalScores<V>(state: GameState<V>, arithmetic: Arithmetic<V>): Record<Player, V> {
   const totals: Record<Player, V> = { ...state.scores };
-  for (const row of state.board) {
-    for (const piece of row) {
+  for (let row = 0; row < state.board.length; row++) {
+    const cols = state.board[row];
+    if (!cols) continue;
+    for (let col = 0; col < cols.length; col++) {
+      const piece = cols[col];
       if (!piece) continue;
-      const contribution = piece.isDama ? arithmetic.double(piece.value) : piece.value;
+      const value = substituteValueAt(piece.value, { row, col }, arithmetic);
+      const contribution = piece.isDama ? arithmetic.double(value) : value;
       totals[piece.owner] = arithmetic.add(totals[piece.owner], contribution);
     }
   }

@@ -94,6 +94,31 @@ describe('polynomialArithmetic', () => {
   });
 });
 
+describe('substituteAt (coordinate-substitution scoring house rule)', () => {
+  it('evaluates a single term at the given (x, y) into a whole-number constant', () => {
+    // 36x²y at x=2, y=1 -> 36 * 2² * 1 = 144
+    const term = polynomial(fraction(36), 2, 1);
+    expect(polynomialArithmetic.substituteAt?.(term, 2, 1)).toEqual([{ xExp: 0, yExp: 0, coefficient: fraction(144) }]);
+  });
+
+  it('distributes over a multi-term sum, matching term-by-term substitution', () => {
+    // 6x + 10y at x=4, y=1 -> 6*4 + 10*1 = 34
+    const sum = polynomialArithmetic.add(polynomial(fraction(6), 1, 0), polynomial(fraction(10), 0, 1));
+    expect(polynomialArithmetic.substituteAt?.(sum, 4, 1)).toEqual([{ xExp: 0, yExp: 0, coefficient: fraction(34) }]);
+  });
+
+  it('a term with exponent 0 in one variable ignores that coordinate', () => {
+    // 6x at any y -> unaffected by y
+    const term = polynomial(fraction(6), 1, 0);
+    expect(polynomialArithmetic.substituteAt?.(term, 5, 99)).toEqual([{ xExp: 0, yExp: 0, coefficient: fraction(30) }]);
+  });
+
+  it('evaluating to zero collapses to the empty polynomial, like any other zero value', () => {
+    const term = polynomial(fraction(6), 1, 0);
+    expect(polynomialArithmetic.substituteAt?.(term, 0, 5)).toEqual([]);
+  });
+});
+
 describe('POLYNOMIAL_DAMATH variant data', () => {
   it('matches the printed chip values exactly', () => {
     expect(POLYNOMIAL_DAMATH.values.map((v) => polynomialArithmetic.format(v))).toEqual([

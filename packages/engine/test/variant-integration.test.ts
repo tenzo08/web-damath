@@ -95,21 +95,24 @@ describe('Polynomial Damath plays through the real engine', () => {
       owner: 'black',
       isDama: false,
     };
-    // (3,4) jumps the enemy at (4,5), landing at (5,6) — op '/': (6x) / (2y) = 3xy^-1.
+    // (3,4) jumps the enemy at (4,5), landing at (5,6) -- op '/'. Per the coordinate-
+    // substitution house rule (scoring.ts's `scoreCaptureAt`, not a rulebook rule),
+    // both operands are evaluated at the landing square first: x=6 (col), y=5 (row) ->
+    // taker 6x -> 6*6=36, taken 2y -> 2*5=10, then 36 / 10 = 18/5.
     const state = stateWith(polynomialArithmetic, [
       [{ row: 3, col: 4 }, taker],
       [{ row: 4, col: 5 }, taken],
     ]);
     const move = only(legalMoves(state));
     const next = applyMove(state, move, POLYNOMIAL_DAMATH);
-    expect(polynomialArithmetic.format(next.scores.white)).toBe('3xy⁻¹');
+    expect(next.scores.white).toEqual(polynomial(fraction(18, 5)));
     // Black had only the one (now-captured) piece — cornered by having no chips left (§7.3).
     expect(isGameOver(next, POLYNOMIAL_DAMATH)).toBe(true);
 
     const totals = finalScores(next, polynomialArithmetic);
-    // white's score (3xy^-1) plus the remaining piece's own value (6x, now at (5,6)).
-    expect(polynomialArithmetic.format(totals.white)).toBe(
-      polynomialArithmetic.format(polynomialArithmetic.add(polynomial(fraction(3), 1, -1), polynomial(fraction(6), 1, 0))),
-    );
+    // white's score (18/5) plus the remaining piece's own printed value (6x, still
+    // symbolic on the board) evaluated at *its* current square (5,6): 6*6=36. 18/5 + 36
+    // = 18/5 + 180/5 = 198/5.
+    expect(totals.white).toEqual(polynomial(fraction(198, 5)));
   });
 });

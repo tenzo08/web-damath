@@ -1,4 +1,4 @@
-import { operationAt, scoreCapture } from '@damath/engine';
+import { operationAt, scoreCaptureAt, substituteValueAt } from '@damath/engine';
 import type { GameState, Move, Piece, Player, Variant } from '@damath/engine';
 import { operationGlyph, playerLetter, toCoord } from './notation';
 
@@ -33,11 +33,15 @@ export function buildLedgerEntry<V>(
   variant: Variant<V>,
 ): LedgerEntry<V> {
   const arithmetic = variant.arithmetic;
+  // `taker`/`taken` are what the record actually shows for a capture (ledger.ts's own
+  // `pathNotation` doc comment) — for Polynomial specifically, that has to be the
+  // same landing-square-substituted values `scoreCaptureAt` scores with, or the
+  // displayed arithmetic wouldn't add up to `result`.
   const steps: LedgerStep<V>[] = move.captures.map((step) => ({
-    taker: mover.value,
-    taken: step.capturedPiece.value,
+    taker: substituteValueAt(mover.value, step.landedAt, arithmetic),
+    taken: substituteValueAt(step.capturedPiece.value, step.landedAt, arithmetic),
     operation: operationGlyph(operationAt(step.landedAt)),
-    result: scoreCapture(mover, step.capturedPiece, operationAt(step.landedAt), arithmetic),
+    result: scoreCaptureAt(mover, step.capturedPiece, step.landedAt, arithmetic),
   }));
   const delta = steps.reduce((sum, step) => arithmetic.add(sum, step.result), arithmetic.zero);
   const promoted = !mover.isDama && after.board[move.to.row]?.[move.to.col]?.isDama === true;

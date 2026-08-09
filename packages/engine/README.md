@@ -82,6 +82,15 @@ console.log(finalScores(state)); // { white: number, black: number }
   Division by zero and any `|result| < 1` both score `0` (§5.5, `KNOWLEDGE.md`
   "Division truncation"); otherwise the result truncates toward zero.
 
+- **`scoreCaptureAt(taker: Piece, taken: Piece, landedAt: Position): V`** — `scoreCapture`,
+  but first substitutes both operands via `Arithmetic<V>.substituteAt(value, landedAt.col,
+  landedAt.row)` when the variant defines one. Only Polynomial Damath does — a deliberate
+  house rule, not from the rulebook: a capture's score comes from each piece's polynomial
+  evaluated at the square the taker lands on, not its printed symbolic term. Identical to
+  `scoreCapture(taker, taken, operationAt(landedAt), arithmetic)` for every other variant.
+  `substituteValueAt(value, pos, arithmetic)` is the same substitution as a standalone
+  helper, used to evaluate a *remaining* chip at its own resting square (`finalScores`).
+
 - **`pieceAt(board: Board, pos: Position): Piece | null`**, **`isOnBoard(pos: Position): boolean`**,
   **`BOARD_SIZE`** — board geometry helpers.
 

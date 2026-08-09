@@ -68,13 +68,14 @@ export function Square<V>({
     );
   }
 
-  let background = 'var(--square-play)';
-  if (isLegalDestination) background = 'var(--square-legal)';
-  else if (isCapturePath) background = 'var(--square-legal-path)';
   // A piece the current player can legally move this turn -- not shown once it's the
   // one selected (the accent selection ring below already marks that), so the two
   // signals never compete on the same square.
-  else if (isSelectable && piece && !isSelected) background = 'var(--square-movable)';
+  const isMovablePiece = isSelectable && piece && !isSelected;
+  let background = 'var(--square-play)';
+  if (isLegalDestination) background = 'var(--square-legal)';
+  else if (isCapturePath) background = 'var(--square-legal-path)';
+  else if (isMovablePiece) background = 'var(--square-movable)';
   else if (isLastMove) background = 'var(--square-last)';
 
   return (
@@ -90,7 +91,12 @@ export function Square<V>({
         ...baseStyle,
         background,
         cursor: isSelectable || isLegalDestination ? 'pointer' : 'default',
-        boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
+        // A ring, not just the background tint alone -- a low-opacity fill is easy to
+        // miss under a piece that already covers 72% of the square (MiniPieceView), so
+        // "which pieces can I move" now gets the same strength of signal `isSelected`'s
+        // own accent ring already had, just a different hue so the two never read as
+        // the same state.
+        boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : isMovablePiece ? 'inset 0 0 0 2px var(--success)' : undefined,
       }}
     >
       {/* The physical board prints the operation in the square's center — and once a
@@ -108,7 +114,7 @@ export function Square<V>({
           covers glyph" ratio at any size instead of just at the desktop cap this token
           was tuned for. Ceilings out at the original `var(--fs-title)` from roughly
           tablet width up, so desktop rendering is pixel-identical to before. */}
-      <span aria-hidden="true" style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-title))', fontWeight: 500, color: 'var(--square-op)' }}>
+      <span aria-hidden="true" style={{ fontSize: 'clamp(16px, 4vw, var(--fs-display))', fontWeight: 500, color: 'var(--square-op)' }}>
         {operationGlyph(operation)}
       </span>
     </button>

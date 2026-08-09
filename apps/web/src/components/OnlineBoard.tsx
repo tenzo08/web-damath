@@ -104,7 +104,10 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
                 border: 'none',
                 padding: 0,
                 background,
-                boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
+                // A ring, not just the background tint alone — same "a low-opacity fill
+                // is easy to miss under a piece that already covers 72% of the square"
+                // reasoning as Square.tsx's identical local-play treatment.
+                boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : isMovable ? 'inset 0 0 0 2px var(--success)' : undefined,
                 cursor: 'pointer',
               }}
             >
@@ -117,7 +120,7 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
                   with the board on a narrow viewport (it's a percentage of the cell), so
                   the glyph has to shrink with it too or a fixed-size glyph can eventually
                   peek out from under a small enough piece. */}
-              <span aria-hidden="true" style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-title))', fontWeight: 500, color: 'var(--square-op)' }}>
+              <span aria-hidden="true" style={{ fontSize: 'clamp(16px, 4vw, var(--fs-display))', fontWeight: 500, color: 'var(--square-op)' }}>
                 {operationGlyph(operationAt(pos))}
               </span>
             </button>

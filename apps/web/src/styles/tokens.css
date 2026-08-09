@@ -52,8 +52,12 @@
   /* A piece with a legal move this turn -- deliberately a different hue (green) from
      --square-legal's accent gold, since both can appear on screen together (a movable
      piece elsewhere on the board, a legal destination for the one currently selected)
-     and need to read as two distinct kinds of "you can act here." */
-  --square-movable: rgba(63, 185, 80, 0.14);
+     and need to read as two distinct kinds of "you can act here." Raised from an
+     original 0.14 -- at that opacity the fill was easy to miss under a piece already
+     covering 72% of the square (MiniPieceView), so Square.tsx/OnlineBoard.tsx now also
+     ring a movable piece's square in solid --success on top of this fill, rather than
+     relying on the tint alone. */
+  --square-movable: rgba(63, 185, 80, 0.32);
   /* The square(s) a selected piece's chain capture passes *through* before its final
      landing square -- deliberately built from --danger/--square-play via color-mix,
      not a new hand-picked hex, so it stays in step with whichever theme (and board
@@ -143,7 +147,7 @@
   --square-op: #6e6e7c;
   --square-legal: rgba(156, 107, 10, 0.14);
   --square-last: rgba(63, 111, 150, 0.12);
-  --square-movable: rgba(47, 158, 91, 0.14);
+  --square-movable: rgba(47, 158, 91, 0.28);
 }
 
 /**
@@ -162,7 +166,7 @@
   --square-op: #b7c9a6;
   --square-legal: rgba(201, 168, 76, 0.18);
   --square-last: rgba(139, 175, 122, 0.16);
-  --square-movable: rgba(99, 179, 96, 0.18);
+  --square-movable: rgba(99, 179, 96, 0.36);
 
   --piece-light: #dcc98f;
   --piece-light-on: #2b2410;
@@ -176,7 +180,7 @@
   --square-op: #9dc4de;
   --square-legal: rgba(94, 197, 214, 0.18);
   --square-last: rgba(127, 166, 201, 0.16);
-  --square-movable: rgba(79, 191, 150, 0.18);
+  --square-movable: rgba(79, 191, 150, 0.36);
 
   --piece-light: #7fd8e0;
   --piece-light-on: #062226;

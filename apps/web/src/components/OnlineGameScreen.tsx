@@ -701,7 +701,16 @@ export function OnlineGameScreen({
                 )}
                 {/* The one section that's meant to scroll internally, per request — a
                     fixed max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
-                <MoveLedger entries={ledger} format={(v) => (variant ? variant.arithmetic.format(v) : String(v))} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={() => setViewIndex(null)} />
+                <MoveLedger
+                  entries={ledger}
+                  format={(v) => (variant ? variant.arithmetic.format(v) : String(v))}
+                  viewIndex={viewIndex}
+                  onSelectMove={goToMove}
+                  onExitReplay={() => setViewIndex(null)}
+                  leftSide={online.color ?? 'white'}
+                  leftLabel={nameFor(online.color ?? 'white', online.view)}
+                  rightLabel={nameFor(online.color === 'white' ? 'black' : 'white', online.view)}
+                />
               </div>
             </div>
           )}

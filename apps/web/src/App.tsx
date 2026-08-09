@@ -266,7 +266,16 @@ function GameShellView<V>({
             />
             {/* The one section that's meant to scroll internally, per request — a fixed
                 max-height (MoveLedger.tsx) and a hidden scrollbar (.scroll-hidden). */}
-            <MoveLedger entries={ledger} format={format} viewIndex={viewIndex} onSelectMove={goToMove} onExitReplay={exitReplay} />
+            <MoveLedger
+              entries={ledger}
+              format={format}
+              viewIndex={viewIndex}
+              onSelectMove={goToMove}
+              onExitReplay={exitReplay}
+              leftSide="white"
+              leftLabel={labelFor('white')}
+              rightLabel={labelFor('black')}
+            />
           </div>
         </div>
       </div>
@@ -308,6 +317,7 @@ function GameShell<V>({
   onFlip,
   nav,
   playerName,
+  friendNicknames,
   onReviewGame,
   practiceContext,
 }: {
@@ -316,8 +326,10 @@ function GameShell<V>({
   flipped: boolean;
   onFlip: () => void;
   nav: GameNavigation;
-  /** The signed-in player's display name, if any — only ever used for the human's own seat in vs-AI mode (`computerPlayer` below decides which color that is, randomized per match). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
+  /** The signed-in player's display name, if any — only ever used for the human's own seat in vs-AI mode (`computerPlayer` below decides which color that is, randomized per match). */
   playerName: string | null;
+  /** Friend mode's two name fields (GameSetupModal), keyed by side — `null` for vs-computer matches, which have their own identity sources (`playerName`/`opponentName` below) instead. */
+  friendNicknames: { white: string; black: string } | null;
   onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[], perspective: Player) => void;
   /**
    * Set only via GameReviewScreen's "Practice this position" — seeds the match at the
@@ -367,6 +379,7 @@ function GameShell<V>({
   const effectiveFlipped = isFriendMode ? gameApi.game.turn === 'black' : flipped !== (computerPlayer === 'white');
   const opponentSummary = opponentName ? `vs ${opponentName} (${tier})` : 'Pass-and-play with a friend';
   const scoreLabelOverrides = {
+    ...(isFriendMode && friendNicknames ? { white: friendNicknames.white, black: friendNicknames.black } : {}),
     ...(!isFriendMode && playerName ? { [humanPlayer]: playerName } : {}),
     ...(opponentName ? { [computerPlayer]: opponentName } : {}),
   };
@@ -426,6 +439,10 @@ function AppShell() {
   }
   const [variant, setVariant] = useState<AnyVariant>(defaultVariant);
   const [tier, setTier] = useState<DifficultyTier | null>(null);
+  // Set only for a friend-mode match (GameSetupModal's two name fields) -- vs-computer
+  // matches have no equivalent since there's a real bot identity already (opponentName,
+  // GameShell) and the human's own signed-in display name (playerName) to show instead.
+  const [friendNicknames, setFriendNicknames] = useState<{ white: string; black: string } | null>(null);
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
   // Set only by GameReviewScreen's "Practice this position" (via `enterPractice`
@@ -544,6 +561,7 @@ function AppShell() {
   function enterGame(newVariant: AnyVariant, opponent: OpponentChoice) {
     setVariant(newVariant);
     setTier(opponent.kind === 'computer' ? opponent.tier : null);
+    setFriendNicknames(opponent.kind === 'friend' ? (opponent.nicknames ?? null) : null);
     setPracticeContext(null);
     setMatchNonce((n) => n + 1);
     navigate('game');
@@ -562,6 +580,7 @@ function AppShell() {
     if (!practiceVariant) return; // defensive -- variantId always comes from a real reviewed game
     setVariant(practiceVariant);
     setTier('steady'); // a reasonable default opponent strength; GameReviewScreen doesn't know the original AI tier (or whether there was one at all, for an online/human game)
+    setFriendNicknames(null); // practice is always vs-computer
     setPracticeContext({ moveHistory, humanPlayer });
     setMatchNonce((n) => n + 1);
     navigate('game');
@@ -733,6 +752,7 @@ function AppShell() {
             onFlip={() => setFlipped((f) => !f)}
             nav={nav}
             playerName={auth.user?.displayName ?? null}
+            friendNicknames={friendNicknames}
             onReviewGame={openReview}
             practiceContext={practiceContext}
           />

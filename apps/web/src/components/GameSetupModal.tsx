@@ -5,7 +5,9 @@ import { TIERS } from '@damath/ai';
 import type { DifficultyTier } from '@damath/ai';
 import { Modal } from './Modal';
 
-export type OpponentChoice = { kind: 'friend' } | { kind: 'computer'; tier: DifficultyTier };
+export type OpponentChoice =
+  | { kind: 'friend'; nicknames?: { white: string; black: string } }
+  | { kind: 'computer'; tier: DifficultyTier };
 
 interface GameSetupModalProps {
   open: boolean;
@@ -34,6 +36,16 @@ const TIER_DESCRIPTION: Record<DifficultyTier, string> = {
 
 const ELEMENTARY_IDS = new Set(['counting', 'whole', 'fraction']);
 
+const inputStyle = {
+  padding: 'var(--pad-sm) var(--pad-md)',
+  borderRadius: 'var(--radius)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-panel)',
+  color: 'var(--text-primary)',
+  font: 'inherit',
+  fontSize: 'var(--fs-body)',
+} as const;
+
 const cardButton = (active: boolean) =>
   ({
     textAlign: 'left' as const,
@@ -56,19 +68,28 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
   const [opponentKind, setOpponentKind] = useState<'friend' | 'computer'>(fixedOpponentKind ?? initialOpponent.kind);
   const [tier, setTier] = useState<DifficultyTier>(initialOpponent.kind === 'computer' ? initialOpponent.tier : 'steady');
   const [variant, setVariant] = useState<AnyVariant>(initialVariant);
+  const [whiteName, setWhiteName] = useState(initialOpponent.kind === 'friend' ? (initialOpponent.nicknames?.white ?? '') : '');
+  const [blackName, setBlackName] = useState(initialOpponent.kind === 'friend' ? (initialOpponent.nicknames?.black ?? '') : '');
 
   useEffect(() => {
     if (!open) return;
     setOpponentKind(fixedOpponentKind ?? initialOpponent.kind);
     setTier(initialOpponent.kind === 'computer' ? initialOpponent.tier : 'steady');
     setVariant(initialVariant);
+    setWhiteName(initialOpponent.kind === 'friend' ? (initialOpponent.nicknames?.white ?? '') : '');
+    setBlackName(initialOpponent.kind === 'friend' ? (initialOpponent.nicknames?.black ?? '') : '');
   }, [open, initialOpponent, initialVariant, fixedOpponentKind]);
 
   const elementary = ALL_VARIANTS.filter((v) => ELEMENTARY_IDS.has(v.id));
   const secondary = ALL_VARIANTS.filter((v) => !ELEMENTARY_IDS.has(v.id));
 
   function confirm() {
-    onConfirm(variant, opponentKind === 'friend' ? { kind: 'friend' } : { kind: 'computer', tier });
+    onConfirm(
+      variant,
+      opponentKind === 'friend'
+        ? { kind: 'friend', nicknames: { white: whiteName.trim() || 'Light', black: blackName.trim() || 'Dark' } }
+        : { kind: 'computer', tier },
+    );
   }
 
   return (
@@ -84,6 +105,30 @@ export function GameSetupModal({ open, onClose, onConfirm, initialVariant, initi
               <button type="button" style={cardButton(opponentKind === 'computer')} onClick={() => setOpponentKind('computer')}>
                 🤖 Computer
               </button>
+            </div>
+          </div>
+        )}
+
+        {opponentKind === 'friend' && (
+          <div>
+            <h3 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-label)', color: 'var(--text-secondary)' }}>Player names</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+              <input
+                type="text"
+                value={whiteName}
+                onChange={(e) => setWhiteName(e.target.value)}
+                placeholder="Light player's name"
+                maxLength={24}
+                style={inputStyle}
+              />
+              <input
+                type="text"
+                value={blackName}
+                onChange={(e) => setBlackName(e.target.value)}
+                placeholder="Dark player's name"
+                maxLength={24}
+                style={inputStyle}
+              />
             </div>
           </div>
         )}

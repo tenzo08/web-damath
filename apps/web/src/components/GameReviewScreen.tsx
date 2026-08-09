@@ -51,6 +51,56 @@ function squareName(pos: Position): string {
   return `${String.fromCharCode(97 + pos.col)}${String(pos.row + 1)}`;
 }
 
+interface ReviewRound<V> {
+  round: number;
+  white: PlyReview<V> | null;
+  black: PlyReview<V> | null;
+}
+
+/** Same pairing as MoveLedger.tsx's `buildRounds` — `reviewPly` reviews every ply in order, and the engine always alternates white/black starting with white, so index parity alone tells the two sides apart. */
+function buildReviewRounds<V>(reviews: readonly PlyReview<V>[]): ReviewRound<V>[] {
+  const rounds: ReviewRound<V>[] = [];
+  for (let i = 0; i < reviews.length; i += 2) {
+    rounds.push({ round: rounds.length + 1, white: reviews[i] ?? null, black: reviews[i + 1] ?? null });
+  }
+  return rounds;
+}
+
+function ReviewCell<V>({ review, isActive, onSelect }: { review: PlyReview<V> | null; isActive: boolean; onSelect: (ply: number) => void }) {
+  if (!review) return <span style={{ flex: 1 }} />;
+  const meta = CLASSIFICATION_META[review.classification];
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(review.ply)}
+      aria-label={`Ply ${String(review.ply)}, ${playerLabel(review.mover)} ${squareName(review.playedMove.from)} to ${squareName(review.playedMove.to)}, ${meta.label}`}
+      style={{
+        textAlign: 'left',
+        display: 'flex',
+        flex: 1,
+        minWidth: 0,
+        justifyContent: 'space-between',
+        gap: 'var(--gap-sm)',
+        background: isActive ? 'var(--accent-bg)' : 'transparent',
+        border: 'none',
+        borderRadius: 'var(--radius)',
+        padding: 'var(--pad-sm)',
+        color: isActive ? 'var(--accent)' : 'var(--text-primary)',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontSize: 'var(--fs-meta)',
+      }}
+    >
+      <span aria-hidden="true" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {squareName(review.playedMove.from)}→{squareName(review.playedMove.to)}
+      </span>
+      <span aria-hidden="true" style={{ color: meta.color, fontWeight: 700, flexShrink: 0 }}>
+        {meta.icon}
+      </span>
+    </button>
+  );
+}
+
 /**
  * Maps a raw engine `Position` to its *visual* grid position for a given `flipped` —
  * the inverse of `buildRows`'s own `rowOrder`/`colOrder` reversal (same formula
@@ -214,6 +264,9 @@ export function GameReviewScreen({
   // itself, the arrows, the moves list are all unaffected), only the *orientation*
   // stays put.
   const flipped = perspective === 'black';
+  // Which column the move list's "Player" side is -- same fallback the board orientation
+  // itself uses when there's no single reviewer to default to (local friend mode).
+  const reviewSide: Player = perspective ?? 'white';
   const currentReview: PlyReview<AnyValue> | undefined = activePly > 0 ? reviews[activePly - 1] : undefined;
 
   const arrows: MiniArrowSpec[] =
@@ -228,6 +281,8 @@ export function GameReviewScreen({
       : [];
 
   const rows = buildRows(boardState, variant, flipped, currentReview);
+  const rowLabels = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+  const colLabels = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
   const canStepBack = activePly > 0;
   const canStepForward = activePly < reviews.length;
   const stepBack = () => setSelectedPly(Math.max(0, activePly - 1));
@@ -266,6 +321,8 @@ export function GameReviewScreen({
               rows={rows}
               size="min(560px, 58vh, 100%)"
               arrows={arrows}
+              rowLabels={rowLabels}
+              colLabels={colLabels}
               label={`${variant.name} · ${activePly === 0 ? 'Starting position' : `after ply ${String(activePly)}`}`}
             />
 
@@ -349,37 +406,24 @@ export function GameReviewScreen({
                 >
                   Starting position
                 </button>
-                {reviews.map((r) => {
-                  const meta = CLASSIFICATION_META[r.classification];
-                  const isActive = activePly === r.ply;
+                {/* Two columns, "Player" (the reviewer's own side, `perspective`) then
+                    "Opponent" — same round-pairing convention as MoveLedger.tsx's online/
+                    local log, so a review taken from Black's side lists moves in the
+                    opposite column order from one taken from White's. */}
+                <div style={{ display: 'flex', gap: 'var(--gap-sm)', padding: '2px var(--pad-sm)', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  <span style={{ minWidth: '1.6em' }} />
+                  <span style={{ flex: 1 }}>{playerLabel(reviewSide)}</span>
+                  <span style={{ flex: 1 }}>{playerLabel(reviewSide === 'white' ? 'black' : 'white')}</span>
+                </div>
+                {buildReviewRounds(reviews).map(({ round, white, black }) => {
+                  const leftReview = reviewSide === 'white' ? white : black;
+                  const rightReview = reviewSide === 'white' ? black : white;
                   return (
-                    <button
-                      key={r.ply}
-                      type="button"
-                      onClick={() => setSelectedPly(r.ply)}
-                      aria-label={`Ply ${String(r.ply)}, ${playerLabel(r.mover)} ${squareName(r.playedMove.from)} to ${squareName(r.playedMove.to)}, ${meta.label}`}
-                      style={{
-                        textAlign: 'left',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 'var(--gap-sm)',
-                        background: isActive ? 'var(--accent-bg)' : 'transparent',
-                        border: 'none',
-                        borderRadius: 'var(--radius)',
-                        padding: 'var(--pad-sm)',
-                        color: isActive ? 'var(--accent)' : 'var(--text-primary)',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        fontSize: 'var(--fs-meta)',
-                      }}
-                    >
-                      <span aria-hidden="true">
-                        {r.ply}. {playerLabel(r.mover)} {squareName(r.playedMove.from)}→{squareName(r.playedMove.to)}
-                      </span>
-                      <span aria-hidden="true" style={{ color: meta.color, fontWeight: 700 }}>
-                        {meta.icon}
-                      </span>
-                    </button>
+                    <div key={round} style={{ display: 'flex', gap: 'var(--gap-sm)', alignItems: 'stretch' }}>
+                      <span style={{ minWidth: '1.6em', color: 'var(--text-muted)', fontSize: 'var(--fs-meta)', paddingTop: 'var(--pad-sm)' }}>{round}.</span>
+                      <ReviewCell review={leftReview} isActive={activePly === leftReview?.ply} onSelect={setSelectedPly} />
+                      <ReviewCell review={rightReview} isActive={activePly === rightReview?.ply} onSelect={setSelectedPly} />
+                    </div>
                   );
                 })}
               </div>

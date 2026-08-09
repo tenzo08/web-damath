@@ -15,6 +15,16 @@ export default defineConfig({
     outDir: '../../dist',
     emptyOutDir: true,
   },
+  // `useComputerOpponent`/`useGameReview` spin up `new Worker(new URL('./ai-worker-entry.ts',
+  // import.meta.url), { type: 'module' })` -- an ES module worker that itself imports
+  // @damath/ai, so Rollup needs to code-split its bundle. Vite's own default worker
+  // output format is 'iife', and Rollup refuses iife/UMD together with code-splitting
+  // ("UMD and IIFE output formats are not supported for code-splitting builds") --
+  // harmless in dev (esbuild, not this config) but a hard production build failure.
+  // 'es' matches the `{ type: 'module' }` the worker is already constructed with.
+  worker: {
+    format: 'es',
+  },
   plugins: [
     react(),
     // docs/PLANNING.md: "Connectivity in Philippine schools is uneven; this is a real

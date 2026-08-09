@@ -1,7 +1,7 @@
 import { operationAt } from '@damath/engine';
 import type { Player, Position } from '@damath/engine';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
-import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
+import { operationGlyph, operationVerb, playerLabel, toCoord } from '../lib/notation';
 import { MiniPieceView } from './diagram/MiniBoard';
 import { BoardCoordinates } from './BoardCoordinates';
 import type { PublicGameView, WirePiece } from '../lib/onlineProtocol';
@@ -9,7 +9,7 @@ import type { PublicGameView, WirePiece } from '../lib/onlineProtocol';
 const BOARD_MAX_WIDTH = 'min(560px, 58vh, 100%)';
 
 function accessibleName(pos: Position, piece: WirePiece | null): string {
-  const alg = toAlgebraic(pos);
+  const alg = toCoord(pos);
   const parts = [alg, operationVerb(operationAt(pos))];
   if (piece) {
     parts.push(`${playerLabel(piece.owner).toLowerCase()} ${piece.value}`);

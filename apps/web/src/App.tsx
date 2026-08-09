@@ -251,7 +251,7 @@ function GameShellView<V>({
             {playerCard(bottomColor)}
           </div>
 
-          <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          <div style={{ flex: '1 1 340px', maxWidth: 420, minWidth: 280, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <GameControls
               canUndo={canUndo}
               canResign={canResign && !blockInteraction}

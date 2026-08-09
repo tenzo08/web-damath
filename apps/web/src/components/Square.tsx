@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Operation, Piece as PieceModel, Position } from '@damath/engine';
-import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
+import { operationGlyph, operationVerb, playerLabel, toCoord } from '../lib/notation';
 
 interface SquareProps<V> {
   pos: Position;
@@ -19,7 +19,7 @@ interface SquareProps<V> {
 }
 
 function accessibleName<V>(pos: Position, operation: Operation | null, piece: PieceModel<V> | null, format: (value: V) => string): string {
-  const alg = toAlgebraic(pos);
+  const alg = toCoord(pos);
   if (!operation) return `${alg}, not playable`;
   const parts = [alg, operationVerb(operation)];
   if (piece) {

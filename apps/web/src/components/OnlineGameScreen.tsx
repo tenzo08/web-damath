@@ -584,7 +584,7 @@ export function OnlineGameScreen({
                 {playerCardFor(bottomColor, effectiveView ?? online.view)}
               </div>
 
-              <div style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 220, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+              <div style={{ flex: '1 1 340px', maxWidth: 420, minWidth: 280, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
                 {online.view.status === 'finished' && (
                   <div style={{ ...cardStyle, position: 'relative' }}>
                     {online.view.winner &&

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { operationGlyph, operationVerb, operationWord, playerLabel, playerLetter, toAlgebraic } from './notation';
+import { operationGlyph, operationVerb, operationWord, playerLabel, playerLetter, toCoord } from './notation';
 
-describe('toAlgebraic', () => {
-  it('converts {row,col} to file+rank', () => {
-    expect(toAlgebraic({ row: 0, col: 0 })).toBe('a1');
-    expect(toAlgebraic({ row: 7, col: 7 })).toBe('h8');
-    expect(toAlgebraic({ row: 2, col: 3 })).toBe('d3');
+describe('toCoord', () => {
+  it("converts {row,col} to the board's digit coordinate convention, never letters", () => {
+    expect(toCoord({ row: 0, col: 0 })).toBe('0,0');
+    expect(toCoord({ row: 7, col: 7 })).toBe('7,7');
+    expect(toCoord({ row: 2, col: 3 })).toBe('2,3');
   });
 });
 

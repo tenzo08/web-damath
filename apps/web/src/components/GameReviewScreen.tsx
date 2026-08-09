@@ -3,7 +3,7 @@ import { ALL_VARIANTS, operationAt, pieceAt, replayMoves } from '@damath/engine'
 import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniArrowSpec, type MiniSquareSpec } from './diagram/MiniBoard';
 import { isPlayable, samePosition } from '../lib/board';
-import { operationGlyph, playerLabel } from '../lib/notation';
+import { operationGlyph, playerLabel, toCoord } from '../lib/notation';
 import { useGameReview } from '../hooks/useGameReview';
 import { plyAccuracy, type MoveClassification, type PlyReview } from '../lib/gameReview';
 
@@ -47,10 +47,6 @@ const CLASSIFICATION_META: Record<MoveClassification, { label: string; color: st
   blunder: { label: 'Blunder', color: 'var(--danger)', icon: '??' },
 };
 
-function squareName(pos: Position): string {
-  return `${String.fromCharCode(97 + pos.col)}${String(pos.row + 1)}`;
-}
-
 interface ReviewRound<V> {
   round: number;
   white: PlyReview<V> | null;
@@ -73,7 +69,7 @@ function ReviewCell<V>({ review, isActive, onSelect }: { review: PlyReview<V> | 
     <button
       type="button"
       onClick={() => onSelect(review.ply)}
-      aria-label={`Ply ${String(review.ply)}, ${playerLabel(review.mover)} ${squareName(review.playedMove.from)} to ${squareName(review.playedMove.to)}, ${meta.label}`}
+      aria-label={`Ply ${String(review.ply)}, ${playerLabel(review.mover)} ${toCoord(review.playedMove.from)} to ${toCoord(review.playedMove.to)}, ${meta.label}`}
       style={{
         textAlign: 'left',
         display: 'flex',
@@ -92,7 +88,7 @@ function ReviewCell<V>({ review, isActive, onSelect }: { review: PlyReview<V> | 
       }}
     >
       <span aria-hidden="true" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {squareName(review.playedMove.from)}→{squareName(review.playedMove.to)}
+        {toCoord(review.playedMove.from)}→{toCoord(review.playedMove.to)}
       </span>
       <span aria-hidden="true" style={{ color: meta.color, fontWeight: 700, flexShrink: 0 }}>
         {meta.icon}
@@ -181,8 +177,8 @@ function buildRows<V>(
  */
 function describeInsight<V>(review: PlyReview<V>): string {
   if (review.isBest) return "This was the engine's top choice in this position.";
-  const bestFrom = squareName(review.bestMove.from);
-  const bestTo = squareName(review.bestMove.to);
+  const bestFrom = toCoord(review.bestMove.from);
+  const bestTo = toCoord(review.bestMove.to);
   const bestCaptures = review.bestMove.captures.length;
   const playedCaptures = review.playedMove.captures.length;
   const delta = review.delta.toFixed(1);
@@ -243,8 +239,9 @@ export function GameReviewScreen({
   // early return below -- when `variant` is genuinely invalid, this analyzes a harmless
   // placeholder (Whole Damath) whose result is simply never rendered.
   const { reviews, analyzing, error, total } = useGameReview(variant ?? fallbackVariant, typedMoveHistory);
-  // `null` means "show the final position" -- the natural default once the review has
-  // (or is still) loading in ply by ply.
+  // `null` means "show the starting position" -- a review always opens there, so the
+  // reviewer sees the game unfold from the beginning rather than wherever analysis
+  // happens to have reached so far.
   const [selectedPly, setSelectedPly] = useState<number | null>(null);
 
   if (!variant) {
@@ -257,7 +254,7 @@ export function GameReviewScreen({
     );
   }
 
-  const activePly = selectedPly ?? reviews.length;
+  const activePly = selectedPly ?? 0;
   const boardState = replayMoves(variant, typedMoveHistory.slice(0, activePly));
   // Fixed for the whole review, not re-derived per ply from whoever's turn it is —
   // see the prop's own doc comment. The other player's moves still show (the board
@@ -343,11 +340,11 @@ export function GameReviewScreen({
                     {CLASSIFICATION_META[currentReview.classification].icon} {CLASSIFICATION_META[currentReview.classification].label}
                   </p>
                   <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
-                    {playerLabel(currentReview.mover)} played {squareName(currentReview.playedMove.from)}→{squareName(currentReview.playedMove.to)}
+                    {playerLabel(currentReview.mover)} played {toCoord(currentReview.playedMove.from)}→{toCoord(currentReview.playedMove.to)}
                     {!currentReview.isBest && (
                       <>
                         {' '}
-                        — the engine's best was {squareName(currentReview.bestMove.from)}→{squareName(currentReview.bestMove.to)} (Δ{' '}
+                        — the engine's best was {toCoord(currentReview.bestMove.from)}→{toCoord(currentReview.bestMove.to)} (Δ{' '}
                         {currentReview.delta.toFixed(1)}).
                       </>
                     )}
@@ -384,7 +381,7 @@ export function GameReviewScreen({
             </div>
           </div>
 
-          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          <div style={{ flex: '1 1 340px', maxWidth: 420, minWidth: 280, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <div style={{ ...cardStyle, maxHeight: 360, overflowY: 'auto' }} className="scroll-hidden">
               <h2 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 Moves

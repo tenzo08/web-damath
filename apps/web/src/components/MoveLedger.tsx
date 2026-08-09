@@ -62,7 +62,7 @@ function MoveCell<V>({
   isCurrent: boolean;
   onSelectMove: (index: number) => void;
 }) {
-  if (!entry) return <div style={{ flex: 1 }} />;
+  if (!entry) return <div style={{ flex: 1, minWidth: 0 }} />;
   const row = formatLedgerRow(entry, format);
   return (
     <button
@@ -71,13 +71,12 @@ function MoveCell<V>({
       aria-current={isCurrent}
       style={{
         display: 'flex',
+        flexDirection: 'column',
         flex: 1,
         minWidth: 0,
-        gap: 'var(--gap-sm)',
-        padding: '2px 6px',
+        gap: 1,
+        padding: '3px 6px',
         color: 'var(--text-secondary)',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
         background: isCurrent ? 'var(--accent-bg)' : 'transparent',
         border: 'none',
         borderRadius: 'var(--radius)',
@@ -86,12 +85,22 @@ function MoveCell<V>({
         cursor: 'pointer',
       }}
     >
-      <span style={{ minWidth: '7em' }}>{row.path}</span>
-      <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.arithmetic}</span>
-      <span style={{ fontWeight: 700 }}>{row.total}</span>
-      {row.promoted && (
-        <span aria-label="promoted to Dama" style={{ color: 'var(--accent)' }}>
-          ⬥
+      {/* Coordinates on their own line, full cell width -- the digit `row,col` pairs
+          (coordinates.txt's convention) run longer than chess letters did, so this no
+          longer tries to share a line with the arithmetic/total the way the old
+          single-column ledger's one-line-per-ply layout could get away with. */}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {row.path}
+        {row.promoted && (
+          <span aria-label="promoted to Dama" style={{ color: 'var(--accent)' }}>
+            {' '}
+            ⬥
+          </span>
+        )}
+      </span>
+      {row.arithmetic && (
+        <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {row.arithmetic} <strong style={{ color: 'var(--text-primary)' }}>· {row.total}</strong>
         </span>
       )}
     </button>

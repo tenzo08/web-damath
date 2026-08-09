@@ -3,7 +3,7 @@ import { applyMove, finalScores, legalMoves, pieceAt, replayMoves } from '@damat
 import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
-import { playerLabel, toAlgebraic } from '../lib/notation';
+import { playerLabel, toCoord } from '../lib/notation';
 
 interface State<V> {
   game: GameState<V>;
@@ -54,7 +54,7 @@ function describeMove<V>(entry: LedgerEntry<V>, mover: NonNullable<ReturnType<ty
   const who = playerLabel(entry.player);
   const format = variant.arithmetic.format;
   if (entry.steps.length === 0) {
-    return `${who} ${format(mover.value)} moves to ${toAlgebraic(entry.move.to)}.`;
+    return `${who} ${format(mover.value)} moves to ${toCoord(entry.move.to)}.`;
   }
   if (entry.steps.length === 1) {
     const step = entry.steps[0];

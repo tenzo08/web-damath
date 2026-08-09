@@ -1,10 +1,8 @@
 import type { Operation, Player, Position } from '@damath/engine';
 
-const FILES = 'abcdefgh';
-
-/** Board coordinate as algebraic notation, e.g. {row:2,col:3} -> "d3". */
-export function toAlgebraic(pos: Position): string {
-  return `${FILES[pos.col] ?? '?'}${String(pos.row + 1)}`;
+/** Board coordinate in the same digit `row,col` convention the board's own axis labels use (never letters) — e.g. {row:2,col:3} -> "2,3". */
+export function toCoord(pos: Position): string {
+  return `${String(pos.row)},${String(pos.col)}`;
 }
 
 /** docs/DESIGN.md §7: the engine's internal Player stays white/black; the UI shows Light/Dark. */

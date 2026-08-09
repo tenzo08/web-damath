@@ -1,6 +1,6 @@
 import { operationAt, scoreCapture } from '@damath/engine';
 import type { GameState, Move, Piece, Player, Variant } from '@damath/engine';
-import { operationGlyph, playerLetter, toAlgebraic } from './notation';
+import { operationGlyph, playerLetter, toCoord } from './notation';
 
 export interface LedgerStep<V> {
   readonly taker: V;
@@ -55,16 +55,16 @@ export function buildLedgerEntry<V>(
 
 function pathNotation<V>(entry: LedgerEntry<V>): string {
   if (entry.steps.length === 0) {
-    return `${toAlgebraic(entry.move.from)}→${toAlgebraic(entry.move.to)}`;
+    return `${toCoord(entry.move.from)}→${toCoord(entry.move.to)}`;
   }
   const squares = [entry.move.from, ...entry.move.captures.map((c) => c.landedAt)];
   const glyphs = entry.steps.map((s) => s.operation);
   return squares
     .map((sq, i) => {
-      if (i === 0) return toAlgebraic(sq);
+      if (i === 0) return toCoord(sq);
       const glyph = glyphs[i - 1];
       if (!glyph) throw new Error('unreachable: one glyph per capture step after the first square');
-      return `${glyph}${toAlgebraic(sq)}`;
+      return `${glyph}${toCoord(sq)}`;
     })
     .join('');
 }

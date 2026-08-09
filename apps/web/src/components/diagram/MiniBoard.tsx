@@ -167,11 +167,15 @@ export interface MiniArrowSpec {
   kind?: 'move' | 'capture';
 }
 
+const COORD_GUTTER = '1.2em';
+
 export function MiniBoard({
   rows,
   size = 220,
   label,
   arrows,
+  rowLabels,
+  colLabels,
 }: {
   rows: (MiniSquareSpec | null)[][];
   /** A pixel number, or any CSS width value (e.g. `'min(640px, 62vh, 100%)'`) for a board that should also shrink on short viewports, not just narrow ones. */
@@ -179,6 +183,10 @@ export function MiniBoard({
   label?: string | undefined;
   /** Drawn as arrows overlaid on the grid, from square-center to square-center — the tutorial uses this to show the actual path a move or capture takes, not just the before/after squares. */
   arrows?: readonly MiniArrowSpec[] | undefined;
+  /** coordinates.txt's `row,col` numbering, top-to-bottom in the same order `rows` was built in — omit for diagrams (the tutorial's) that don't need real board coordinates. */
+  rowLabels?: readonly number[] | undefined;
+  /** Same convention as `rowLabels`, left-to-right. */
+  colLabels?: readonly number[] | undefined;
 }) {
   const rowCount = rows.length;
   const cols = rows[0]?.length ?? 0;
@@ -196,6 +204,20 @@ export function MiniBoard({
     // inside a 395px-wide container). Found while investigating "the diagram board...
     // is not dynamic on the size of the screen."
     <figure style={{ margin: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+      <div style={{ width: size, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', width: '100%' }}>
+        {rowLabels && colLabels && (
+          <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', width: COORD_GUTTER, flexShrink: 0 }}>
+            {rowLabels.map((r, i) => (
+              <span
+                key={`${String(r)}-${String(i)}`}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}
+              >
+                {r}
+              </span>
+            ))}
+          </div>
+        )}
       <div
         role="img"
         aria-label={label ?? 'board diagram'}
@@ -203,8 +225,9 @@ export function MiniBoard({
           position: 'relative',
           display: 'grid',
           gridTemplateColumns: `repeat(${String(cols)}, 1fr)`,
-          width: size,
-          maxWidth: '100%',
+          width: '100%',
+          flex: 1,
+          minWidth: 0,
           aspectRatio: '1',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)',
@@ -279,6 +302,20 @@ export function MiniBoard({
             })}
           </svg>
         )}
+      </div>
+      </div>
+      {rowLabels && colLabels && (
+        <div style={{ display: 'flex', width: '100%' }}>
+          <div aria-hidden="true" style={{ width: COORD_GUTTER, flexShrink: 0 }} />
+          <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+            {colLabels.map((c, i) => (
+              <span key={`${String(c)}-${String(i)}`} style={{ flex: 1, textAlign: 'center', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)' }}>
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       </div>
       {label && <figcaption style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', textAlign: 'center' }}>{label}</figcaption>}
     </figure>

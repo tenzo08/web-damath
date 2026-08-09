@@ -3,7 +3,10 @@ import type { Player, Position } from '@damath/engine';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
 import { operationGlyph, operationVerb, playerLabel, toAlgebraic } from '../lib/notation';
 import { MiniPieceView } from './diagram/MiniBoard';
+import { BoardCoordinates } from './BoardCoordinates';
 import type { PublicGameView, WirePiece } from '../lib/onlineProtocol';
+
+const BOARD_MAX_WIDTH = 'min(560px, 58vh, 100%)';
 
 function accessibleName(pos: Position, piece: WirePiece | null): string {
   const alg = toAlgebraic(pos);
@@ -50,6 +53,7 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
 
   return (
+    <BoardCoordinates rows={rows} cols={cols} maxWidth={BOARD_MAX_WIDTH}>
     <div
       role="grid"
       aria-label="Online Damath board"
@@ -59,9 +63,6 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
         gridTemplateRows: 'repeat(8, 1fr)',
         width: '100%',
         aspectRatio: '1',
-        // Same viewport-height-aware cap as the local board (Board.tsx) — keeps the
-        // online board fitting a desktop viewport without forcing page scroll.
-        maxWidth: 'min(560px, 58vh, 100%)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
         position: 'relative',
@@ -154,5 +155,6 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
         )}
       </div>
     </div>
+    </BoardCoordinates>
   );
 }

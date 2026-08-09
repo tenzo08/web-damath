@@ -4,6 +4,9 @@ import type { GameState, Move, Position } from '@damath/engine';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
 import { Square } from './Square';
 import { PieceLayer } from './PieceLayer';
+import { BoardCoordinates } from './BoardCoordinates';
+
+const BOARD_MAX_WIDTH = 'min(560px, 58vh, 100%)';
 
 interface BoardProps<V> {
   game: GameState<V>;
@@ -58,6 +61,7 @@ export function Board<V>({
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
 
   return (
+    <BoardCoordinates rows={rows} cols={cols} maxWidth={BOARD_MAX_WIDTH}>
     <div
       role="grid"
       aria-label="Damath board"
@@ -68,11 +72,6 @@ export function Board<V>({
         width: '100%',
         aspectRatio: '1',
         position: 'relative',
-        // Capped by viewport height as well as width so the board (plus the clock and
-        // player cards stacked with it) actually fits a desktop viewport without
-        // forcing the page to scroll — a smaller, height-aware scale rather than the
-        // previous flat 760px, which regularly ran taller than the window.
-        maxWidth: 'min(560px, 58vh, 100%)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
         // Deliberately no `overflow: hidden` here — it would clip the focus ring at the
@@ -143,5 +142,6 @@ export function Board<V>({
       )}
       <PieceLayer game={game} format={format} flipped={flipped} />
     </div>
+    </BoardCoordinates>
   );
 }

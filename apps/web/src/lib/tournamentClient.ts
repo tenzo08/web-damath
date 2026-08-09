@@ -98,3 +98,33 @@ export function reportResult(token: string, id: string, round: number, index: nu
 export function startMatchRoom(token: string, id: string, round: number, index: number): Promise<{ roomId: string }> {
   return call(`/tournaments/${id}/matches/${String(round)}/${String(index)}/room`, token, { method: 'POST' });
 }
+
+/** Mirrors apps/server/src/tournament/analytics.ts's OperationStat exactly. */
+export interface OperationStat {
+  operation: '+' | '-' | '*' | '/';
+  capturesMade: number;
+  totalValueGained: number;
+  capturesSuffered: number;
+  totalValueLost: number;
+}
+
+/** Mirrors apps/server/src/tournament/analytics.ts's ParticipantAnalytics exactly. */
+export interface ParticipantAnalytics {
+  participantId: string;
+  gamesPlayed: number;
+  operations: OperationStat[];
+}
+
+/** Mirrors apps/server/src/tournament/analytics.ts's TournamentAnalytics exactly. */
+export interface TournamentAnalytics {
+  tournamentId: string;
+  participants: ParticipantAnalytics[];
+}
+
+/** Creator-only (403 otherwise) — per-participant, per-operation capture stats, "which operations a student struggles with." `displayNames` is keyed by participant id, resolved server-side so the client never needs a per-id profile fetch. */
+export function getTournamentAnalytics(
+  token: string,
+  id: string,
+): Promise<{ analytics: TournamentAnalytics; displayNames: Record<string, string | null> }> {
+  return call(`/tournaments/${id}/analytics`, token);
+}

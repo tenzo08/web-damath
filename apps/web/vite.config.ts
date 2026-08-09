@@ -30,9 +30,16 @@ export default defineConfig({
     // docs/PLANNING.md: "Connectivity in Philippine schools is uneven; this is a real
     // requirement, not a nice-to-have." Caches the app shell so local hot-seat play and
     // practice-vs-computer (both fully client-side — the AI runs in a Web Worker) work
-    // with no network at all after the first load. Online play/tournaments/sign-in
-    // still need the server and fail gracefully when it's unreachable — see
-    // useOnlineGame.ts, already built to handle that.
+    // with no network at all after the first load. Live match play/move submission
+    // still need the server and fail gracefully when it's unreachable, on purpose (see
+    // useOnlineGame.ts) — a competitive match can't be played against a cache. But
+    // previously-loaded tournament brackets/standings, the leaderboard, and match
+    // history are read-mostly and genuinely useful to keep browsing offline (a teacher
+    // reviewing a bracket, a student checking their own history), so those specific
+    // GET endpoints are cached below — see the matching `useOnlineStatus` banner in
+    // TournamentScreen/LeaderboardScreen/MatchHistoryScreen, which tells the viewer
+    // when they're looking at a cached, possibly-stale response rather than staying
+    // silent about it.
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
@@ -55,6 +62,46 @@ export default defineConfig({
             options: {
               cacheName: 'google-fonts',
               expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+          // NetworkFirst, not CacheFirst: this is live classroom data (a bracket
+          // mid-tournament, a rating that just changed), so a real connection always
+          // wins when one's available -- the cache is purely the offline fallback, with
+          // a short timeout so a merely-slow connection doesn't hang the UI waiting to
+          // fail before falling back. `/tournaments` and `/tournaments/<id>` (list and
+          // detail; regex excludes deeper action paths like `/start` or
+          // `/matches/.../room`, which are POST anyway and never GET), `/leaderboard`,
+          // and `/games/mine` (match history) are the three read-mostly surfaces this
+          // extends to -- live match play/moves are deliberately not included, see the
+          // doc comment above this plugin.
+          {
+            urlPattern: /\/tournaments(\/[^/?]+)?(\?.*)?$/,
+            method: 'GET',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'tournaments',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+          {
+            urlPattern: /\/leaderboard(\?.*)?$/,
+            method: 'GET',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'leaderboard',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+          {
+            urlPattern: /\/games\/mine(\?.*)?$/,
+            method: 'GET',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'match-history',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 },
             },
           },
         ],

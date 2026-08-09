@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { fetchLeaderboard, type LeaderboardEntry } from '../lib/leaderboardClient';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { Avatar } from './Avatar';
+import { OfflineBanner } from './OfflineBanner';
 
 interface LeaderboardScreenProps {
   token: string | null;
@@ -31,6 +33,7 @@ const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 export function LeaderboardScreen({ token, myUserId, onBackToLobby }: LeaderboardScreenProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isOnline = useOnlineStatus();
 
   useEffect(() => {
     if (!token) return;
@@ -56,6 +59,8 @@ export function LeaderboardScreen({ token, myUserId, onBackToLobby }: Leaderboar
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Leaderboard</h1>
         </header>
+
+        {!isOnline && <OfflineBanner />}
 
         {!token && (
           <div style={cardStyle}>

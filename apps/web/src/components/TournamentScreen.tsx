@@ -4,6 +4,9 @@ import type { VariantId } from '@damath/engine';
 import type { AuthUser } from '../lib/authClient';
 import * as tournamentClient from '../lib/tournamentClient';
 import type { Match, Standing, Tournament } from '../lib/tournamentClient';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineBanner } from './OfflineBanner';
+import { TournamentAnalyticsScreen } from './TournamentAnalyticsScreen';
 
 interface TournamentScreenProps {
   token: string | null;
@@ -137,6 +140,13 @@ export function TournamentScreen({
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [reachable, setReachable] = useState(true);
+  // Renders TournamentAnalyticsScreen in place of the normal detail view instead of a
+  // whole new top-level Screen/URL — it's a sub-view of one tournament's detail, not
+  // its own destination, same "modal, not a route" reasoning GameSetupModal already
+  // uses. Reset whenever the selected tournament changes so navigating detail -> list
+  // -> a different tournament never leaves a stale analytics view showing.
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const isOnline = useOnlineStatus();
 
   function refreshList() {
     tournamentClient
@@ -165,6 +175,8 @@ export function TournamentScreen({
     if (selectedId) refreshDetail(selectedId);
     else setDetail(null);
   }, [selectedId, tournamentEventCount]);
+
+  useEffect(() => setShowAnalytics(false), [selectedId]);
 
   async function handleCreate() {
     if (!token) return;
@@ -262,6 +274,8 @@ export function TournamentScreen({
           )}
         </header>
 
+        {!isOnline && <OfflineBanner />}
+
         {!reachable && (
           <div style={cardStyle}>
             <p style={{ margin: 0, color: 'var(--danger)' }}>Can't reach the server — tournaments need apps/server running.</p>
@@ -357,10 +371,29 @@ export function TournamentScreen({
           </>
         )}
 
-        {selectedId && detail && (
+        {selectedId && detail && token && showAnalytics && (
+          <TournamentAnalyticsScreen
+            token={token}
+            tournamentId={selectedId}
+            tournamentName={detail.tournament.name}
+            onBack={() => setShowAnalytics(false)}
+          />
+        )}
+
+        {selectedId && detail && !showAnalytics && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
             <div style={cardStyle}>
-              <h2 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{detail.tournament.name}</h2>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--gap-md)' }}>
+                <h2 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>{detail.tournament.name}</h2>
+                {/* Every status, not just lobby -- unlike Remove-participant/Start below,
+                    analytics only gets more useful once games have actually been
+                    played, so it isn't gated to the pre-start phase. */}
+                {token && detail.tournament.creatorUserId === user?.id && (
+                  <button type="button" onClick={() => setShowAnalytics(true)} style={secondaryButton}>
+                    📊 Analytics
+                  </button>
+                )}
+              </div>
               <p style={{ margin: 'var(--pad-sm) 0 0 0', fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
                 Join code <strong>{detail.tournament.joinCode}</strong> · {detail.tournament.participants.length} players ·{' '}
                 {detail.tournament.status}

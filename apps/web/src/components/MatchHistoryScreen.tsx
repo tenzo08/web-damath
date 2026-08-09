@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ALL_VARIANTS } from '@damath/engine';
 import { myGameHistory, type GameHistoryEntry } from '../lib/gameHistoryClient';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineBanner } from './OfflineBanner';
 import { ReportBlockButtons } from './ReportBlockButtons';
 
 interface MatchHistoryScreenProps {
@@ -52,6 +54,7 @@ function formatDate(iso: string): string {
 export function MatchHistoryScreen({ token, onBackToLobby, onViewGame }: MatchHistoryScreenProps) {
   const [games, setGames] = useState<GameHistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isOnline = useOnlineStatus();
 
   useEffect(() => {
     if (!token) return;
@@ -77,6 +80,8 @@ export function MatchHistoryScreen({ token, onBackToLobby, onViewGame }: MatchHi
           </button>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-title)' }}>Match History</h1>
         </header>
+
+        {!isOnline && <OfflineBanner />}
 
         {!token && (
           <div style={cardStyle}>

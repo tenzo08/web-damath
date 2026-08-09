@@ -169,7 +169,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     broadcastRef.current = gameSocket.broadcastToAll;
     app.decorate('roomManager', gameSocket.roomManager);
 
-    registerTournamentRoutes(app, tournamentManager, gameSocket.roomManager);
+    registerTournamentRoutes(app, tournamentManager, gameSocket.roomManager, options.gameStore, options.userStore);
   });
 
   return app;

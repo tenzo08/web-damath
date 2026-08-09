@@ -49,6 +49,8 @@ export interface GameStore {
    * cold start (Render's free tier spins down and wakes on the next request).
    */
   listActive(limit: number): Promise<PersistedGame[]>;
+  /** Every game (any status, any color pairing) ever played for one tournament match bracket — the source for tournament-analytics aggregation (rating/routes.ts's per-participant operation breakdown). Not limited: a single tournament's game count is small at classroom scale. */
+  listByTournament(tournamentId: string): Promise<PersistedGame[]>;
 }
 
 /**
@@ -140,6 +142,11 @@ export class FileGameStore implements GameStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   }
+
+  async listByTournament(tournamentId: string): Promise<PersistedGame[]> {
+    const games = await this.readAll();
+    return games.filter((g) => g.tournamentMatch?.tournamentId === tournamentId);
+  }
 }
 
 /**
@@ -190,6 +197,11 @@ export class PrismaGameStore implements GameStore {
       orderBy: { updatedAt: 'desc' },
       take: limit,
     });
+    return rows.map(toPersistedGame);
+  }
+
+  async listByTournament(tournamentId: string): Promise<PersistedGame[]> {
+    const rows = await this.prisma.game.findMany({ where: { tournamentId } });
     return rows.map(toPersistedGame);
   }
 }

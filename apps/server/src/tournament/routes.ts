@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { VariantId } from '@damath/engine';
 import type { RoomManager } from '../game/rooms.js';
+import type { GameStore } from '../game/store.js';
+import type { UserStore } from '../auth/store.js';
+import { findVariant } from '../game/variants.js';
+import { computeTournamentAnalytics } from './analytics.js';
 import type { TournamentManager } from './manager.js';
 
 async function requireUserId(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
@@ -28,7 +32,13 @@ const createBodySchema = {
   },
 } as const;
 
-export function registerTournamentRoutes(app: FastifyInstance, manager: TournamentManager, roomManager: RoomManager): void {
+export function registerTournamentRoutes(
+  app: FastifyInstance,
+  manager: TournamentManager,
+  roomManager: RoomManager,
+  gameStore: GameStore,
+  userStore: UserStore,
+): void {
   app.post<{ Body: { name: string; variantId: VariantId; startTime?: string | null; endTime?: string | null } }>(
     '/tournaments',
     { schema: { body: createBodySchema } },
@@ -131,4 +141,33 @@ export function registerTournamentRoutes(app: FastifyInstance, manager: Tourname
       return reply.send({ roomId: room.id });
     },
   );
+
+  /**
+   * `GET /tournaments/:id/analytics` — creator-only ("teacher-facing"): per-participant,
+   * per-operation capture stats across every finished game played for this tournament
+   * (analytics.ts). Scoped to the creator, not every participant, the same "teacher
+   * moderation" boundary `removeParticipant` already draws — a student's own operation
+   * breakdown isn't broadcast to their classmates.
+   */
+  app.get<{ Params: { id: string } }>('/tournaments/:id/analytics', async (request, reply) => {
+    const userId = await requireUserId(request, reply);
+    if (!userId) return;
+    const tournament = await manager.get(request.params.id);
+    if (!tournament) return reply.code(404).send({ error: 'tournament not found' });
+    if (tournament.creatorUserId !== userId) {
+      return reply.code(403).send({ error: 'only the tournament creator can view analytics' });
+    }
+    const variant = findVariant(tournament.variantId);
+    if (!variant) return reply.code(500).send({ error: `unknown variant id ${tournament.variantId}` });
+
+    const games = await gameStore.listByTournament(tournament.id);
+    const analytics = computeTournamentAnalytics(tournament.id, tournament.participants, games, variant);
+    const profiles = await Promise.all(
+      tournament.participants.map(async (id) => {
+        const user = await userStore.findById(id);
+        return [id, user?.displayName ?? null] as const;
+      }),
+    );
+    return reply.send({ analytics, displayNames: Object.fromEntries(profiles) });
+  });
 }

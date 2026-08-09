@@ -318,6 +318,18 @@ export function OnlineGameScreen({
     return new Set(legalMoves(liveState).map((m) => positionKey(m.from)));
   }, [online.view, variant, online.color, isViewingHistory]);
 
+  // Every legal move from the currently selected piece -- "show all the cells where it
+  // can move," same computation `legalFrom` above already does for "which pieces have
+  // some legal move," just filtered down to one piece and keeping the whole `Move`
+  // (not just its `from`) so OnlineBoard can also tell a chain capture's intermediate
+  // landing squares apart from its final destination.
+  const destinations = useMemo(() => {
+    if (!online.view || !variant || !selected || isViewingHistory) return [];
+    if (online.view.turn !== online.color || online.view.status === 'finished') return [];
+    const liveState = replayMoves(variant, online.view.moveHistory as Move<AnyValue>[]);
+    return legalMoves(liveState).filter((m) => samePosition(m.from, selected));
+  }, [online.view, variant, selected, online.color, isViewingHistory]);
+
   const historyLength = ledger.length;
   function goToMove(index: number) {
     const clamped = Math.max(0, Math.min(index, historyLength));
@@ -501,11 +513,11 @@ export function OnlineGameScreen({
           {online.status === 'queued' && (
             <div style={cardStyle}>
               <p style={{ margin: '0 0 var(--pad-lg) 0', color: 'var(--text-secondary)' }}>Waiting for an opponent…</p>
-              <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                <button type="button" onClick={online.declineBot} style={secondaryButton}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+                <button type="button" onClick={online.declineBot} style={{ ...secondaryButton, width: '100%' }}>
                   Keep waiting for a human
                 </button>
-                <button type="button" onClick={online.cancelQueue} style={secondaryButton}>
+                <button type="button" onClick={online.cancelQueue} style={{ ...secondaryButton, width: '100%' }}>
                   Cancel
                 </button>
               </div>
@@ -566,6 +578,7 @@ export function OnlineGameScreen({
                   selected={selected}
                   myColor={online.color}
                   legalFrom={legalFrom}
+                  destinations={destinations}
                   onActivateSquare={activateSquare}
                 />
                 {playerCardFor(bottomColor, effectiveView ?? online.view)}
@@ -589,8 +602,15 @@ export function OnlineGameScreen({
                               ? `Game over — ${nameFor(online.view.winner, online.view)} wins.`
                               : 'Game over — draw.'}
                     </p>
-                    <div style={{ display: 'flex', gap: 'var(--gap-sm)', flexWrap: 'wrap', marginTop: 'var(--pad-md)' }}>
-                      <button type="button" onClick={() => online.queue(online.view?.variantId ?? variantId)} style={primaryButton}>
+                    {/* A full-width vertical stack, primary action first -- the same
+                        convention GameOverModal uses for local play's own end-of-game
+                        actions, not an ad-hoc wrapping row. Three buttons of visibly
+                        different label lengths in a `flex-wrap` row reflow
+                        unpredictably at phone widths (one alone on its own short line,
+                        or an awkward two-plus-one split) instead of reading as one
+                        deliberate group. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', marginTop: 'var(--pad-md)' }}>
+                      <button type="button" onClick={() => online.queue(online.view?.variantId ?? variantId)} style={{ ...primaryButton, width: '100%' }}>
                         Find another match
                       </button>
                       <button
@@ -598,11 +618,11 @@ export function OnlineGameScreen({
                         onClick={() => {
                           if (online.view) onReviewGame(online.view.variantId, online.view.moveHistory);
                         }}
-                        style={secondaryButton}
+                        style={{ ...secondaryButton, width: '100%' }}
                       >
                         🔍 Review game
                       </button>
-                      <button type="button" onClick={onBackToLobby} style={secondaryButton}>
+                      <button type="button" onClick={onBackToLobby} style={{ ...secondaryButton, width: '100%' }}>
                         Back to Lobby
                       </button>
                     </div>
@@ -611,11 +631,14 @@ export function OnlineGameScreen({
                 {/* Back/forward history browsing — deliberately not an undo control. Online
                     games are server-authoritative; a player can look at any earlier position
                     but can't retract a move that's already landed. */}
-                <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                  <button type="button" onClick={stepBack} disabled={(viewIndex ?? historyLength) <= 0} style={secondaryButton}>
+                {/* A grid, not flex — guarantees the two columns stay exactly equal
+                    width regardless of the label lengths, same convention local play's
+                    GameControls.tsx uses for its own Back/Forward pair. */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+                  <button type="button" onClick={stepBack} disabled={(viewIndex ?? historyLength) <= 0} style={{ ...secondaryButton, width: '100%' }}>
                     ◂ Back
                   </button>
-                  <button type="button" onClick={stepForward} disabled={!isViewingHistory} style={secondaryButton}>
+                  <button type="button" onClick={stepForward} disabled={!isViewingHistory} style={{ ...secondaryButton, width: '100%' }}>
                     Forward ▸
                   </button>
                 </div>
@@ -624,11 +647,11 @@ export function OnlineGameScreen({
                 {online.color !== null && online.view.status !== 'finished' && online.view.drawOfferedBy && online.view.drawOfferedBy !== online.color && (
                   <div style={{ ...cardStyle, padding: 'var(--pad-md)', border: '1px solid var(--accent)' }}>
                     <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)' }}>Your opponent offered a draw.</p>
-                    <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-                      <button type="button" onClick={() => online.respondDraw(true)} style={primaryButton}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' }}>
+                      <button type="button" onClick={() => online.respondDraw(true)} style={{ ...primaryButton, width: '100%' }}>
                         Accept
                       </button>
-                      <button type="button" onClick={() => online.respondDraw(false)} style={secondaryButton}>
+                      <button type="button" onClick={() => online.respondDraw(false)} style={{ ...secondaryButton, width: '100%' }}>
                         Decline
                       </button>
                     </div>
@@ -640,13 +663,17 @@ export function OnlineGameScreen({
                   </p>
                 )}
                 {online.color !== null && online.view.status !== 'finished' && (
-                  <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+                  // A bot game never shows "Offer Draw" (room.ts rejects it outright),
+                  // so Resign is the only button here -- a lone half-width grid cell
+                  // would look like a mistake, not a deliberate single action, so the
+                  // grid only appears once there's a real pair to align.
+                  <div style={online.view.opponentType === 'human' ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-sm)' } : undefined}>
                     {online.view.opponentType === 'human' && (
                       <button
                         type="button"
                         onClick={online.offerDraw}
                         disabled={isViewingHistory || online.status !== 'in_game' || online.view.drawOfferedBy !== null}
-                        style={secondaryButton}
+                        style={{ ...secondaryButton, width: '100%' }}
                       >
                         Offer Draw
                       </button>
@@ -655,7 +682,7 @@ export function OnlineGameScreen({
                       type="button"
                       onClick={online.resign}
                       disabled={isViewingHistory || online.status !== 'in_game'}
-                      style={{ ...secondaryButton, color: 'var(--danger)' }}
+                      style={{ ...secondaryButton, color: 'var(--danger)', width: '100%' }}
                     >
                       Resign
                     </button>

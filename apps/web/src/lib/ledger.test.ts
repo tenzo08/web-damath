@@ -62,7 +62,9 @@ describe('buildLedgerEntry', () => {
     expect(entry.delta).toBe(after.scores.white);
     expect(entry.runningTotal).toBe(after.scores.white);
     expect(row.arithmetic).toBe(`4 ÷ 3 = ${String(entry.delta)}`);
-    expect(row.path).toBe('2,3÷4,5');
+    // A capture's record is the pieces involved (the arithmetic above), not the
+    // squares -- see ledger.ts's `pathNotation`.
+    expect(row.path).toBe('');
   });
 
   it('marks promotion only when the piece actually promotes on this move', () => {

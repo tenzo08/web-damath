@@ -53,20 +53,17 @@ export function buildLedgerEntry<V>(
   };
 }
 
+/**
+ * A quiet move has nothing else to record, so it's the origin/destination squares. A
+ * capture's own record is the pieces involved (arithmeticNotation, by value) per the
+ * rulebook's own scoresheet convention (§ "record his or her move... and the
+ * corresponding score") — the squares it happened on add nothing a reader needs.
+ */
 function pathNotation<V>(entry: LedgerEntry<V>): string {
   if (entry.steps.length === 0) {
     return `${toCoord(entry.move.from)}→${toCoord(entry.move.to)}`;
   }
-  const squares = [entry.move.from, ...entry.move.captures.map((c) => c.landedAt)];
-  const glyphs = entry.steps.map((s) => s.operation);
-  return squares
-    .map((sq, i) => {
-      if (i === 0) return toCoord(sq);
-      const glyph = glyphs[i - 1];
-      if (!glyph) throw new Error('unreachable: one glyph per capture step after the first square');
-      return `${glyph}${toCoord(sq)}`;
-    })
-    .join('');
+  return '';
 }
 
 function arithmeticNotation<V>(entry: LedgerEntry<V>, format: (v: V) => string): string {

@@ -186,11 +186,11 @@ describe('local play (Play a Friend)', () => {
     await enterFriendGame(user);
 
     // Whole Damath's opening: white has a piece at (2,1) with a legal quiet move to (3,0).
-    const origin = screen.getByRole('gridcell', { name: /^2,1, /i });
+    const origin = screen.getByRole('gridcell', { name: /^\(1,2\), /i });
     await user.click(origin);
     expect(origin).toHaveAttribute('aria-selected', 'true');
 
-    const destination = screen.getByRole('gridcell', { name: /^3,0, /i });
+    const destination = screen.getByRole('gridcell', { name: /^\(0,3\), /i });
     await user.click(destination);
 
     expect(screen.queryByText('No moves yet.')).not.toBeInTheDocument();
@@ -201,15 +201,15 @@ describe('local play (Play a Friend)', () => {
     // reposition them — a real DOM detail, not a test bug, so the assertion below
     // reflects what a user actually sees (the a4 square, wherever it now sits, showing
     // the piece that just moved there) rather than a detached old node.
-    expect(screen.getByRole('gridcell', { name: /^3,0, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    expect(screen.getByRole('gridcell', { name: /^\(0,3\), /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
   it('the Menu button offers Rematch, New game, and Back to lobby', async () => {
     const user = userEvent.setup();
     await enterFriendGame(user);
 
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    await user.click(screen.getByRole('gridcell', { name: /^3,0, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(0,3\), /i }));
     expect(screen.getByText('Dark to move')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Menu' }));
@@ -238,15 +238,15 @@ describe('local play (Play a Friend)', () => {
     const user = userEvent.setup();
     await enterFriendGame(user);
 
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    await user.click(screen.getByRole('gridcell', { name: /^3,0, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(0,3\), /i }));
     expect(screen.getByText('Dark to move')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Undo move' }));
 
     expect(screen.getByText('No moves yet.')).toBeInTheDocument();
     expect(screen.getByText('Light to move')).toBeInTheDocument();
-    expect(screen.getByRole('gridcell', { name: /^2,1, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    expect(screen.getByRole('gridcell', { name: /^\(1,2\), /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
   it('"Resign" ends the game and shows the winner announcement modal', async () => {
@@ -271,17 +271,17 @@ describe('local play (Play a Friend)', () => {
     const user = userEvent.setup();
     await enterFriendGame(user);
 
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    await user.click(screen.getByRole('gridcell', { name: /^3,0, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(0,3\), /i }));
 
     await user.click(screen.getByRole('button', { name: '◂ Back' }));
-    expect(screen.getByRole('gridcell', { name: /^2,1, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    expect(screen.getByRole('gridcell', { name: /^\(1,2\), /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
     expect(screen.getByText('Move 0 of 1')).toBeInTheDocument();
     // The live status line is unaffected by browsing history — only the board changes.
     expect(screen.getByText('Dark to move')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Live' }));
-    expect(screen.getByRole('gridcell', { name: /^3,0, /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
+    expect(screen.getByRole('gridcell', { name: /^\(0,3\), /i })).toHaveAttribute('aria-label', expect.stringContaining('light'));
   });
 
   it('a non-integer variant renders formatted (non-numeric) chip values', async () => {
@@ -312,14 +312,14 @@ describe('local play (Play a Friend)', () => {
     // Not flipped, Light to move: the first grid cell in document order is a8
     // (Board.tsx's own not-flipped row/col order).
     const grid = screen.getByRole('grid', { name: 'Damath board' });
-    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^7,0,/));
+    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^\(0,7\),/));
     expect(screen.queryByRole('button', { name: 'Flip board' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    await user.click(screen.getByRole('gridcell', { name: /^3,0, /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    await user.click(screen.getByRole('gridcell', { name: /^\(0,3\), /i }));
 
     // Dark to move now — auto-flipped, so the first cell is h1 instead.
-    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^0,7,/));
+    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^\(7,0\),/));
   });
 
   it('gates the clock and board behind a "Ready to start?" confirmation before the match itself', async () => {
@@ -333,13 +333,13 @@ describe('local play (Play a Friend)', () => {
     const readyDialog = screen.getByRole('dialog', { name: 'Ready to start' });
     expect(within(readyDialog).getByText(/Pass-and-play with a friend/)).toBeInTheDocument();
     expect(screen.getByText('20:00')).toBeInTheDocument();
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    expect(screen.queryByRole('gridcell', { name: /^2,1, /i })).not.toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    expect(screen.queryByRole('gridcell', { name: /^\(1,2\), /i })).not.toHaveAttribute('aria-selected', 'true');
 
     await confirmReady(user);
     expect(screen.queryByRole('dialog', { name: 'Ready to start' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('gridcell', { name: /^2,1, /i }));
-    expect(screen.getByRole('gridcell', { name: /^2,1, /i })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('gridcell', { name: /^\(1,2\), /i }));
+    expect(screen.getByRole('gridcell', { name: /^\(1,2\), /i })).toHaveAttribute('aria-selected', 'true');
   });
 });
 

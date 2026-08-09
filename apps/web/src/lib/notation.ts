@@ -1,8 +1,13 @@
 import type { Operation, Player, Position } from '@damath/engine';
 
-/** Board coordinate in the same digit `row,col` convention the board's own axis labels use (never letters) — e.g. {row:2,col:3} -> "2,3". */
+/**
+ * Board coordinate as `(x,y)` digits, never letters — `x` first (horizontal/column),
+ * `y` second (vertical/row), matching the rulebook's own square notation for the dama
+ * promotion rows (docs/source/Damath-Rules.pdf: "(1,0) (3,0) (5,0) (7,0)", already
+ * documented in operation-layout.ts as `(col, row)`). E.g. {row:2,col:3} -> "(3,2)".
+ */
 export function toCoord(pos: Position): string {
-  return `${String(pos.row)},${String(pos.col)}`;
+  return `(${String(pos.col)},${String(pos.row)})`;
 }
 
 /** docs/DESIGN.md §7: the engine's internal Player stays white/black; the UI shows Light/Dark. */

@@ -64,6 +64,10 @@ function MoveCell<V>({
 }) {
   if (!entry) return <div style={{ flex: 1, minWidth: 0 }} />;
   const row = formatLedgerRow(entry, format);
+  // A quiet move's whole record is where it went (`row.path`); a capture's is which
+  // pieces were involved (`row.arithmetic`, by value) -- ledger.ts's `pathNotation`
+  // never returns both for the same entry, so exactly one of the two lines applies.
+  const isCapture = row.path === '';
   return (
     <button
       type="button"
@@ -71,10 +75,10 @@ function MoveCell<V>({
       aria-current={isCurrent}
       style={{
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'baseline',
         flex: 1,
         minWidth: 0,
-        gap: 1,
+        gap: 'var(--gap-sm)',
         padding: '3px 6px',
         color: 'var(--text-secondary)',
         background: isCurrent ? 'var(--accent-bg)' : 'transparent',
@@ -85,12 +89,8 @@ function MoveCell<V>({
         cursor: 'pointer',
       }}
     >
-      {/* Coordinates on their own line, full cell width -- the digit `row,col` pairs
-          (coordinates.txt's convention) run longer than chess letters did, so this no
-          longer tries to share a line with the arithmetic/total the way the old
-          single-column ledger's one-line-per-ply layout could get away with. */}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.path}
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {isCapture ? row.arithmetic : row.path}
         {row.promoted && (
           <span aria-label="promoted to Dama" style={{ color: 'var(--accent)' }}>
             {' '}
@@ -98,10 +98,8 @@ function MoveCell<V>({
           </span>
         )}
       </span>
-      {row.arithmetic && (
-        <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {row.arithmetic} <strong style={{ color: 'var(--text-primary)' }}>· {row.total}</strong>
-        </span>
+      {isCapture && (
+        <strong style={{ color: 'var(--text-primary)', flexShrink: 0 }}>· {row.total}</strong>
       )}
     </button>
   );
@@ -178,22 +176,43 @@ export function MoveLedger<V>({ entries, format, viewIndex, onSelectMove, onExit
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-meta)' }}>No moves yet.</p>
       ) : (
         <div style={{ overflowY: 'auto', minHeight: 0 }} className="scroll-hidden">
-          <div
-            role="row"
-            style={{ display: 'flex', gap: 'var(--gap-sm)', padding: '2px 4px', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}
-          >
-            <span style={{ minWidth: '2.5em' }} />
-            <span style={{ flex: 1 }}>{leftLabel}</span>
-            <span style={{ flex: 1 }}>{rightLabel}</span>
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-meta)' }}>
+          {/* One table for both the header and the body -- a separate flex header row
+              over a <table> body looked aligned only by coincidence: a table's own
+              column widths are content-driven (auto layout) and don't necessarily match
+              a flex row's even 50/50 split, so the two drifted apart as row content
+              varied length to length (the reported "moves isn't aligned" bug). A single
+              `<colgroup>` with `tableLayout: 'fixed'` fixes the round-number column and
+              splits the rest evenly, guaranteed identical for `<thead>` and `<tbody>`. */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-meta)', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '2.2em' }} />
+              <col />
+              <col />
+            </colgroup>
+            <thead>
+              <tr>
+                <th aria-hidden="true" />
+                <th
+                  scope="col"
+                  style={{ textAlign: 'left', padding: '2px 4px', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}
+                >
+                  {leftLabel}
+                </th>
+                <th
+                  scope="col"
+                  style={{ textAlign: 'left', padding: '2px 4px', fontSize: 'var(--fs-micro)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}
+                >
+                  {rightLabel}
+                </th>
+              </tr>
+            </thead>
             <tbody>
               {rounds.map(({ round, white, black }) => {
                 const leftEntry = leftSide === 'white' ? white : black;
                 const rightEntry = leftSide === 'white' ? black : white;
                 return (
                   <tr key={round}>
-                    <td style={{ color: 'var(--text-muted)', minWidth: '2.5em', verticalAlign: 'top', padding: '2px 4px' }}>{round}.</td>
+                    <td style={{ color: 'var(--text-muted)', verticalAlign: 'top', padding: '2px 4px' }}>{round}.</td>
                     <td style={{ padding: 0 }}>
                       <MoveCell
                         entry={leftEntry}

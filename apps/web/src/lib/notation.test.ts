@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { operationGlyph, operationVerb, operationWord, playerLabel, playerLetter, toCoord } from './notation';
 
 describe('toCoord', () => {
-  it("converts {row,col} to the board's digit coordinate convention, never letters", () => {
-    expect(toCoord({ row: 0, col: 0 })).toBe('0,0');
-    expect(toCoord({ row: 7, col: 7 })).toBe('7,7');
-    expect(toCoord({ row: 2, col: 3 })).toBe('2,3');
+  it('converts {row,col} to "(x,y)" digits, x (column) first, never letters', () => {
+    expect(toCoord({ row: 0, col: 0 })).toBe('(0,0)');
+    expect(toCoord({ row: 7, col: 7 })).toBe('(7,7)');
+    expect(toCoord({ row: 2, col: 3 })).toBe('(3,2)');
   });
 });
 

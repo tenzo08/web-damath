@@ -104,10 +104,7 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, 
                 border: 'none',
                 padding: 0,
                 background,
-                // A ring, not just the background tint alone — same "a low-opacity fill
-                // is easy to miss under a piece that already covers 72% of the square"
-                // reasoning as Square.tsx's identical local-play treatment.
-                boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : isMovable ? 'inset 0 0 0 2px var(--success)' : undefined,
+                boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
                 cursor: 'pointer',
               }}
             >

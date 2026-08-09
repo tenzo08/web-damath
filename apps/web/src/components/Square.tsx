@@ -91,12 +91,7 @@ export function Square<V>({
         ...baseStyle,
         background,
         cursor: isSelectable || isLegalDestination ? 'pointer' : 'default',
-        // A ring, not just the background tint alone -- a low-opacity fill is easy to
-        // miss under a piece that already covers 72% of the square (MiniPieceView), so
-        // "which pieces can I move" now gets the same strength of signal `isSelected`'s
-        // own accent ring already had, just a different hue so the two never read as
-        // the same state.
-        boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : isMovablePiece ? 'inset 0 0 0 2px var(--success)' : undefined,
+        boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
       }}
     >
       {/* The physical board prints the operation in the square's center — and once a

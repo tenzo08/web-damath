@@ -54,6 +54,18 @@
      piece elsewhere on the board, a legal destination for the one currently selected)
      and need to read as two distinct kinds of "you can act here." */
   --square-movable: rgba(63, 185, 80, 0.14);
+  /* The square(s) a selected piece's chain capture passes *through* before its final
+     landing square -- deliberately built from --danger/--square-play via color-mix,
+     not a new hand-picked hex, so it stays in step with whichever theme (and board
+     skin) an element actually renders under without needing its own entry in every
+     override block below (a custom property's var() references resolve lazily,
+     against whatever cascade is live at the point of use — the same technique
+     GameReviewScreen's MiniBoard highlights already use inline). Red/danger, not gold
+     like --square-legal: this is "a capture happens here," the same association
+     MiniBoard's own capture arrows already establish, and the final landing square
+     still gets the ordinary gold --square-legal treatment so "where you'll actually
+     end up" stays the one unambiguous highlight. */
+  --square-legal-path: color-mix(in srgb, var(--danger) 16%, var(--square-play));
 
   --piece-light: #e3b341;
   --piece-light-on: #221904;

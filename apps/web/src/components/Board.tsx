@@ -105,6 +105,14 @@ export function Board<V>({
           const operation = playable ? operationAt(pos) : null;
           const piece = pieceAt(game.board, pos);
           const isDestination = destinations.some((m) => samePosition(m.to, pos));
+          // A chain capture's own intermediate landing squares — every step but the
+          // last (the last step's `landedAt` always equals the move's own `to`, already
+          // covered by `isDestination` above). Checked across every candidate move from
+          // the selected piece, not just one: two different capture paths can share an
+          // early waypoint before diverging, and this square is "part of the path"
+          // either way.
+          const isCapturePath =
+            !isDestination && destinations.some((m) => m.captures.slice(0, -1).some((step) => samePosition(step.landedAt, pos)));
           const isLastMoveSquare =
             lastMove !== null &&
             (samePosition(lastMove.from, pos) ||
@@ -120,6 +128,7 @@ export function Board<V>({
               format={format}
               isSelected={selected !== null && samePosition(selected, pos)}
               isLegalDestination={isDestination}
+              isCapturePath={isCapturePath}
               isLastMove={isLastMoveSquare}
               isCursor={samePosition(cursor, pos)}
               isSelectable={legalFrom.has(key)}

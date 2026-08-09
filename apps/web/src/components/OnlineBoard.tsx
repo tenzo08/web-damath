@@ -15,12 +15,26 @@ function accessibleName(pos: Position, piece: WirePiece | null): string {
   return parts.join(', ');
 }
 
+/**
+ * The minimal shape this board needs from a candidate move to draw destination
+ * highlights -- not the full generic `Move<V>` (this component, like the rest of the
+ * "online play sends a formatted view, not typed state" boundary, deliberately stays
+ * non-generic). See OnlineGameScreen's own `destinations` for how it's computed
+ * client-side from the replayed live position.
+ */
+export interface OnlineDestinationMove {
+  to: Position;
+  captures: readonly { landedAt: Position }[];
+}
+
 interface OnlineBoardProps {
   view: PublicGameView;
   selected: Position | null;
   myColor: Player | null;
   /** Squares holding a piece the seated player can legally move this turn -- empty when it isn't their turn, they're spectating, or mid-history-browse. See OnlineGameScreen's own `legalFrom` for how it's computed client-side from the replayed live position. */
   legalFrom: Set<string>;
+  /** Every legal move from the currently `selected` piece -- empty when nothing's selected. Drives the "show all the cells it can move to" highlight, distinguishing a chain capture's own intermediate landing squares from its final destination (see Board.tsx's identical local-play computation). */
+  destinations: readonly OnlineDestinationMove[];
   onActivateSquare: (pos: Position) => void;
 }
 
@@ -30,7 +44,7 @@ interface OnlineBoardProps {
  * for a local `GameState<V>` — see `useOnlineGame`'s doc comment. Flips to the seated
  * player's own side automatically, same convenience the local board offers manually.
  */
-export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSquare }: OnlineBoardProps) {
+export function OnlineBoard({ view, selected, myColor, legalFrom, destinations, onActivateSquare }: OnlineBoardProps) {
   const flipped = myColor === 'black';
   const rows = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -63,12 +77,24 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
           const piece = view.board[row]?.[col] ?? null;
           const isSelected = selected !== null && samePosition(selected, pos);
           const isMovable = !isSelected && piece !== null && legalFrom.has(key);
+          const isDestination = destinations.some((m) => samePosition(m.to, pos));
+          // Same "every step but the last" reasoning as Board.tsx's local-play
+          // equivalent -- the last capture step's landedAt always equals the move's
+          // own `to`, already covered by isDestination above.
+          const isCapturePath =
+            !isDestination && destinations.some((m) => m.captures.slice(0, -1).some((step) => samePosition(step.landedAt, pos)));
+          let background = 'var(--square-play)';
+          if (isDestination) background = 'var(--square-legal)';
+          else if (isCapturePath) background = 'var(--square-legal-path)';
+          else if (isMovable) background = 'var(--square-movable)';
           return (
             <button
               key={key}
               type="button"
               role="gridcell"
-              aria-label={accessibleName(pos, piece)}
+              aria-label={
+                accessibleName(pos, piece) + (isDestination ? ', legal destination' : isCapturePath ? ', captures through here' : '')
+              }
               onClick={() => onActivateSquare(pos)}
               style={{
                 display: 'flex',
@@ -77,7 +103,7 @@ export function OnlineBoard({ view, selected, myColor, legalFrom, onActivateSqua
                 aspectRatio: '1',
                 border: 'none',
                 padding: 0,
-                background: isMovable ? 'var(--square-movable)' : 'var(--square-play)',
+                background,
                 boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
                 cursor: 'pointer',
               }}

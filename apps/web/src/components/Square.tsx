@@ -9,6 +9,8 @@ interface SquareProps<V> {
   format: (value: V) => string;
   isSelected: boolean;
   isLegalDestination: boolean;
+  /** A square the selected piece's chain capture lands on *mid-sequence*, before its final destination — see Board.tsx's own computation. Always false whenever `isLegalDestination` is true for the same square (the final landing square keeps the ordinary gold treatment, not this one). */
+  isCapturePath: boolean;
   isLastMove: boolean;
   isCursor: boolean;
   isSelectable: boolean;
@@ -34,6 +36,7 @@ export function Square<V>({
   format,
   isSelected,
   isLegalDestination,
+  isCapturePath,
   isLastMove,
   isCursor,
   isSelectable,
@@ -67,6 +70,7 @@ export function Square<V>({
 
   let background = 'var(--square-play)';
   if (isLegalDestination) background = 'var(--square-legal)';
+  else if (isCapturePath) background = 'var(--square-legal-path)';
   // A piece the current player can legally move this turn -- not shown once it's the
   // one selected (the accent selection ring below already marks that), so the two
   // signals never compete on the same square.
@@ -77,7 +81,7 @@ export function Square<V>({
     <button
       type="button"
       role="gridcell"
-      aria-label={accessibleName(pos, operation, piece, format)}
+      aria-label={accessibleName(pos, operation, piece, format) + (isLegalDestination ? ', legal destination' : isCapturePath ? ', captures through here' : '')}
       aria-selected={isSelected}
       tabIndex={isCursor ? 0 : -1}
       ref={registerRef}

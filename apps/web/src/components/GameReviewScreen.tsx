@@ -21,6 +21,14 @@ interface GameReviewScreenProps {
    */
   perspective?: Player;
   onBackToLobby: () => void;
+  /**
+   * "Practice this position" — hands the position just *before* a reviewed mistake
+   * back to the caller (App.tsx's `enterPractice`) along with which side made it, to
+   * start a fresh vs-computer match retrying that exact decision. Optional: a caller
+   * with nowhere to send this (none today, but the type doesn't assume one exists)
+   * simply doesn't get the button.
+   */
+  onPracticePosition?: (variantId: VariantId, moveHistory: readonly unknown[], mover: Player) => void;
 }
 
 type ValueOf<T> = T extends Variant<infer V> ? V : never;
@@ -170,7 +178,13 @@ const primaryButton = {
  * fell short. Works for both local and online games — either caller just hands over a
  * variant id and a finished game's move history.
  */
-export function GameReviewScreen({ variantId, moveHistory, perspective = 'white', onBackToLobby }: GameReviewScreenProps) {
+export function GameReviewScreen({
+  variantId,
+  moveHistory,
+  perspective = 'white',
+  onBackToLobby,
+  onPracticePosition,
+}: GameReviewScreenProps) {
   const variant = findVariant(variantId);
   const fallbackVariant = findVariant('whole');
   if (!fallbackVariant) throw new Error('unreachable: ALL_VARIANTS always includes Whole Damath');
@@ -297,6 +311,19 @@ export function GameReviewScreen({ variantId, moveHistory, perspective = 'white'
                   Next ▸
                 </button>
               </div>
+              {/* Only on an actual mistake (isBest === true has nothing to practice) and
+                  only once a caller has somewhere to send it (App.tsx's enterPractice) —
+                  hands over the position *before* this ply, not the position currently
+                  on screen (which already shows the mistake having happened). */}
+              {onPracticePosition && currentReview && !currentReview.isBest && (
+                <button
+                  type="button"
+                  onClick={() => onPracticePosition(variantId, moveHistory.slice(0, currentReview.ply - 1), currentReview.mover)}
+                  style={{ ...secondaryButton, width: '100%', marginTop: 'var(--pad-sm)' }}
+                >
+                  🔁 Practice this position
+                </button>
+              )}
             </div>
           </div>
 

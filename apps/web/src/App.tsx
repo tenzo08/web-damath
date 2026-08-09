@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_VARIANTS, legalMoves } from '@damath/engine';
-import type { AnyVariant, Player, Variant, VariantId } from '@damath/engine';
+import type { AnyVariant, Move, Player, Variant, VariantId } from '@damath/engine';
 import type { DifficultyTier } from '@damath/ai';
 import { useGame } from './hooks/useGame';
 import { useComputerOpponent } from './hooks/useComputerOpponent';
@@ -309,6 +309,7 @@ function GameShell<V>({
   nav,
   playerName,
   onReviewGame,
+  practiceContext,
 }: {
   variant: Variant<V>;
   tier: DifficultyTier | null;
@@ -318,16 +319,32 @@ function GameShell<V>({
   /** The signed-in player's display name, if any — only ever used for the human's own seat in vs-AI mode (`computerPlayer` below decides which color that is, randomized per match). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
   playerName: string | null;
   onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[], perspective: Player) => void;
+  /**
+   * Set only via GameReviewScreen's "Practice this position" — seeds the match at the
+   * position just before a reviewed mistake instead of the canonical opening, with the
+   * side that made the mistake under human control and the computer taking the other
+   * seat. `moveHistory` is untyped here for the same JSON-boundary reason
+   * OnlineGameScreen's own prop is (App.tsx's `practiceContext` state crosses from
+   * GameReviewScreen, which itself only ever holds `readonly unknown[]`).
+   */
+  practiceContext?: { moveHistory: readonly unknown[]; humanPlayer: Player } | null;
 }) {
-  const gameApi = useGame(variant);
+  // Cast once, at the one point `V` is concrete — same JSON-boundary trust point
+  // GameReviewScreen/OnlineGameScreen already use for an identical `unknown[]` prop.
+  const practiceMoveHistory = useMemo(() => (practiceContext?.moveHistory ?? []) as Move<V>[], [practiceContext]);
+  const gameApi = useGame(variant, practiceMoveHistory);
 
   // Picked once per mount (this component remounts on every new match, via the
   // `key={variant.id}-${matchNonce}` at the call site — a fresh key on rematch too), so
   // it's stable for the whole game but genuinely varies match to match: the computer
   // shouldn't sit in Black every single game, always waiting on the human to move
   // first. Board.tsx/the engine always starts `turn: 'white'`, so whichever side this
-  // lands on determines who actually opens the game.
-  const [computerPlayer] = useState<Player>(() => (Math.random() < 0.5 ? 'white' : 'black'));
+  // lands on determines who actually opens the game -- unless a practice session
+  // already says which side the human is retrying as, in which case the computer
+  // always takes the other seat instead of a fresh coin flip.
+  const [computerPlayer] = useState<Player>(() =>
+    practiceContext ? (practiceContext.humanPlayer === 'white' ? 'black' : 'white') : Math.random() < 0.5 ? 'white' : 'black',
+  );
   const humanPlayer: Player = computerPlayer === 'white' ? 'black' : 'white';
   const computersTurn = tier !== null && !gameApi.gameOver && gameApi.game.turn === computerPlayer;
   useComputerOpponent(gameApi.game, tier, computerPlayer, gameApi.playMove);
@@ -411,6 +428,12 @@ function AppShell() {
   const [tier, setTier] = useState<DifficultyTier | null>(null);
   const [matchNonce, setMatchNonce] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  // Set only by GameReviewScreen's "Practice this position" (via `enterPractice`
+  // below) — carries the seed position across the same kind of round trip
+  // `reviewContext`/`tournamentContext` already do for their own screens. Cleared by
+  // `enterGame`, the ordinary "start a fresh match" path, so a subsequent normal Play
+  // a Friend/Play the Computer never accidentally reuses a stale practice seed.
+  const [practiceContext, setPracticeContext] = useState<{ moveHistory: readonly unknown[]; humanPlayer: Player } | null>(null);
   const [screen, setScreenState] = useState<Screen>(() => screenFromPath(window.location.pathname));
   // Every existing in-app "go to this screen" call site becomes `navigate(...)`
   // instead of a bare state set, so each one also pushes a real history entry —
@@ -521,6 +544,25 @@ function AppShell() {
   function enterGame(newVariant: AnyVariant, opponent: OpponentChoice) {
     setVariant(newVariant);
     setTier(opponent.kind === 'computer' ? opponent.tier : null);
+    setPracticeContext(null);
+    setMatchNonce((n) => n + 1);
+    navigate('game');
+  }
+
+  /**
+   * GameReviewScreen's "Practice this position" — starts a fresh vs-computer match
+   * seeded at `moveHistory` (the position just *before* a reviewed mistake) instead of
+   * the canonical opening, with `humanPlayer` under the reviewer's own control. Works
+   * the same regardless of whether the game being reviewed was local or online — this
+   * always opens a local practice match, since there's no live opponent to retry a
+   * position against.
+   */
+  function enterPractice(variantId: VariantId, moveHistory: readonly unknown[], humanPlayer: Player) {
+    const practiceVariant = ALL_VARIANTS.find((v) => v.id === variantId);
+    if (!practiceVariant) return; // defensive -- variantId always comes from a real reviewed game
+    setVariant(practiceVariant);
+    setTier('steady'); // a reasonable default opponent strength; GameReviewScreen doesn't know the original AI tier (or whether there was one at all, for an online/human game)
+    setPracticeContext({ moveHistory, humanPlayer });
     setMatchNonce((n) => n + 1);
     navigate('game');
   }
@@ -590,6 +632,7 @@ function AppShell() {
             moveHistory={reviewContext.moveHistory}
             perspective={reviewContext.perspective}
             onBackToLobby={() => navigate('lobby')}
+            onPracticePosition={enterPractice}
           />
         </Suspense>
       )}
@@ -691,6 +734,7 @@ function AppShell() {
             nav={nav}
             playerName={auth.user?.displayName ?? null}
             onReviewGame={openReview}
+            practiceContext={practiceContext}
           />
         </>
       )}

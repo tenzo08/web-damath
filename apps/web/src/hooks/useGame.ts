@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer } from 'react';
-import { applyMove, createGame, finalScores, legalMoves, pieceAt, replayMoves } from '@damath/engine';
+import { applyMove, finalScores, legalMoves, pieceAt, replayMoves } from '@damath/engine';
 import type { GameState, Move, Player, Position, Variant } from '@damath/engine';
 import { buildLedgerEntry, type LedgerEntry } from '../lib/ledger';
 import { isPlayable, positionKey, samePosition } from '../lib/board';
@@ -81,11 +81,16 @@ function endOfGameMessage<V>(game: GameState<V>, variant: Variant<V>, reasonOver
   return `${reason}. ${playerLabel(winner)} wins on score ${arithmetic.format(winnerScore)} to ${arithmetic.format(loserScore)}.`;
 }
 
-function makeReducer<V>(variant: Variant<V>) {
+function makeReducer<V>(variant: Variant<V>, initialMoveHistory: readonly Move<V>[]) {
   return function reducer(state: State<V>, action: Action<V>): State<V> {
     switch (action.type) {
       case 'NEW_GAME': {
-        const game = createGame(variant);
+        // Replays the same seed a practice session started from (GameReviewScreen's
+        // "Practice this position"), not always a blank board -- so "Rematch" on a
+        // practice match retries the identical position instead of silently dropping
+        // back to a normal fresh game. `replayMoves(variant, [])` behaves exactly like
+        // `createGame(variant)` for the ordinary (non-practice) case.
+        const game = replayMoves(variant, initialMoveHistory);
         return {
           game,
           selected: null,
@@ -94,7 +99,10 @@ function makeReducer<V>(variant: Variant<V>) {
           resignedBy: null,
           timeExpired: false,
           viewIndex: null,
-          announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
+          announcement:
+            initialMoveHistory.length > 0
+              ? `Practice position. ${variant.name}. ${playerLabel(game.turn)} to move.`
+              : `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
         };
       }
       case 'SELECT': {
@@ -172,8 +180,8 @@ function makeReducer<V>(variant: Variant<V>) {
   };
 }
 
-function init<V>(variant: Variant<V>): State<V> {
-  const game = createGame(variant);
+function init<V>({ variant, initialMoveHistory }: { variant: Variant<V>; initialMoveHistory: readonly Move<V>[] }): State<V> {
+  const game = replayMoves(variant, initialMoveHistory);
   return {
     game,
     selected: null,
@@ -182,13 +190,23 @@ function init<V>(variant: Variant<V>): State<V> {
     resignedBy: null,
     timeExpired: false,
     viewIndex: null,
-    announcement: `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
+    announcement:
+      initialMoveHistory.length > 0
+        ? `Practice position. ${variant.name}. ${playerLabel(game.turn)} to move.`
+        : `New match. ${variant.name}. ${playerLabel(game.turn)} to move.`,
   };
 }
 
-/** One React tree per variant — a caller switching to a different chip-value type remounts via `key`, so `variant` is stable for this hook's whole lifetime (see `App.tsx`). */
-export function useGame<V>(variant: Variant<V>) {
-  const [state, dispatch] = useReducer(makeReducer(variant), variant, init);
+/**
+ * One React tree per variant — a caller switching to a different chip-value type
+ * remounts via `key`, so `variant` is stable for this hook's whole lifetime (see
+ * `App.tsx`). `initialMoveHistory` seeds a practice session at an arbitrary position
+ * instead of the canonical opening (GameReviewScreen's "Practice this position," which
+ * hands over the position just *before* a reviewed mistake) — omit it for the ordinary
+ * fresh-game case, where it behaves identically to `createGame(variant)`.
+ */
+export function useGame<V>(variant: Variant<V>, initialMoveHistory: readonly Move<V>[] = []) {
+  const [state, dispatch] = useReducer(makeReducer(variant, initialMoveHistory), { variant, initialMoveHistory }, init);
 
   const moves = useMemo(() => legalMoves(state.game), [state.game]);
   const legalFrom = useMemo(() => new Set(moves.map((m) => positionKey(m.from))), [moves]);

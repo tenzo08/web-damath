@@ -11,9 +11,11 @@ export interface MiniPieceSpec {
   owner: 'white' | 'black';
   isDama?: boolean;
   label: string;
+  /** GameReviewScreen's own "show what the reviewed move captured, not just what moved" — renders the piece faded with a red X overlay, at the square it was captured on (which the live position already shows empty), instead of just vanishing. */
+  captured?: boolean;
 }
 
-export function MiniPieceView({ owner, isDama, label }: MiniPieceSpec) {
+export function MiniPieceView({ owner, isDama, label, captured }: MiniPieceSpec) {
   const isLight = owner === 'white';
   const fill = isLight ? 'var(--piece-light)' : 'var(--piece-dark)';
   const onColor = isLight ? 'var(--piece-light-on)' : 'var(--piece-dark-on)';
@@ -38,10 +40,29 @@ export function MiniPieceView({ owner, isDama, label }: MiniPieceSpec) {
           color: onColor,
           padding: '0 2px',
           overflow: 'hidden',
+          opacity: captured ? 0.4 : 1,
         }}
       >
         {label}
       </span>
+      {captured && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 'var(--fs-title)',
+            fontWeight: 700,
+            color: 'var(--danger, #e35b5b)',
+            textShadow: '0 0 3px var(--square-play)',
+          }}
+        >
+          ×
+        </span>
+      )}
     </span>
   );
 }

@@ -1,16 +1,25 @@
 import { useMemo, useState } from 'react';
 import { ALL_VARIANTS, operationAt, pieceAt, replayMoves } from '@damath/engine';
-import type { Move, Position, Variant, VariantId } from '@damath/engine';
+import type { Move, Player, Position, Variant, VariantId } from '@damath/engine';
 import { MiniBoard, type MiniArrowSpec, type MiniSquareSpec } from './diagram/MiniBoard';
 import { isPlayable, samePosition } from '../lib/board';
 import { operationGlyph, playerLabel } from '../lib/notation';
 import { useGameReview } from '../hooks/useGameReview';
-import type { MoveClassification, PlyReview } from '../lib/gameReview';
+import { plyAccuracy, type MoveClassification, type PlyReview } from '../lib/gameReview';
 
 interface GameReviewScreenProps {
   variantId: VariantId;
   /** Genuine `Move<V>` values, untyped here for the same JSON-boundary reason OnlineGameScreen's own moveHistory prop is — see that file's doc comment. */
   moveHistory: readonly unknown[];
+  /**
+   * Whose side the board stays oriented to for the *whole* review — the reviewer is
+   * one specific person looking back at a finished game, not both players sharing a
+   * screen, so the board must not keep auto-flipping to whichever side is on move the
+   * way local pass-and-play's live board does (that reads as "the board is flipping,"
+   * a real bug report, not a feature). Defaults to `'white'` when the caller has no
+   * single obvious reviewer to name (local friend mode, or a spectator).
+   */
+  perspective?: Player;
   onBackToLobby: () => void;
 }
 
@@ -35,11 +44,30 @@ function squareName(pos: Position): string {
 }
 
 /**
+ * Maps a raw engine `Position` to its *visual* grid position for a given `flipped` —
+ * the inverse of `buildRows`'s own `rowOrder`/`colOrder` reversal (same formula
+ * OnlineBoard.tsx's piece-layer overlay already uses for the identical problem).
+ * `MiniBoard` draws `arrows` as literal indices into whatever grid array `rows` built —
+ * it doesn't know engine coordinates exist, so an arrow built from raw `Position`s
+ * pointed at the wrong squares the instant `flipped` was `true` (previously "sometimes"
+ * — auto-flipping per ply — now a first-class prop, so this must always be right).
+ */
+function toVisual(pos: Position, flipped: boolean): Position {
+  return {
+    row: flipped ? pos.row : 7 - pos.row,
+    col: flipped ? 7 - pos.col : pos.col,
+  };
+}
+
+/**
  * Builds a read-only diagram of one ply's board state for `MiniBoard`, highlighting the
  * recommended move (gold ring on the piece that should've moved, gold star on where it
  * should land) and, when they differ, the move actually played (muted red) — chess.com's
- * own Game Review convention (review.png). `review` is `undefined` for the starting
- * position, where there's nothing yet to highlight.
+ * own Game Review convention (review.png). Also surfaces what the reviewed move actually
+ * captured: `boardState` already shows a captured piece's square as empty (it's been
+ * removed from play), so this synthesizes a faded, X-marked piece there instead of
+ * leaving it silently blank — "show the pieces that were taken." `review` is `undefined`
+ * for the starting position, where there's nothing yet to highlight or show captured.
  */
 function buildRows<V>(
   state: ReturnType<typeof replayMoves<V>>,
@@ -70,9 +98,15 @@ function buildRows<V>(
         else if (!review.isBest && samePosition(pos, review.playedMove.to)) highlight = 'played-to';
         else if (!review.isBest && samePosition(pos, review.playedMove.from)) highlight = 'played-from';
       }
+      const capturedStep = !piece && review ? review.playedMove.captures.find((c) => samePosition(c.capturedAt, pos)) : undefined;
+      const pieceSpec: MiniSquareSpec['piece'] = piece
+        ? { owner: piece.owner, isDama: piece.isDama, label: variant.arithmetic.format(piece.value) }
+        : capturedStep
+          ? { owner: capturedStep.capturedPiece.owner, isDama: capturedStep.capturedPiece.isDama, label: variant.arithmetic.format(capturedStep.capturedPiece.value), captured: true }
+          : null;
       cols.push({
         operation: operationGlyph(operationAt(pos)) as '+' | '−' | '×' | '÷',
-        piece: piece ? { owner: piece.owner, isDama: piece.isDama, label: variant.arithmetic.format(piece.value) } : null,
+        piece: pieceSpec,
         highlight,
       });
     }
@@ -136,7 +170,7 @@ const primaryButton = {
  * fell short. Works for both local and online games — either caller just hands over a
  * variant id and a finished game's move history.
  */
-export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: GameReviewScreenProps) {
+export function GameReviewScreen({ variantId, moveHistory, perspective = 'white', onBackToLobby }: GameReviewScreenProps) {
   const variant = findVariant(variantId);
   const fallbackVariant = findVariant('whole');
   if (!fallbackVariant) throw new Error('unreachable: ALL_VARIANTS always includes Whole Damath');
@@ -161,15 +195,19 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
 
   const activePly = selectedPly ?? reviews.length;
   const boardState = replayMoves(variant, typedMoveHistory.slice(0, activePly));
-  const flipped = boardState.turn === 'black';
+  // Fixed for the whole review, not re-derived per ply from whoever's turn it is —
+  // see the prop's own doc comment. The other player's moves still show (the board
+  // itself, the arrows, the moves list are all unaffected), only the *orientation*
+  // stays put.
+  const flipped = perspective === 'black';
   const currentReview: PlyReview<AnyValue> | undefined = activePly > 0 ? reviews[activePly - 1] : undefined;
 
   const arrows: MiniArrowSpec[] =
     currentReview && !currentReview.isBest
       ? [
           {
-            from: currentReview.bestMove.from,
-            to: currentReview.bestMove.to,
+            from: toVisual(currentReview.bestMove.from, flipped),
+            to: toVisual(currentReview.bestMove.to, flipped),
             kind: currentReview.bestMove.captures.length > 0 ? 'capture' : 'move',
           },
         ]
@@ -185,7 +223,10 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
     (acc, r) => ({ ...acc, [r.classification]: acc[r.classification] + 1 }),
     { best: 0, excellent: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
   );
-  const accuracy = reviews.length > 0 ? Math.round(((counts.best + counts.excellent) / reviews.length) * 100) : null;
+  // Weighted by how many points each ply actually cost (plyAccuracy), not just a
+  // count of best/excellent plies out of the total — see plyAccuracy's own doc
+  // comment ("consider the points that was being taken").
+  const accuracy = reviews.length > 0 ? Math.round(reviews.reduce((sum, r) => sum + plyAccuracy(r.delta), 0) / reviews.length) : null;
 
   return (
     <main style={{ flex: 1, padding: 'var(--pad-xl)', display: 'flex', justifyContent: 'center' }}>
@@ -203,17 +244,18 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
         </header>
 
         <div style={{ display: 'flex', gap: 'var(--gap-xl)', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          {/* Board, then the insight/suggestion card with Prev/Next directly beneath it
+              — both belong to "the position currently on screen," so they stay stacked
+              together in this column instead of the card living apart in the sidebar. */}
+          <div style={{ flex: '2 1 380px', maxWidth: 560, minWidth: 260, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-md)' }}>
             <MiniBoard
               rows={rows}
               size="min(560px, 58vh, 100%)"
               arrows={arrows}
               label={`${variant.name} · ${activePly === 0 ? 'Starting position' : `after ply ${String(activePly)}`}`}
             />
-          </div>
 
-          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
-            <div style={cardStyle}>
+            <div style={{ ...cardStyle, width: '100%' }}>
               {analyzing && !error && (
                 <p style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-meta)', color: 'var(--text-muted)' }}>
                   Analyzing move {reviews.length} of {total}…
@@ -256,7 +298,9 @@ export function GameReviewScreen({ variantId, moveHistory, onBackToLobby }: Game
                 </button>
               </div>
             </div>
+          </div>
 
+          <div style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
             <div style={{ ...cardStyle, maxHeight: 360, overflowY: 'auto' }} className="scroll-hidden">
               <h2 style={{ margin: '0 0 var(--pad-sm) 0', fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 Moves

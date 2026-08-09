@@ -32,7 +32,7 @@ interface OnlineGameScreenProps {
   /** Only meaningful together with `initialRoomId` — which screen handed off this room, purely for header/back-button copy. Defaults to `'tournament'` so the existing TournamentScreen call site didn't need to change. */
   origin?: 'tournament' | 'history' | 'spectate' | undefined;
   /** Opens GameReviewScreen for this room's variant/move history — App.tsx owns the actual screen switch, this just hands over what to review. */
-  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[]) => void;
+  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[], perspective: Player) => void;
   /**
    * Fires once when a game reaches `status: 'finished'` (win, loss, or draw) — App.tsx
    * wires this to `useAuth`'s `refreshUser`, since the server updates the player's Elo
@@ -616,7 +616,7 @@ export function OnlineGameScreen({
                       <button
                         type="button"
                         onClick={() => {
-                          if (online.view) onReviewGame(online.view.variantId, online.view.moveHistory);
+                          if (online.view) onReviewGame(online.view.variantId, online.view.moveHistory, online.color ?? 'white');
                         }}
                         style={{ ...secondaryButton, width: '100%' }}
                       >

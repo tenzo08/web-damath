@@ -317,7 +317,7 @@ function GameShell<V>({
   nav: GameNavigation;
   /** The signed-in player's display name, if any — only ever used for the human's own seat in vs-AI mode (`computerPlayer` below decides which color that is, randomized per match). Friend mode leaves both seats generic: two people share one screen, and there's no single "you" to name. */
   playerName: string | null;
-  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[]) => void;
+  onReviewGame: (variantId: VariantId, moveHistory: readonly unknown[], perspective: Player) => void;
 }) {
   const gameApi = useGame(variant);
 
@@ -367,7 +367,11 @@ function GameShell<V>({
       onFlip={onFlip}
       allowManualFlip={!isFriendMode}
       nav={nav}
-      onReviewGame={() => onReviewGame(variant.id, gameApi.game.moveHistory)}
+      // Friend mode has no single "the reviewer" (two people shared this screen) --
+      // default to White, same fallback GameReviewScreen's own prop uses. Vs-computer
+      // mode has a real answer: the human's own seat, whichever color the coin flip
+      // gave them this match.
+      onReviewGame={() => onReviewGame(variant.id, gameApi.game.moveHistory, isFriendMode ? 'white' : humanPlayer)}
     />
   );
 }
@@ -455,9 +459,11 @@ function AppShell() {
   // mounts. `moveHistory` stays untyped (`readonly unknown[]`) here, same JSON-boundary
   // reasoning OnlineGameScreen's own prop already uses -- GameReviewScreen re-attaches a
   // concrete `V` once it resolves `variantId`.
-  const [reviewContext, setReviewContext] = useState<{ variantId: VariantId; moveHistory: readonly unknown[] } | null>(null);
-  function openReview(variantId: VariantId, moveHistory: readonly unknown[]) {
-    setReviewContext({ variantId, moveHistory });
+  const [reviewContext, setReviewContext] = useState<{ variantId: VariantId; moveHistory: readonly unknown[]; perspective: Player } | null>(
+    null,
+  );
+  function openReview(variantId: VariantId, moveHistory: readonly unknown[], perspective: Player) {
+    setReviewContext({ variantId, moveHistory, perspective });
     navigate('review');
   }
   // `reviewContext` is in-memory only, never derivable from the URL alone — reaching
@@ -579,7 +585,12 @@ function AppShell() {
 
       {screen === 'review' && reviewContext && (
         <Suspense fallback={<ScreenFallback />}>
-          <GameReviewScreen variantId={reviewContext.variantId} moveHistory={reviewContext.moveHistory} onBackToLobby={() => navigate('lobby')} />
+          <GameReviewScreen
+            variantId={reviewContext.variantId}
+            moveHistory={reviewContext.moveHistory}
+            perspective={reviewContext.perspective}
+            onBackToLobby={() => navigate('lobby')}
+          />
         </Suspense>
       )}
 

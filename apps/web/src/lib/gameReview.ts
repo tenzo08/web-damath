@@ -41,6 +41,26 @@ export function classifyDelta(delta: number): MoveClassification {
   return 'blunder'; // unreachable -- the last band's max is Infinity
 }
 
+/**
+ * A continuous per-ply accuracy score, 0-100, from the same `delta` (eval-unit points
+ * lost versus the engine's best) `classifyDelta` buckets into six tiers. The overall
+ * "Accuracy" figure used to just count best/excellent plies out of the total, which
+ * treats a 0.2-point inaccuracy identically to a 20-point one as long as neither
+ * crosses into "best"/"excellent" — this instead scales smoothly with how many points
+ * were actually on the table, per request ("consider the points that was being
+ * taken"). Exponential decay, not linear: losing the first point or two should barely
+ * move the number (classifyDelta's own bands treat anything under 1 as "excellent"),
+ * while a double-digit blunder should collapse it — same "tuned by feel, not a formal
+ * source" caveat as CLASSIFICATION_BANDS above. `k` is chosen so a 12-point delta
+ * (the mistake/blunder boundary) lands near 20%.
+ */
+const ACCURACY_DECAY_K = 0.134;
+
+export function plyAccuracy(delta: number): number {
+  const clamped = Math.max(0, delta);
+  return 100 * Math.exp(-ACCURACY_DECAY_K * clamped);
+}
+
 export interface PlyReview<V> {
   ply: number;
   mover: Player;

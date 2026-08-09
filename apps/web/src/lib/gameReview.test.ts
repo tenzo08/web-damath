@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame, legalMoves, WHOLE_DAMATH } from '@damath/engine';
 import type { Move, Piece } from '@damath/engine';
 import type { SearchResult } from '@damath/ai';
-import { classifyDelta, isSameMove, reviewPly } from './gameReview';
+import { classifyDelta, isSameMove, plyAccuracy, reviewPly } from './gameReview';
 
 function fakePiece(overrides: Partial<Piece<number>> = {}): Piece<number> {
   return { id: 'p1', value: 3, owner: 'black', isDama: false, ...overrides };
@@ -28,6 +28,41 @@ describe('classifyDelta', () => {
 
   it('clamps a negative delta to the "best" band rather than throwing or going out of range', () => {
     expect(classifyDelta(-5)).toBe('best');
+  });
+});
+
+describe('plyAccuracy', () => {
+  it('is 100 for a zero delta (the played move was the engine\'s best)', () => {
+    expect(plyAccuracy(0)).toBe(100);
+  });
+
+  it('decreases as delta grows, never increases', () => {
+    const deltas = [0, 0.5, 1, 3, 6, 12, 20];
+    const scores = deltas.map(plyAccuracy);
+    for (let i = 1; i < scores.length; i++) {
+      const prev = scores[i - 1];
+      const next = scores[i];
+      if (prev === undefined || next === undefined) throw new Error('unreachable: fixed-length array');
+      expect(next).toBeLessThan(prev);
+    }
+  });
+
+  it('stays within [0, 100] for a very large delta', () => {
+    const score = plyAccuracy(1000);
+    expect(score).toBeGreaterThanOrEqual(0);
+    expect(score).toBeLessThanOrEqual(100);
+  });
+
+  it('clamps a negative delta to 100, same as classifyDelta clamping it to "best"', () => {
+    expect(plyAccuracy(-5)).toBe(100);
+  });
+
+  it('weighs a bigger point swing more heavily than counting classification tiers alone would', () => {
+    // Two different "inaccuracy"-tier deltas (classifyDelta's own band is 3 < delta <= 6)
+    // used to count identically toward accuracy; plyAccuracy must still tell them apart.
+    expect(classifyDelta(3.5)).toBe('inaccuracy');
+    expect(classifyDelta(5.5)).toBe('inaccuracy');
+    expect(plyAccuracy(3.5)).toBeGreaterThan(plyAccuracy(5.5));
   });
 });
 

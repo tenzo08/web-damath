@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { GoogleIdTokenPayload, GoogleIdTokenVerifier } from '../src/auth/routes.js';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, type TestApp } from './helpers.js';
 
 const GOOGLE_CLIENT_ID = 'test-google-client-id';
 
@@ -58,11 +58,7 @@ describe('POST /auth/google', () => {
   });
 
   it('auto-links an existing email/password account the first time it signs in with a matching Google email', async () => {
-    await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
-      payload: { email: 'teacher@example.com', password: 'hunter22222', displayName: 'Ms. Cruz' },
-    });
+    await signupUser(testApp, { email: 'teacher@example.com', password: 'hunter22222', displayName: 'Ms. Cruz' });
 
     const res = await googleAuth('valid-existing-email');
     expect(res.statusCode).toBe(200);
@@ -129,12 +125,7 @@ describe('POST /auth/google/complete', () => {
   });
 
   it("rejects a normal session token used as if it were a pending token (can't be replayed)", async () => {
-    const signup = await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
-      payload: { email: 'real-account@example.com', password: 'hunter22222', displayName: 'Real Account' },
-    });
-    const { token } = signup.json() as { token: string };
+    const { token } = await signupUser(testApp, { email: 'real-account@example.com', password: 'hunter22222', displayName: 'Real Account' });
 
     const res = await app.inject({
       method: 'POST',
@@ -145,11 +136,7 @@ describe('POST /auth/google/complete', () => {
   });
 
   it('rejects a nickname already taken by someone else', async () => {
-    await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
-      payload: { email: 'other@example.com', password: 'hunter22222', displayName: 'Taken Name' },
-    });
+    await signupUser(testApp, { email: 'other@example.com', password: 'hunter22222', displayName: 'Taken Name' });
     const pendingToken = await getPendingToken();
     const res = await app.inject({
       method: 'POST',
@@ -162,11 +149,7 @@ describe('POST /auth/google/complete', () => {
   it('rejects completion if the email was claimed by someone else in the meantime', async () => {
     const pendingToken = await getPendingToken();
     // Someone else signs up with the same email directly, in the window before completion.
-    await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
-      payload: { email: 'newperson@example.com', password: 'hunter22222', displayName: 'Got There First' },
-    });
+    await signupUser(testApp, { email: 'newperson@example.com', password: 'hunter22222', displayName: 'Got There First' });
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',

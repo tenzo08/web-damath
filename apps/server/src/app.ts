@@ -5,6 +5,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
 import { registerAuthRoutes, type ActionLinkNotifier, type GoogleIdTokenVerifier } from './auth/routes.js';
+import type { SignupCodeNotifier } from './auth/email.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
@@ -55,6 +56,12 @@ export interface AppOptions {
   googleClientId?: string | undefined;
   /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers when `googleClientId` is set (auth/routes.ts). Tests inject a stub instead, so the suite never makes a real network call to a third party. */
   googleVerifier?: GoogleIdTokenVerifier | undefined;
+  /** A Resend API key (resend.com) for real signup-verification-code delivery — unset, codes are logged instead of emailed (auth/email.ts). */
+  resendApiKey?: string | undefined;
+  /** The `from` address a real signup-code email is sent from. Only matters once `resendApiKey` is set. */
+  emailFrom?: string | undefined;
+  /** Overrides how a signup verification code is delivered — defaults to real Resend delivery when `resendApiKey` is set, or a log line otherwise (auth/routes.ts). Tests inject a capturing implementation instead, same reasoning `notifyActionLink` already has. */
+  notifySignupCode?: SignupCodeNotifier | undefined;
 }
 
 declare module 'fastify' {
@@ -126,6 +133,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
       options.notifyActionLink,
       options.googleClientId,
       options.googleVerifier,
+      options.resendApiKey,
+      options.emailFrom,
+      options.notifySignupCode,
     );
     registerGameHistoryRoutes(app, options.gameStore, options.userStore);
     registerSpectateRoutes(app, options.gameStore, options.userStore);

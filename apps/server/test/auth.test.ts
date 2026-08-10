@@ -16,8 +16,25 @@ afterEach(() => testApp.cleanup());
 
 const CREDENTIALS = { email: 'Teacher@Example.com', password: 'hunter22222', displayName: 'Ms. Cruz' };
 
-async function signup(overrides: Partial<typeof CREDENTIALS> = {}) {
+/** Only the first step -- starts a pending signup (or fails validation/uniqueness) without ever redeeming a code. */
+async function signupPending(overrides: Partial<typeof CREDENTIALS> = {}) {
   return app.inject({ method: 'POST', url: '/auth/signup', payload: { ...CREDENTIALS, ...overrides } });
+}
+
+/**
+ * The full two-step flow most tests actually care about: start the pending signup,
+ * then immediately redeem the code `testApp.signupCodes` captured for it (the same way
+ * a real client would after the user types the code from their inbox). A validation or
+ * uniqueness failure at step one (400/409/429) is returned as-is, unredeemed, matching
+ * what callers of the old single-step `signup()` already expect for those cases.
+ */
+async function signup(overrides: Partial<typeof CREDENTIALS> = {}) {
+  const initial = await signupPending(overrides);
+  if (initial.statusCode !== 200) return initial;
+  const { pendingToken, email } = initial.json() as { pendingToken: string; email: string };
+  const codeEntry = testApp.signupCodes.filter((c) => c.email === email).at(-1);
+  if (!codeEntry) throw new Error('expected a signup code to have been issued');
+  return app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: codeEntry.code } });
 }
 
 describe('POST /auth/signup', () => {
@@ -29,6 +46,7 @@ describe('POST /auth/signup', () => {
     expect(body.user.email).toBe('teacher@example.com'); // normalised to lowercase
     expect(body.user.displayName).toBe('Ms. Cruz');
     expect(body.user.passwordHash).toBeUndefined();
+    expect(body.user.emailVerified).toBe(true); // just proved control of the inbox via the code
   });
 
   it('rejects a second signup with the same email (case-insensitively)', async () => {
@@ -347,25 +365,7 @@ describe('password reset', () => {
   });
 });
 
-describe('email verification', () => {
-  it('starts unverified and auto-sends a verify link at signup', async () => {
-    const res = await signup();
-    expect(res.json().user.emailVerified).toBe(false);
-    expect(testApp.actionLinks).toHaveLength(1);
-    expect(testApp.actionLinks[0]).toMatchObject({ kind: 'verify', email: 'teacher@example.com' });
-  });
-
-  it('verifies the account end to end', async () => {
-    await signup();
-    const link = testApp.actionLinks[0]?.link;
-    if (!link) throw new Error('expected a verify link to have been issued at signup');
-    const token = new URL(link).searchParams.get('verifyToken');
-
-    const verify = await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token } });
-    expect(verify.statusCode).toBe(200);
-    expect(verify.json().user.emailVerified).toBe(true);
-  });
-
+describe('email verification (legacy link flow, /auth/verify-email)', () => {
   it('rejects a garbage token', async () => {
     const res = await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token: 'not-a-real-token' } });
     expect(res.statusCode).toBe(400);
@@ -376,19 +376,105 @@ describe('email verification', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('reports alreadyVerified instead of re-sending once the account is verified', async () => {
+  it('reports alreadyVerified for an account created through the code-verified signup flow', async () => {
     const signupRes = await signup();
     const { token: authToken } = signupRes.json() as { token: string };
-    const link = testApp.actionLinks[0]?.link;
-    if (!link) throw new Error('expected a verify link to have been issued at signup');
-    const verifyToken = new URL(link).searchParams.get('verifyToken');
-    await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token: verifyToken } });
 
     const resend = await app.inject({ method: 'POST', url: '/auth/send-verification', headers: { authorization: `Bearer ${authToken}` } });
     expect(resend.statusCode).toBe(200);
     expect(resend.json()).toMatchObject({ alreadyVerified: true });
-    // Only the original signup link, no second one sent for an already-verified account.
-    expect(testApp.actionLinks).toHaveLength(1);
+    // Signup already proved the inbox via the code -- no separate link should ever be sent.
+    expect(testApp.actionLinks).toHaveLength(0);
+  });
+});
+
+describe('POST /auth/signup/verify (email verification code)', () => {
+  it("doesn't create an account just from starting a pending signup", async () => {
+    const pending = await signupPending();
+    expect(pending.statusCode).toBe(200);
+    const body = pending.json() as { pending: true; pendingToken: string; email: string };
+    expect(body.pending).toBe(true);
+    expect(typeof body.pendingToken).toBe('string');
+    expect(body.email).toBe('teacher@example.com');
+
+    // The account doesn't exist yet -- logging in with the right credentials must fail.
+    const loginAttempt = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: CREDENTIALS.email, password: CREDENTIALS.password },
+    });
+    expect(loginAttempt.statusCode).toBe(401);
+  });
+
+  it('sends exactly one 6-digit code to the signup email', async () => {
+    await signupPending();
+    expect(testApp.signupCodes).toHaveLength(1);
+    expect(testApp.signupCodes[0]?.email).toBe('teacher@example.com');
+    expect(testApp.signupCodes[0]?.code).toMatch(/^\d{6}$/);
+  });
+
+  it('rejects the wrong code without creating the account', async () => {
+    const pending = await signupPending();
+    const { pendingToken } = pending.json() as { pendingToken: string };
+    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: '000000' } });
+    expect(res.statusCode).toBe(400);
+
+    const loginAttempt = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: CREDENTIALS.email, password: CREDENTIALS.password },
+    });
+    expect(loginAttempt.statusCode).toBe(401);
+  });
+
+  it('rejects a garbage or expired pending token', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken: 'not-a-real-token', code: '123456' } });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('re-checks email/nickname uniqueness at verify time, not just at the start of signup', async () => {
+    const pending = await signupPending();
+    const { pendingToken } = pending.json() as { pendingToken: string };
+    const codeEntry = testApp.signupCodes[0];
+    if (!codeEntry) throw new Error('expected a signup code to have been issued');
+
+    // Someone else grabs the same email via a separate, faster signup before this one redeems its code.
+    await signup({ email: 'teacher@example.com', displayName: 'Someone Else' });
+
+    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: codeEntry.code } });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('creates the account with emailVerified already true', async () => {
+    const res = await signup();
+    expect(res.statusCode).toBe(201);
+    expect(res.json().user.emailVerified).toBe(true);
+  });
+});
+
+describe('POST /auth/signup/resend-code', () => {
+  it('issues a new working code for the same pending signup', async () => {
+    const pending = await signupPending();
+    const { pendingToken } = pending.json() as { pendingToken: string };
+
+    const resend = await app.inject({ method: 'POST', url: '/auth/signup/resend-code', payload: { pendingToken } });
+    expect(resend.statusCode).toBe(200);
+    const resendBody = resend.json() as { pendingToken: string; email: string };
+    expect(testApp.signupCodes).toHaveLength(2);
+
+    const newCode = testApp.signupCodes.at(-1);
+    if (!newCode) throw new Error('expected a resent signup code');
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/auth/signup/verify',
+      payload: { pendingToken: resendBody.pendingToken, code: newCode.code },
+    });
+    expect(verify.statusCode).toBe(201);
+  });
+
+  it('rejects a garbage pending token', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/signup/resend-code', payload: { pendingToken: 'not-a-real-token' } });
+    expect(res.statusCode).toBe(401);
   });
 });
 
@@ -405,10 +491,18 @@ describe('JWT expiration', () => {
   it('rejects a token once it actually expires, not just a token with no exp claim at all', async () => {
     const shortLived = makeTestApp({ jwtExpiresIn: '1s' });
     try {
-      const signupRes = await shortLived.app.inject({
+      const pendingRes = await shortLived.app.inject({
         method: 'POST',
         url: '/auth/signup',
         payload: CREDENTIALS,
+      });
+      const { pendingToken } = pendingRes.json() as { pendingToken: string };
+      const codeEntry = shortLived.signupCodes[0];
+      if (!codeEntry) throw new Error('expected a signup code to have been issued');
+      const signupRes = await shortLived.app.inject({
+        method: 'POST',
+        url: '/auth/signup/verify',
+        payload: { pendingToken, code: codeEntry.code },
       });
       const { token } = signupRes.json() as { token: string };
 

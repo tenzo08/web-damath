@@ -47,8 +47,25 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export function signup(email: string, password: string, displayName: string): Promise<AuthSession> {
-  return post<AuthSession>('/auth/signup', { email, password, displayName });
+/** Returned by POST /auth/signup -- the account doesn't exist yet. The caller must collect the code sent to `email` and pass it to `verifySignupCode` before it does. */
+export interface EmailPendingSignup {
+  pending: true;
+  pendingToken: string;
+  email: string;
+}
+
+export function signup(email: string, password: string, displayName: string): Promise<EmailPendingSignup> {
+  return post<EmailPendingSignup>('/auth/signup', { email, password, displayName });
+}
+
+/** Redeems the code sent to the pending signup's email -- this is the moment the account actually starts existing. */
+export function verifySignupCode(pendingToken: string, code: string): Promise<AuthSession> {
+  return post<AuthSession>('/auth/signup/verify', { pendingToken, code });
+}
+
+/** Issues a fresh code against the same pending signup, e.g. after the first one expired or never arrived. */
+export function resendSignupCode(pendingToken: string): Promise<EmailPendingSignup> {
+  return post<EmailPendingSignup>('/auth/signup/resend-code', { pendingToken });
 }
 
 export function login(email: string, password: string): Promise<AuthSession> {

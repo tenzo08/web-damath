@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { OAuth2Client } from 'google-auth-library';
 import { actionTokenExpiry, generateActionToken, hashActionToken, isActionTokenExpired } from './actionTokens.js';
 import { isValidAvatarEmoji, isValidAvatarImageDataUrl } from './avatars.js';
+import { defaultSignupCodeNotifier, type SignupCodeNotifier } from './email.js';
 import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
 import { PLACEMENT_GAMES_REQUIRED, STARTING_RATING } from '../rating/elo.js';
@@ -72,6 +73,23 @@ const googleCompleteBodySchema = {
   },
 } as const;
 
+const signupVerifyBodySchema = {
+  type: 'object',
+  required: ['pendingToken', 'code'],
+  additionalProperties: false,
+  properties: {
+    pendingToken: { type: 'string', minLength: 1 },
+    code: { type: 'string', minLength: 6, maxLength: 6 },
+  },
+} as const;
+
+const signupResendCodeBodySchema = {
+  type: 'object',
+  required: ['pendingToken'],
+  additionalProperties: false,
+  properties: { pendingToken: { type: 'string', minLength: 1 } },
+} as const;
+
 /**
  * The short-lived token `/auth/google` hands back when no account exists yet for this
  * Google identity -- distinct `kind` so it can never be mistaken for (or misused as) a
@@ -86,6 +104,26 @@ interface GooglePendingClaims {
   sub: string;
   kind: 'google-pending';
   email: string;
+}
+
+/**
+ * What `/auth/signup` hands back instead of creating the account outright -- the
+ * account only actually exists once `/auth/signup/verify` redeems the code sent to
+ * `email`, same "prove it before it's real" shape as `GooglePendingClaims` above.
+ * `passwordHash` rides along already hashed (never the raw password) so the pending
+ * token itself is safe to have sitting in the client for up to its 15-minute expiry.
+ */
+interface EmailSignupPendingClaims {
+  sub: string;
+  kind: 'email-signup-pending';
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  codeHash: string;
+}
+
+function generateSignupCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 export interface GoogleIdTokenPayload {
@@ -161,7 +199,20 @@ export function registerAuthRoutes(
   googleClientId?: string,
   /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers (`defaultGoogleVerifier`). Tests inject a stub instead, the same reasoning `notifyActionLink` above already has: no real network call to a third party from a test suite. */
   googleVerifier: GoogleIdTokenVerifier | null = googleClientId ? defaultGoogleVerifier(googleClientId) : null,
+  /** A Resend API key (resend.com) -- unset, signup verification codes are logged instead of emailed (see `defaultSignupCodeNotifier`), the same "no provider configured" fallback `notifyActionLink` uses. */
+  resendApiKey?: string,
+  /** The `from` address a real signup-code email is sent from. Only matters once `resendApiKey` is set. */
+  emailFrom = 'Damath <onboarding@resend.dev>',
+  /** Overrides how a signup verification code is delivered — defaults to real Resend delivery when `resendApiKey` is set, or a log line otherwise. Tests inject a capturing implementation instead, same reasoning `notifyActionLink` already has. */
+  notifySignupCode: SignupCodeNotifier = defaultSignupCodeNotifier(resendApiKey, emailFrom, app.log),
 ): void {
+  /**
+   * Doesn't create the account -- only starts it. Same reasoning `/auth/google`
+   * already has for a brand-new Google identity: the account becomes real only once
+   * proof of control (here, the emailed code) actually lands, via `/auth/signup/verify`
+   * below. `passwordHash` is computed now and carried inside the signed pending token
+   * so it never has to be re-typed or re-transmitted at the verify step.
+   */
   app.post<{ Body: { email: string; password: string; displayName: string } }>(
     '/auth/signup',
     { schema: { body: signupBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
@@ -181,29 +232,96 @@ export function registerAuthRoutes(
         return reply.code(409).send({ error: 'this nickname is already taken' });
       }
 
-      const verifyToken = generateActionToken();
+      const code = generateSignupCode();
+      const pendingClaims: EmailSignupPendingClaims = {
+        sub: email,
+        kind: 'email-signup-pending',
+        email,
+        displayName,
+        passwordHash: await hashPassword(request.body.password),
+        codeHash: hashActionToken(code),
+      };
+      const pendingToken = await app.jwt.sign(pendingClaims, { expiresIn: '15m' });
+      await notifySignupCode(email, code);
+      return reply.send({ pending: true, pendingToken, email });
+    },
+  );
+
+  /** Redeems the code `/auth/signup` (or `/auth/signup/resend-code`) sent -- this is the moment the account actually starts existing. */
+  app.post<{ Body: { pendingToken: string; code: string } }>(
+    '/auth/signup/verify',
+    { schema: { body: signupVerifyBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      let claims: EmailSignupPendingClaims;
+      try {
+        const decoded = app.jwt.verify(request.body.pendingToken);
+        if (typeof decoded !== 'object' || decoded === null || (decoded as { kind?: unknown }).kind !== 'email-signup-pending') {
+          throw new Error('not a pending-signup token');
+        }
+        claims = decoded as EmailSignupPendingClaims;
+      } catch {
+        return reply.code(401).send({ error: 'this signup session has expired — start over' });
+      }
+
+      if (hashActionToken(request.body.code) !== claims.codeHash) {
+        return reply.code(400).send({ error: 'incorrect verification code' });
+      }
+
+      // Re-checked here, not just trusted from /auth/signup's moment-in-time check --
+      // someone else could have taken the email or nickname while this code sat
+      // unredeemed, same reasoning /auth/google/complete already has.
+      if (await userStore.findByEmail(claims.email)) {
+        return reply.code(409).send({ error: 'an account with this email already exists' });
+      }
+      if (await userStore.findByDisplayName(claims.displayName)) {
+        return reply.code(409).send({ error: 'this nickname is already taken' });
+      }
+
       const user: User = {
         id: randomUUID(),
-        email,
-        passwordHash: await hashPassword(request.body.password),
-        displayName,
+        email: claims.email,
+        passwordHash: claims.passwordHash,
+        displayName: claims.displayName,
         rating: STARTING_RATING,
         avatarEmoji: null,
         avatarImage: null,
-        emailVerified: false,
+        emailVerified: true, // just proved control of the inbox by entering the code
         resetTokenHash: null,
         resetTokenExpiresAt: null,
-        verifyTokenHash: hashActionToken(verifyToken),
-        verifyTokenExpiresAt: actionTokenExpiry(),
+        verifyTokenHash: null,
+        verifyTokenExpiresAt: null,
         googleId: null,
         placementGamesPlayed: 0,
         createdAt: new Date().toISOString(),
       };
       await userStore.create(user);
-      notifyActionLink('verify', user.email, `${webOrigin}/?verifyToken=${verifyToken}`);
 
       const token = await reply.jwtSign({ sub: user.id });
       return reply.code(201).send({ token, user: publicUser(user) });
+    },
+  );
+
+  /** Issues a fresh code against the same pending signup -- for a code that expired, got mistyped too many times, or never arrived. */
+  app.post<{ Body: { pendingToken: string } }>(
+    '/auth/signup/resend-code',
+    { schema: { body: signupResendCodeBodySchema }, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      let claims: EmailSignupPendingClaims;
+      try {
+        const decoded = app.jwt.verify(request.body.pendingToken);
+        if (typeof decoded !== 'object' || decoded === null || (decoded as { kind?: unknown }).kind !== 'email-signup-pending') {
+          throw new Error('not a pending-signup token');
+        }
+        claims = decoded as EmailSignupPendingClaims;
+      } catch {
+        return reply.code(401).send({ error: 'this signup session has expired — start over' });
+      }
+
+      const code = generateSignupCode();
+      const refreshed: EmailSignupPendingClaims = { ...claims, codeHash: hashActionToken(code) };
+      const pendingToken = await app.jwt.sign(refreshed, { expiresIn: '15m' });
+      await notifySignupCode(claims.email, code);
+      return reply.send({ pending: true, pendingToken, email: claims.email });
     },
   );
 

@@ -1,13 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { GoogleSignInButton, googleSignInConfigured } from './GoogleSignInButton';
-import { forgotPassword, type GooglePendingSignup } from '../lib/authClient';
+import { forgotPassword, type EmailPendingSignup, type GooglePendingSignup } from '../lib/authClient';
 
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
-  onSignup: (email: string, password: string, displayName: string) => Promise<void>;
+  /** Starts a pending signup -- the account doesn't exist yet until the emailed code is redeemed via `onVerifySignupCode`. */
+  onSignup: (email: string, password: string, displayName: string) => Promise<EmailPendingSignup>;
+  onVerifySignupCode: (pendingToken: string, code: string) => Promise<void>;
+  onResendSignupCode: (pendingToken: string) => Promise<EmailPendingSignup>;
   /** Returns pending-signup details when this Google identity has no account yet -- `null` means it signed straight in. */
   onGoogleAuth: (idToken: string) => Promise<GooglePendingSignup | null>;
   onCompleteGoogleSignup: (pendingToken: string, displayName: string, password: string) => Promise<void>;
@@ -45,7 +48,16 @@ const linkButtonStyle = {
 
 type Mode = 'login' | 'signup' | 'forgot';
 
-export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onCompleteGoogleSignup }: LoginModalProps) {
+export function LoginModal({
+  open,
+  onClose,
+  onLogin,
+  onSignup,
+  onVerifySignupCode,
+  onResendSignupCode,
+  onGoogleAuth,
+  onCompleteGoogleSignup,
+}: LoginModalProps) {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,6 +66,9 @@ export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onC
   const [busy, setBusy] = useState(false);
   const [resetRequested, setResetRequested] = useState(false);
   const [googlePending, setGooglePending] = useState<GooglePendingSignup | null>(null);
+  const [emailPending, setEmailPending] = useState<EmailPendingSignup | null>(null);
+  const [code, setCode] = useState('');
+  const [codeResent, setCodeResent] = useState(false);
 
   function reset() {
     setMode('login');
@@ -64,6 +79,9 @@ export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onC
     setBusy(false);
     setResetRequested(false);
     setGooglePending(null);
+    setEmailPending(null);
+    setCode('');
+    setCodeResent(false);
   }
 
   function close() {
@@ -77,13 +95,45 @@ export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onC
     setBusy(true);
     try {
       if (mode === 'login') await onLogin(email, password);
-      else if (mode === 'signup') await onSignup(email, password, displayName);
-      else {
+      else if (mode === 'signup') {
+        setEmailPending(await onSignup(email, password, displayName));
+        return;
+      } else {
         await forgotPassword(email);
         setResetRequested(true);
         return;
       }
       close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitEmailCode(e: FormEvent) {
+    e.preventDefault();
+    if (!emailPending) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await onVerifySignupCode(emailPending.pendingToken, code);
+      close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    if (!emailPending) return;
+    setError(null);
+    setBusy(true);
+    try {
+      setEmailPending(await onResendSignupCode(emailPending.pendingToken));
+      setCode('');
+      setCodeResent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -127,15 +177,57 @@ export function LoginModal({ open, onClose, onLogin, onSignup, onGoogleAuth, onC
 
   const title = googlePending
     ? 'Finish creating your account'
-    : mode === 'login'
-      ? 'Sign in'
-      : mode === 'signup'
-        ? 'Create an account'
-        : 'Reset your password';
+    : emailPending
+      ? 'Check your email'
+      : mode === 'login'
+        ? 'Sign in'
+        : mode === 'signup'
+          ? 'Create an account'
+          : 'Reset your password';
 
   return (
     <Modal open={open} onClose={close} title={title} width={380}>
-      {googlePending ? (
+      {emailPending ? (
+        <form onSubmit={(e) => void submitEmailCode(e)} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+          <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+            We sent a 6-digit code to <strong>{emailPending.email}</strong>. Enter it below to finish creating your account.
+          </p>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
+            Verification code
+            <input
+              style={inputStyle}
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setCodeResent(false);
+              }}
+              required
+              minLength={6}
+              maxLength={6}
+              inputMode="numeric"
+              pattern="\d{6}"
+              autoFocus
+            />
+          </label>
+          {codeResent && (
+            <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>A new code was sent.</p>
+          )}
+          {error && (
+            <p role="alert" style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--danger)' }}>
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={busy} style={primaryButtonStyle(busy)}>
+            {busy ? 'Working…' : 'Verify and create account'}
+          </button>
+          <button type="button" onClick={() => void resendCode()} disabled={busy} style={linkButtonStyle}>
+            Resend code
+          </button>
+          <button type="button" onClick={() => setEmailPending(null)} style={linkButtonStyle}>
+            ← Back
+          </button>
+        </form>
+      ) : googlePending ? (
         <form onSubmit={(e) => void submitGoogleCompletion(e)} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
           <p style={{ margin: 0, fontSize: 'var(--fs-meta)', color: 'var(--text-secondary)' }}>
             Continuing as <strong>{googlePending.email}</strong>. Choose a nickname and a password — the password lets you sign in

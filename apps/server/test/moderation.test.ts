@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PLACEMENT_GAMES_REQUIRED } from '../src/rating/elo.js';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 
@@ -11,12 +11,7 @@ beforeEach(() => {
 afterEach(() => testApp.cleanup());
 
 async function signup(email: string, displayName: string): Promise<{ token: string; id: string }> {
-  const res = await testApp.app.inject({
-    method: 'POST',
-    url: '/auth/signup',
-    payload: { email, password: 'a-long-enough-password', displayName },
-  });
-  const body = res.json() as { token: string; user: { id: string } };
+  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName });
   return { token: body.token, id: body.user.id };
 }
 

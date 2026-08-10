@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 let baseUrl: string;
@@ -16,12 +16,8 @@ beforeEach(async () => {
 afterEach(() => testApp.cleanup());
 
 async function signupToken(email: string): Promise<string> {
-  const res = await testApp.app.inject({
-    method: 'POST',
-    url: '/auth/signup',
-    payload: { email, password: 'a-long-enough-password', displayName: email },
-  });
-  return (res.json() as { token: string }).token;
+  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
+  return body.token;
 }
 
 /** Resolves once connected *and* past the connection-time `online_count` message every `/ws` handshake now sends — callers that don't care about it (most of this file) shouldn't need to know it exists. */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as authClient from '../lib/authClient';
-import type { AuthSession, AuthUser, GooglePendingSignup } from '../lib/authClient';
+import type { AuthSession, AuthUser, EmailPendingSignup, GooglePendingSignup } from '../lib/authClient';
 
 const STORAGE_KEY = 'damath.auth.token';
 
@@ -49,12 +49,21 @@ export function useAuth() {
     setUser(session.user);
   }, []);
 
-  const signup = useCallback(
-    async (email: string, password: string, displayName: string) => {
-      applySession(await authClient.signup(email, password, displayName));
+  /** Starts a pending signup -- returns the pending-token details the caller (LoginModal) needs to collect and submit the emailed code via `verifySignupCode`. The account doesn't exist yet. */
+  const signup = useCallback((email: string, password: string, displayName: string): Promise<EmailPendingSignup> => {
+    return authClient.signup(email, password, displayName);
+  }, []);
+
+  const verifySignupCode = useCallback(
+    async (pendingToken: string, code: string) => {
+      applySession(await authClient.verifySignupCode(pendingToken, code));
     },
     [applySession],
   );
+
+  const resendSignupCode = useCallback((pendingToken: string): Promise<EmailPendingSignup> => {
+    return authClient.resendSignupCode(pendingToken);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -117,5 +126,18 @@ export function useAuth() {
     [token],
   );
 
-  return { token, user, status, signup, login, logout, refreshUser, updateProfile, googleAuth, completeGoogleSignup };
+  return {
+    token,
+    user,
+    status,
+    signup,
+    verifySignupCode,
+    resendSignupCode,
+    login,
+    logout,
+    refreshUser,
+    updateProfile,
+    googleAuth,
+    completeGoogleSignup,
+  };
 }

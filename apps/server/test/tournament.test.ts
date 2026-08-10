@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 let app: FastifyInstance;
@@ -13,12 +13,8 @@ beforeEach(() => {
 afterEach(() => testApp.cleanup());
 
 async function signupToken(email: string): Promise<string> {
-  const res = await app.inject({
-    method: 'POST',
-    url: '/auth/signup',
-    payload: { email, password: 'a-long-enough-password', displayName: email },
-  });
-  return (res.json() as { token: string }).token;
+  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
+  return body.token;
 }
 
 function auth(token: string) {

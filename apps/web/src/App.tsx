@@ -803,6 +803,8 @@ function AppShell() {
         onClose={() => setLoginOpen(false)}
         onLogin={auth.login}
         onSignup={auth.signup}
+        onVerifySignupCode={auth.verifySignupCode}
+        onResendSignupCode={auth.resendSignupCode}
         onGoogleAuth={auth.googleAuth}
         onCompleteGoogleSignup={auth.completeGoogleSignup}
       />

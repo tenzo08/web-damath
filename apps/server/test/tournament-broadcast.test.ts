@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 let baseUrl: string;
@@ -20,12 +20,7 @@ function auth(token: string) {
 }
 
 async function signupToken(email: string): Promise<{ token: string; id: string }> {
-  const res = await testApp.app.inject({
-    method: 'POST',
-    url: '/auth/signup',
-    payload: { email, password: 'a-long-enough-password', displayName: email },
-  });
-  const body = res.json() as { token: string; user: { id: string } };
+  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
   return { token: body.token, id: body.user.id };
 }
 

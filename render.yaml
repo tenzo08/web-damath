@@ -62,3 +62,12 @@ services:
       # /auth/google). Left unset here, Google sign-in just isn't offered.
       - key: GOOGLE_CLIENT_ID
         sync: false
+      # A Resend API key (resend.com) -- lets email/password signup actually deliver its
+      # verification code instead of just logging it (apps/server/src/auth/email.ts).
+      # Left unset, codes are logged instead, which is useless for real students.
+      - key: RESEND_API_KEY
+        sync: false
+      # The `from` address a real signup-code email is sent from. Only matters once
+      # RESEND_API_KEY is set above.
+      - key: EMAIL_FROM
+        sync: false

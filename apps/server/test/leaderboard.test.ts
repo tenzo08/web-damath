@@ -10,7 +10,7 @@ beforeEach(() => {
 afterEach(() => testApp.cleanup());
 
 async function signup(email: string, displayName: string): Promise<{ token: string; id: string }> {
-  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName });
+  const body = await signupUser(testApp, { email, displayName });
   return { token: body.token, id: body.user.id };
 }
 

@@ -46,12 +46,6 @@ services:
       # apps/server/src/app.ts's corsOrigin option.
       - key: CORS_ORIGIN
         sync: false
-      # The deployed web app's real origin (e.g. https://web-damath.vercel.app, same
-      # value as CORS_ORIGIN above) -- only used to build the link in a logged
-      # password-reset/verify-email message (auth/routes.ts). Left unset, those links
-      # would point at localhost:5173 in production logs, which is useless there.
-      - key: WEB_ORIGIN
-        sync: false
       - key: QUEUE_BOT_TIER
         value: steady
       - key: QUEUE_BOT_TIMEOUT_MS
@@ -62,12 +56,10 @@ services:
       # /auth/google). Left unset here, Google sign-in just isn't offered.
       - key: GOOGLE_CLIENT_ID
         sync: false
-      # A Resend API key (resend.com) -- lets email/password signup actually deliver its
-      # verification code instead of just logging it (apps/server/src/auth/email.ts).
-      # Left unset, codes are logged instead, which is useless for real students.
-      - key: RESEND_API_KEY
-        sync: false
-      # The `from` address a real signup-code email is sent from. Only matters once
-      # RESEND_API_KEY is set above.
-      - key: EMAIL_FROM
+      # A shared secret that unlocks POST /auth/dev-login (apps/server/src/auth/routes.ts)
+      # -- mints a real session for an existing account by email, bypassing Google
+      # entirely. Only set this if you actually need to seed/test accounts that can't go
+      # through a real Google sign-in (e.g. a dummy tournament bracket); left unset, the
+      # route isn't registered at all. Generate with: openssl rand -hex 32
+      - key: DEV_LOGIN_SECRET
         sync: false

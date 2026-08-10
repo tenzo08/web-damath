@@ -13,7 +13,7 @@ beforeEach(() => {
 afterEach(() => testApp.cleanup());
 
 async function signupToken(email: string): Promise<string> {
-  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
+  const body = await signupUser(testApp, { email, displayName: email });
   return body.token;
 }
 

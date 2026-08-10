@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { makeTestApp, signupUser, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, TEST_DEV_LOGIN_SECRET, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 let baseUrl: string;
@@ -16,7 +16,7 @@ beforeEach(async () => {
 afterEach(() => testApp.cleanup());
 
 async function signupToken(email: string): Promise<string> {
-  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
+  const body = await signupUser(testApp, { email, displayName: email });
   return body.token;
 }
 
@@ -283,8 +283,8 @@ describe('disconnect forfeiture', () => {
     // simulates a second open tab for the same user, seated in a second room.
     const loginRes = await testApp.app.inject({
       method: 'POST',
-      url: '/auth/login',
-      payload: { email: 'multiroom-a@example.com', password: 'a-long-enough-password' },
+      url: '/auth/dev-login',
+      payload: { email: 'multiroom-a@example.com', secret: TEST_DEV_LOGIN_SECRET },
     });
     const tokenA2 = (loginRes.json() as { token: string }).token;
 

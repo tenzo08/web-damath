@@ -4,8 +4,7 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { DifficultyTier } from '@damath/ai';
-import { registerAuthRoutes, type ActionLinkNotifier, type GoogleIdTokenVerifier } from './auth/routes.js';
-import type { SignupCodeNotifier } from './auth/email.js';
+import { registerAuthRoutes, type GoogleIdTokenVerifier } from './auth/routes.js';
 import type { UserStore } from './auth/store.js';
 import { registerGameSocket } from './game/ws.js';
 import { registerGameHistoryRoutes } from './game/history.js';
@@ -48,20 +47,12 @@ export interface AppOptions {
    * meaningful route. Pass an explicit allow-list in a real deployment.
    */
   corsOrigin?: boolean | string | string[] | undefined;
-  /** Used only to build the human-facing link in the logged password-reset/verify-email message (auth/routes.ts) — no email provider is wired up. Defaults to the local web dev server's origin. */
-  webOrigin?: string | undefined;
-  /** Overrides how a password-reset/verify-email link is delivered — defaults to a log line (auth/routes.ts). Tests inject a capturing implementation instead, since the token is one-way-hashed before storage and can't be recovered any other way. */
-  notifyActionLink?: ActionLinkNotifier | undefined;
   /** Google OAuth Client ID, used server-side to verify a Google ID token's `aud` claim (auth/routes.ts's /auth/google). Unset means Google sign-in isn't offered on this deployment — it's a per-deployer setup step (a real Google Cloud project), not something this codebase can supply a default for. */
   googleClientId?: string | undefined;
   /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers when `googleClientId` is set (auth/routes.ts). Tests inject a stub instead, so the suite never makes a real network call to a third party. */
   googleVerifier?: GoogleIdTokenVerifier | undefined;
-  /** A Resend API key (resend.com) for real signup-verification-code delivery — unset, codes are logged instead of emailed (auth/email.ts). */
-  resendApiKey?: string | undefined;
-  /** The `from` address a real signup-code email is sent from. Only matters once `resendApiKey` is set. */
-  emailFrom?: string | undefined;
-  /** Overrides how a signup verification code is delivered — defaults to real Resend delivery when `resendApiKey` is set, or a log line otherwise (auth/routes.ts). Tests inject a capturing implementation instead, same reasoning `notifyActionLink` already has. */
-  notifySignupCode?: SignupCodeNotifier | undefined;
+  /** A shared secret that unlocks POST /auth/dev-login (auth/routes.ts) -- mints a real session for an existing account by email, entirely bypassing Google. Unset means the route isn't registered at all. Never wired into the web client. */
+  devLoginSecret?: string | undefined;
 }
 
 declare module 'fastify' {
@@ -126,17 +117,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // ...)` above silently attaches no rate limiting at all — caught by a real request
   // test asserting a 429 actually shows up, not just that the config object looks right.
   app.after(() => {
-    registerAuthRoutes(
-      app,
-      options.userStore,
-      options.webOrigin ?? 'http://localhost:5173',
-      options.notifyActionLink,
-      options.googleClientId,
-      options.googleVerifier,
-      options.resendApiKey,
-      options.emailFrom,
-      options.notifySignupCode,
-    );
+    registerAuthRoutes(app, options.userStore, options.googleClientId, options.googleVerifier, options.devLoginSecret);
     registerGameHistoryRoutes(app, options.gameStore, options.userStore);
     registerSpectateRoutes(app, options.gameStore, options.userStore);
     registerModerationRoutes(app, options.moderationStore, options.userStore);

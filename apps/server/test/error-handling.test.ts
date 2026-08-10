@@ -25,6 +25,12 @@ class ThrowingUserStore implements UserStore {
   findById(): Promise<User | null> {
     return Promise.resolve(null);
   }
+  findByDisplayName(): Promise<User | null> {
+    return Promise.resolve(null);
+  }
+  findByGoogleId(): Promise<User | null> {
+    return Promise.resolve(null);
+  }
   create(): Promise<void> {
     return Promise.reject(new Error(SENSITIVE_MESSAGE));
   }
@@ -36,6 +42,9 @@ class ThrowingUserStore implements UserStore {
   }
   findByVerifyTokenHash(): Promise<User | null> {
     return Promise.resolve(null);
+  }
+  listTopByRating(): Promise<User[]> {
+    return Promise.resolve([]);
   }
 }
 
@@ -50,7 +59,7 @@ afterEach(async () => {
 });
 
 describe('unhandled errors never reach the client (security -- never leak DB/infra details)', () => {
-  it('POST /auth/signup returns a flat generic message, not the thrown error, when the store fails', async () => {
+  it('POST /auth/google/complete returns a flat generic message, not the thrown error, when the store fails', async () => {
     dir = mkdtempSync(path.join(tmpdir(), 'damath-server-error-test-'));
     app = buildApp({
       jwtSecret: 'test-secret',
@@ -60,10 +69,20 @@ describe('unhandled errors never reach the client (security -- never leak DB/inf
       moderationStore: new FileModerationStore(path.join(dir, 'reports.json'), path.join(dir, 'blocks.json')),
     });
 
+    // `@fastify/jwt` only decorates `app.jwt` once plugin registration resolves --
+    // `.inject()` awaits that internally before dispatching a request, but calling
+    // `app.jwt.sign` directly here needs the same wait made explicit.
+    await app.ready();
+
+    // A hand-signed pending token, standing in for the real one /auth/google would
+    // have handed back -- no real network call to Google needed for this test to
+    // reach the /auth/google/complete handler's own userStore.create() call.
+    const pendingToken = await app.jwt.sign({ sub: 'google-sub-1', kind: 'google-pending', email: 'teacher@example.com' }, { expiresIn: '10m' });
+
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/signup',
-      payload: { email: 'teacher@example.com', password: 'hunter22222', displayName: 'Ms. Cruz' },
+      url: '/auth/google/complete',
+      payload: { pendingToken, displayName: 'Ms. Cruz' },
     });
 
     expect(res.statusCode).toBe(500);

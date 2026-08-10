@@ -1,59 +1,9 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { OAuth2Client } from 'google-auth-library';
-import { actionTokenExpiry, generateActionToken, hashActionToken, isActionTokenExpired } from './actionTokens.js';
 import { isValidAvatarEmoji, isValidAvatarImageDataUrl } from './avatars.js';
-import { defaultSignupCodeNotifier, type SignupCodeNotifier } from './email.js';
-import { hashPassword, verifyPassword } from './password.js';
 import type { User, UserStore } from './store.js';
 import { PLACEMENT_GAMES_REQUIRED, STARTING_RATING } from '../rating/elo.js';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const signupBodySchema = {
-  type: 'object',
-  required: ['email', 'password', 'displayName'],
-  additionalProperties: false,
-  properties: {
-    email: { type: 'string', minLength: 3, maxLength: 254 },
-    password: { type: 'string', minLength: 8, maxLength: 200 },
-    displayName: { type: 'string', minLength: 1, maxLength: 60 },
-  },
-} as const;
-
-const loginBodySchema = {
-  type: 'object',
-  required: ['email', 'password'],
-  additionalProperties: false,
-  properties: {
-    email: { type: 'string', minLength: 3, maxLength: 254 },
-    password: { type: 'string', minLength: 1, maxLength: 200 },
-  },
-} as const;
-
-const forgotPasswordBodySchema = {
-  type: 'object',
-  required: ['email'],
-  additionalProperties: false,
-  properties: { email: { type: 'string', minLength: 3, maxLength: 254 } },
-} as const;
-
-const resetPasswordBodySchema = {
-  type: 'object',
-  required: ['token', 'newPassword'],
-  additionalProperties: false,
-  properties: {
-    token: { type: 'string', minLength: 1 },
-    newPassword: { type: 'string', minLength: 8, maxLength: 200 },
-  },
-} as const;
-
-const verifyEmailBodySchema = {
-  type: 'object',
-  required: ['token'],
-  additionalProperties: false,
-  properties: { token: { type: 'string', minLength: 1 } },
-} as const;
 
 const googleAuthBodySchema = {
   type: 'object',
@@ -64,30 +14,22 @@ const googleAuthBodySchema = {
 
 const googleCompleteBodySchema = {
   type: 'object',
-  required: ['pendingToken', 'displayName', 'password'],
+  required: ['pendingToken', 'displayName'],
   additionalProperties: false,
   properties: {
     pendingToken: { type: 'string', minLength: 1 },
     displayName: { type: 'string', minLength: 1, maxLength: 60 },
-    password: { type: 'string', minLength: 8, maxLength: 200 },
   },
 } as const;
 
-const signupVerifyBodySchema = {
+const devLoginBodySchema = {
   type: 'object',
-  required: ['pendingToken', 'code'],
+  required: ['email', 'secret'],
   additionalProperties: false,
   properties: {
-    pendingToken: { type: 'string', minLength: 1 },
-    code: { type: 'string', minLength: 6, maxLength: 6 },
+    email: { type: 'string', minLength: 3, maxLength: 254 },
+    secret: { type: 'string', minLength: 1, maxLength: 200 },
   },
-} as const;
-
-const signupResendCodeBodySchema = {
-  type: 'object',
-  required: ['pendingToken'],
-  additionalProperties: false,
-  properties: { pendingToken: { type: 'string', minLength: 1 } },
 } as const;
 
 /**
@@ -104,26 +46,6 @@ interface GooglePendingClaims {
   sub: string;
   kind: 'google-pending';
   email: string;
-}
-
-/**
- * What `/auth/signup` hands back instead of creating the account outright -- the
- * account only actually exists once `/auth/signup/verify` redeems the code sent to
- * `email`, same "prove it before it's real" shape as `GooglePendingClaims` above.
- * `passwordHash` rides along already hashed (never the raw password) so the pending
- * token itself is safe to have sitting in the client for up to its 15-minute expiry.
- */
-interface EmailSignupPendingClaims {
-  sub: string;
-  kind: 'email-signup-pending';
-  email: string;
-  displayName: string;
-  passwordHash: string;
-  codeHash: string;
-}
-
-function generateSignupCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 export interface GoogleIdTokenPayload {
@@ -178,161 +100,46 @@ const updateProfileBodySchema = {
   },
 } as const;
 
-/** Fires with the link a real email would have delivered — swapping in a real provider later is just replacing this one call site. Defaults to a structured log line (`app.log.info`); tests inject a capturing implementation instead, since there's no other way to observe a token that's deliberately one-way-hashed before storage. */
-export type ActionLinkNotifier = (kind: 'reset' | 'verify', email: string, link: string) => void;
+/** Constant-time string comparison for `devLoginSecret` -- it's a real credential (whoever has it can log into any account by email), so it gets the same non-short-circuiting comparison a password would, not a plain `===`. */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
 
 /**
- * `webOrigin` is only used to build the human-facing link handed to `notifyActionLink`
- * — there's no email provider wired up (a deliberate scope decision: this is a
- * classroom app with teacher-created accounts, and a real provider needs an
- * account/API key decision only the deployer can make). The token flow itself is
- * real: a genuine random token, hashed before storage, with a real expiry — only the
- * transport is a log line instead of an actual inbox.
+ * Google Sign-In is the only way into this app -- a self-serve email+password form
+ * lets anyone claim to be any address, and even an emailed verification code only
+ * proves control of an inbox, not a real identity. Google's own account (with its own
+ * fraud detection, 2FA options, etc.) is the actual identity check. Every account here
+ * either comes from `/auth/google`+`/auth/google/complete`, or (test/local use only)
+ * `/auth/dev-login`.
  */
 export function registerAuthRoutes(
   app: FastifyInstance,
   userStore: UserStore,
-  webOrigin: string,
-  notifyActionLink: ActionLinkNotifier = (kind, email, link) =>
-    app.log.info({ email, link }, `${kind === 'reset' ? 'password reset' : 'verify-email'} link (no email provider configured — logged instead)`),
   /** Unset means Google sign-in is simply not offered on this deployment (a Client ID is a per-deployer setup step, not something this codebase can invent) -- `/auth/google` returns a clear 501 rather than crashing. */
   googleClientId?: string,
-  /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers (`defaultGoogleVerifier`). Tests inject a stub instead, the same reasoning `notifyActionLink` above already has: no real network call to a third party from a test suite. */
+  /** Overrides how a Google ID token gets verified — defaults to a real call to Google's own servers (`defaultGoogleVerifier`). Tests inject a stub instead, so the suite never makes a real network call to a third party. */
   googleVerifier: GoogleIdTokenVerifier | null = googleClientId ? defaultGoogleVerifier(googleClientId) : null,
-  /** A Resend API key (resend.com) -- unset, signup verification codes are logged instead of emailed (see `defaultSignupCodeNotifier`), the same "no provider configured" fallback `notifyActionLink` uses. */
-  resendApiKey?: string,
-  /** The `from` address a real signup-code email is sent from. Only matters once `resendApiKey` is set. */
-  emailFrom = 'Damath <onboarding@resend.dev>',
-  /** Overrides how a signup verification code is delivered — defaults to real Resend delivery when `resendApiKey` is set, or a log line otherwise. Tests inject a capturing implementation instead, same reasoning `notifyActionLink` already has. */
-  notifySignupCode: SignupCodeNotifier = defaultSignupCodeNotifier(resendApiKey, emailFrom, app.log),
-): void {
   /**
-   * Doesn't create the account -- only starts it. Same reasoning `/auth/google`
-   * already has for a brand-new Google identity: the account becomes real only once
-   * proof of control (here, the emailed code) actually lands, via `/auth/signup/verify`
-   * below. `passwordHash` is computed now and carried inside the signed pending token
-   * so it never has to be re-typed or re-transmitted at the verify step.
+   * A shared secret that unlocks `POST /auth/dev-login`, which mints a real session
+   * for any existing account by email -- entirely bypassing Google, for seeding and
+   * testing accounts that can't reasonably go through a real Google sign-in (e.g. a
+   * dummy tournament bracket). Unset (the default) means the route isn't even
+   * registered, so there's zero surface for it in a deployment that never opts in.
+   * Never called from the web client -- deliberately not wired into any UI.
    */
-  app.post<{ Body: { email: string; password: string; displayName: string } }>(
-    '/auth/signup',
-    { schema: { body: signupBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      const email = request.body.email.trim().toLowerCase();
-      const displayName = request.body.displayName.trim();
-      if (!EMAIL_RE.test(email)) {
-        return reply.code(400).send({ error: 'invalid email address' });
-      }
-      if (displayName.length === 0) {
-        return reply.code(400).send({ error: 'display name is required' });
-      }
-      if (await userStore.findByEmail(email)) {
-        return reply.code(409).send({ error: 'an account with this email already exists' });
-      }
-      if (await userStore.findByDisplayName(displayName)) {
-        return reply.code(409).send({ error: 'this nickname is already taken' });
-      }
-
-      const code = generateSignupCode();
-      const pendingClaims: EmailSignupPendingClaims = {
-        sub: email,
-        kind: 'email-signup-pending',
-        email,
-        displayName,
-        passwordHash: await hashPassword(request.body.password),
-        codeHash: hashActionToken(code),
-      };
-      const pendingToken = await app.jwt.sign(pendingClaims, { expiresIn: '15m' });
-      await notifySignupCode(email, code);
-      return reply.send({ pending: true, pendingToken, email });
-    },
-  );
-
-  /** Redeems the code `/auth/signup` (or `/auth/signup/resend-code`) sent -- this is the moment the account actually starts existing. */
-  app.post<{ Body: { pendingToken: string; code: string } }>(
-    '/auth/signup/verify',
-    { schema: { body: signupVerifyBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      let claims: EmailSignupPendingClaims;
-      try {
-        const decoded = app.jwt.verify(request.body.pendingToken);
-        if (typeof decoded !== 'object' || decoded === null || (decoded as { kind?: unknown }).kind !== 'email-signup-pending') {
-          throw new Error('not a pending-signup token');
-        }
-        claims = decoded as EmailSignupPendingClaims;
-      } catch {
-        return reply.code(401).send({ error: 'this signup session has expired — start over' });
-      }
-
-      if (hashActionToken(request.body.code) !== claims.codeHash) {
-        return reply.code(400).send({ error: 'incorrect verification code' });
-      }
-
-      // Re-checked here, not just trusted from /auth/signup's moment-in-time check --
-      // someone else could have taken the email or nickname while this code sat
-      // unredeemed, same reasoning /auth/google/complete already has.
-      if (await userStore.findByEmail(claims.email)) {
-        return reply.code(409).send({ error: 'an account with this email already exists' });
-      }
-      if (await userStore.findByDisplayName(claims.displayName)) {
-        return reply.code(409).send({ error: 'this nickname is already taken' });
-      }
-
-      const user: User = {
-        id: randomUUID(),
-        email: claims.email,
-        passwordHash: claims.passwordHash,
-        displayName: claims.displayName,
-        rating: STARTING_RATING,
-        avatarEmoji: null,
-        avatarImage: null,
-        emailVerified: true, // just proved control of the inbox by entering the code
-        resetTokenHash: null,
-        resetTokenExpiresAt: null,
-        verifyTokenHash: null,
-        verifyTokenExpiresAt: null,
-        googleId: null,
-        placementGamesPlayed: 0,
-        createdAt: new Date().toISOString(),
-      };
-      await userStore.create(user);
-
-      const token = await reply.jwtSign({ sub: user.id });
-      return reply.code(201).send({ token, user: publicUser(user) });
-    },
-  );
-
-  /** Issues a fresh code against the same pending signup -- for a code that expired, got mistyped too many times, or never arrived. */
-  app.post<{ Body: { pendingToken: string } }>(
-    '/auth/signup/resend-code',
-    { schema: { body: signupResendCodeBodySchema }, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      let claims: EmailSignupPendingClaims;
-      try {
-        const decoded = app.jwt.verify(request.body.pendingToken);
-        if (typeof decoded !== 'object' || decoded === null || (decoded as { kind?: unknown }).kind !== 'email-signup-pending') {
-          throw new Error('not a pending-signup token');
-        }
-        claims = decoded as EmailSignupPendingClaims;
-      } catch {
-        return reply.code(401).send({ error: 'this signup session has expired — start over' });
-      }
-
-      const code = generateSignupCode();
-      const refreshed: EmailSignupPendingClaims = { ...claims, codeHash: hashActionToken(code) };
-      const pendingToken = await app.jwt.sign(refreshed, { expiresIn: '15m' });
-      await notifySignupCode(claims.email, code);
-      return reply.send({ pending: true, pendingToken, email: claims.email });
-    },
-  );
-
+  devLoginSecret?: string,
+): void {
   /**
    * Verifies a Google Identity Services ID token server-side (never trusts the client's
    * own claim of who it is) and either logs the matching account straight in, links an
-   * existing email/password account the first time it sees that email via Google (safe:
-   * Google's own `email_verified` claim already proves ownership), or -- brand new email
-   * -- hands back a short-lived pending token instead of creating an account outright,
-   * so the account only actually exists once the person has chosen a real nickname and
-   * password (/auth/google/complete), same as ordinary signup always has.
+   * existing account the first time it sees that email via Google (safe: Google's own
+   * `email_verified` claim already proves ownership), or -- brand new email -- hands
+   * back a short-lived pending token instead of creating an account outright, so the
+   * account only actually exists once the person has chosen a nickname
+   * (/auth/google/complete).
    */
   app.post<{ Body: { idToken: string } }>(
     '/auth/google',
@@ -370,8 +177,15 @@ export function registerAuthRoutes(
     },
   );
 
-  /** Finishes a brand-new Google signup: the pending token already proves the Google identity and its verified email, so this only needs to collect (and validate the uniqueness of) a nickname, plus a real password -- Google is a second way to prove identity, not a replacement for having one, per the same reasoning `store.ts`'s `User.googleId` doc comment gives. */
-  app.post<{ Body: { pendingToken: string; displayName: string; password: string } }>(
+  /**
+   * Finishes a brand-new Google signup: the pending token already proves the Google
+   * identity and its verified email, so this only needs to collect (and validate the
+   * uniqueness of) a nickname. `passwordHash` still gets a real random value -- the
+   * `User` model's column is required -- but it's never checked against anything
+   * (there's no password-login route), so it's never derived from anything a person
+   * typed or could be asked to re-enter.
+   */
+  app.post<{ Body: { pendingToken: string; displayName: string } }>(
     '/auth/google/complete',
     { schema: { body: googleCompleteBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
@@ -407,12 +221,12 @@ export function registerAuthRoutes(
       const user: User = {
         id: randomUUID(),
         email: claims.email,
-        passwordHash: await hashPassword(request.body.password),
+        passwordHash: randomBytes(32).toString('hex'),
         displayName,
         rating: STARTING_RATING,
         avatarEmoji: null,
         avatarImage: null,
-        emailVerified: true, // Google already verified this email -- no separate verify-email step needed.
+        emailVerified: true, // Google already verified this email.
         resetTokenHash: null,
         resetTokenExpiresAt: null,
         verifyTokenHash: null,
@@ -425,23 +239,6 @@ export function registerAuthRoutes(
 
       const token = await reply.jwtSign({ sub: user.id });
       return reply.code(201).send({ token, user: publicUser(user) });
-    },
-  );
-
-  app.post<{ Body: { email: string; password: string } }>(
-    '/auth/login',
-    { schema: { body: loginBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      const email = request.body.email.trim().toLowerCase();
-      const user = await userStore.findByEmail(email);
-      // Same generic message whether the email is unknown or the password is wrong —
-      // distinguishing the two would let a caller enumerate registered emails.
-      const invalid = () => reply.code(401).send({ error: 'invalid email or password' });
-      if (!user) return invalid();
-      if (!(await verifyPassword(request.body.password, user.passwordHash))) return invalid();
-
-      const token = await reply.jwtSign({ sub: user.id });
-      return reply.send({ token, user: publicUser(user) });
     },
   );
 
@@ -497,68 +294,20 @@ export function registerAuthRoutes(
     },
   );
 
-  app.post<{ Body: { email: string } }>(
-    '/auth/forgot-password',
-    { schema: { body: forgotPasswordBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      const email = request.body.email.trim().toLowerCase();
-      const user = await userStore.findByEmail(email);
-      // Always 200 whether or not the account exists — a different response would let
-      // a caller enumerate registered emails, same reasoning as /auth/login's message.
-      if (user) {
-        const resetToken = generateActionToken();
-        await userStore.update({ ...user, resetTokenHash: hashActionToken(resetToken), resetTokenExpiresAt: actionTokenExpiry() });
-        notifyActionLink('reset', user.email, `${webOrigin}/?resetToken=${resetToken}`);
-      }
-      return reply.send({ ok: true });
-    },
-  );
-
-  app.post<{ Body: { token: string; newPassword: string } }>(
-    '/auth/reset-password',
-    { schema: { body: resetPasswordBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      const user = await userStore.findByResetTokenHash(hashActionToken(request.body.token));
-      if (!user || isActionTokenExpired(user.resetTokenExpiresAt)) {
-        return reply.code(400).send({ error: 'this reset link is invalid or has expired' });
-      }
-      await userStore.update({
-        ...user,
-        passwordHash: await hashPassword(request.body.newPassword),
-        resetTokenHash: null,
-        resetTokenExpiresAt: null,
-      });
-      return reply.send({ ok: true });
-    },
-  );
-
-  app.post(
-    '/auth/send-verification',
-    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      try {
-        await request.jwtVerify();
-      } catch {
-        return reply.code(401).send({ error: 'unauthorized' });
-      }
-      const user = await userStore.findById(request.user.sub);
-      if (!user) return reply.code(401).send({ error: 'unauthorized' });
-      if (user.emailVerified) return reply.send({ ok: true, alreadyVerified: true });
-
-      const verifyToken = generateActionToken();
-      await userStore.update({ ...user, verifyTokenHash: hashActionToken(verifyToken), verifyTokenExpiresAt: actionTokenExpiry() });
-      notifyActionLink('verify', user.email, `${webOrigin}/?verifyToken=${verifyToken}`);
-      return reply.send({ ok: true });
-    },
-  );
-
-  app.post<{ Body: { token: string } }>('/auth/verify-email', { schema: { body: verifyEmailBodySchema } }, async (request, reply) => {
-    const user = await userStore.findByVerifyTokenHash(hashActionToken(request.body.token));
-    if (!user || isActionTokenExpired(user.verifyTokenExpiresAt)) {
-      return reply.code(400).send({ error: 'this verification link is invalid or has expired' });
-    }
-    const updated: User = { ...user, emailVerified: true, verifyTokenHash: null, verifyTokenExpiresAt: null };
-    await userStore.update(updated);
-    return reply.send({ user: publicUser(updated) });
-  });
+  if (devLoginSecret) {
+    /** Test/local-only: mints a real session for an existing account by email, given the shared secret. Never wired into the web client. */
+    app.post<{ Body: { email: string; secret: string } }>(
+      '/auth/dev-login',
+      { schema: { body: devLoginBodySchema }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+      async (request, reply) => {
+        if (!safeEqual(request.body.secret, devLoginSecret)) {
+          return reply.code(401).send({ error: 'unauthorized' });
+        }
+        const user = await userStore.findByEmail(request.body.email.trim().toLowerCase());
+        if (!user) return reply.code(404).send({ error: 'no account with that email' });
+        const token = await reply.jwtSign({ sub: user.id });
+        return reply.send({ token, user: publicUser(user) });
+      },
+    );
+  }
 }

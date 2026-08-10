@@ -70,10 +70,8 @@ const app = buildApp({
   disconnectForfeitMs: process.env.DISCONNECT_FORFEIT_MS ? Number(process.env.DISCONNECT_FORFEIT_MS) : undefined,
   corsOrigin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : undefined,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN,
-  webOrigin: process.env.WEB_ORIGIN,
   googleClientId: process.env.GOOGLE_CLIENT_ID,
-  resendApiKey: process.env.RESEND_API_KEY,
-  emailFrom: process.env.EMAIL_FROM,
+  devLoginSecret: process.env.DEV_LOGIN_SECRET,
 });
 const port = Number(process.env.PORT ?? 3001);
 

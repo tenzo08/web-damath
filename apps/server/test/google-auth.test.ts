@@ -57,8 +57,8 @@ describe('POST /auth/google', () => {
     expect(typeof body.pendingToken).toBe('string');
   });
 
-  it('auto-links an existing email/password account the first time it signs in with a matching Google email', async () => {
-    await signupUser(testApp, { email: 'teacher@example.com', password: 'hunter22222', displayName: 'Ms. Cruz' });
+  it('auto-links an existing (non-Google-linked) account the first time it signs in with a matching Google email', async () => {
+    await signupUser(testApp, { email: 'teacher@example.com', displayName: 'Ms. Cruz' });
 
     const res = await googleAuth('valid-existing-email');
     expect(res.statusCode).toBe(200);
@@ -75,7 +75,7 @@ describe('POST /auth/google', () => {
     const completed = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken, displayName: 'Newbie', password: 'hunter22222' },
+      payload: { pendingToken, displayName: 'Newbie' },
     });
     const firstUserId = (completed.json() as { user: { id: string } }).user.id;
 
@@ -92,12 +92,12 @@ describe('POST /auth/google/complete', () => {
     return (res.json() as { pendingToken: string }).pendingToken;
   }
 
-  it('creates a real account with a working password, email pre-verified via Google', async () => {
+  it('creates a real account, email pre-verified via Google', async () => {
     const pendingToken = await getPendingToken();
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken, displayName: 'Newbie', password: 'hunter22222' },
+      payload: { pendingToken, displayName: 'Newbie' },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json() as { token: string; user: { displayName: string; email: string; emailVerified: boolean } };
@@ -106,42 +106,38 @@ describe('POST /auth/google/complete', () => {
     expect(body.user.email).toBe('newperson@example.com');
     expect(body.user.emailVerified).toBe(true);
 
-    // The password really was set — a normal email/password login works too, not just Google.
-    const login = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
-      payload: { email: 'newperson@example.com', password: 'hunter22222' },
-    });
-    expect(login.statusCode).toBe(200);
+    // The token really works -- a follow-up authenticated request succeeds.
+    const me = await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${body.token}` } });
+    expect(me.statusCode).toBe(200);
   });
 
   it('rejects a garbage or expired pending token', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken: 'not-a-real-token', displayName: 'Newbie', password: 'hunter22222' },
+      payload: { pendingToken: 'not-a-real-token', displayName: 'Newbie' },
     });
     expect(res.statusCode).toBe(401);
   });
 
   it("rejects a normal session token used as if it were a pending token (can't be replayed)", async () => {
-    const { token } = await signupUser(testApp, { email: 'real-account@example.com', password: 'hunter22222', displayName: 'Real Account' });
+    const { token } = await signupUser(testApp, { email: 'real-account@example.com', displayName: 'Real Account' });
 
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken: token, displayName: 'Hijacked', password: 'hunter22222' },
+      payload: { pendingToken: token, displayName: 'Hijacked' },
     });
     expect(res.statusCode).toBe(401);
   });
 
   it('rejects a nickname already taken by someone else', async () => {
-    await signupUser(testApp, { email: 'other@example.com', password: 'hunter22222', displayName: 'Taken Name' });
+    await signupUser(testApp, { email: 'other@example.com', displayName: 'Taken Name' });
     const pendingToken = await getPendingToken();
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken, displayName: 'taken name', password: 'hunter22222' },
+      payload: { pendingToken, displayName: 'taken name' },
     });
     expect(res.statusCode).toBe(409);
   });
@@ -149,11 +145,11 @@ describe('POST /auth/google/complete', () => {
   it('rejects completion if the email was claimed by someone else in the meantime', async () => {
     const pendingToken = await getPendingToken();
     // Someone else signs up with the same email directly, in the window before completion.
-    await signupUser(testApp, { email: 'newperson@example.com', password: 'hunter22222', displayName: 'Got There First' });
+    await signupUser(testApp, { email: 'newperson@example.com', displayName: 'Got There First' });
     const res = await app.inject({
       method: 'POST',
       url: '/auth/google/complete',
-      payload: { pendingToken, displayName: 'Newbie', password: 'hunter22222' },
+      payload: { pendingToken, displayName: 'Newbie' },
     });
     expect(res.statusCode).toBe(409);
   });

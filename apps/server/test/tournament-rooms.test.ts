@@ -20,7 +20,7 @@ function auth(token: string) {
 }
 
 async function signupToken(email: string): Promise<{ token: string; id: string }> {
-  const body = await signupUser(testApp, { email, password: 'a-long-enough-password', displayName: email });
+  const body = await signupUser(testApp, { email, displayName: email });
   return { token: body.token, id: body.user.id };
 }
 

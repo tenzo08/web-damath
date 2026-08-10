@@ -1,8 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, type TestApp } from './helpers.js';
+import { makeTestApp, signupUser, TEST_DEV_LOGIN_SECRET, type TestApp } from './helpers.js';
 
 let testApp: TestApp;
 let app: FastifyInstance;
@@ -14,94 +12,59 @@ beforeEach(() => {
 
 afterEach(() => testApp.cleanup());
 
-const CREDENTIALS = { email: 'Teacher@Example.com', password: 'hunter22222', displayName: 'Ms. Cruz' };
+const CREDENTIALS = { email: 'teacher@example.com', displayName: 'Ms. Cruz' };
 
-/** Only the first step -- starts a pending signup (or fails validation/uniqueness) without ever redeeming a code. */
-async function signupPending(overrides: Partial<typeof CREDENTIALS> = {}) {
-  return app.inject({ method: 'POST', url: '/auth/signup', payload: { ...CREDENTIALS, ...overrides } });
+async function signupAndGetToken(overrides: Partial<typeof CREDENTIALS> = {}): Promise<string> {
+  const { token } = await signupUser(testApp, { ...CREDENTIALS, ...overrides });
+  return token;
 }
 
-/**
- * The full two-step flow most tests actually care about: start the pending signup,
- * then immediately redeem the code `testApp.signupCodes` captured for it (the same way
- * a real client would after the user types the code from their inbox). A validation or
- * uniqueness failure at step one (400/409/429) is returned as-is, unredeemed, matching
- * what callers of the old single-step `signup()` already expect for those cases.
- */
-async function signup(overrides: Partial<typeof CREDENTIALS> = {}) {
-  const initial = await signupPending(overrides);
-  if (initial.statusCode !== 200) return initial;
-  const { pendingToken, email } = initial.json() as { pendingToken: string; email: string };
-  const codeEntry = testApp.signupCodes.filter((c) => c.email === email).at(-1);
-  if (!codeEntry) throw new Error('expected a signup code to have been issued');
-  return app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: codeEntry.code } });
-}
-
-describe('POST /auth/signup', () => {
-  it('creates an account and returns a token plus the public user, never the password hash', async () => {
-    const res = await signup();
-    expect(res.statusCode).toBe(201);
-    const body = res.json() as { token: string; user: Record<string, unknown> };
-    expect(typeof body.token).toBe('string');
-    expect(body.user.email).toBe('teacher@example.com'); // normalised to lowercase
-    expect(body.user.displayName).toBe('Ms. Cruz');
-    expect(body.user.passwordHash).toBeUndefined();
-    expect(body.user.emailVerified).toBe(true); // just proved control of the inbox via the code
-  });
-
-  it('rejects a second signup with the same email (case-insensitively)', async () => {
-    await signup();
-    const res = await signup({ email: 'teacher@example.com' });
-    expect(res.statusCode).toBe(409);
-  });
-
-  it('rejects a second signup with the same nickname, case-insensitively', async () => {
-    await signup();
-    const res = await signup({ email: 'someone-else@example.com', displayName: 'ms. cruz' });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error).toMatch(/nickname/i);
-  });
-
-  it('rejects a malformed email', async () => {
-    const res = await signup({ email: 'not-an-email' });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('rejects a password shorter than 8 characters', async () => {
-    const res = await signup({ password: 'short' });
-    expect(res.statusCode).toBe(400);
-  });
-});
-
-describe('POST /auth/login', () => {
-  it('succeeds with the correct email and password and returns a usable token', async () => {
-    await signup();
+describe('POST /auth/dev-login', () => {
+  it('mints a working session token for an existing account, given the right secret', async () => {
+    await signupUser(testApp, CREDENTIALS);
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
-      payload: { email: CREDENTIALS.email, password: CREDENTIALS.password },
+      url: '/auth/dev-login',
+      payload: { email: CREDENTIALS.email, secret: TEST_DEV_LOGIN_SECRET },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().token).toBeTypeOf('string');
+    const body = res.json() as { token: string; user: { email: string; passwordHash?: string } };
+    expect(body.token).toBeTypeOf('string');
+    expect(body.user.email).toBe('teacher@example.com');
+    expect(body.user.passwordHash).toBeUndefined();
   });
 
-  it('fails with the wrong password', async () => {
-    await signup();
+  it('rejects the wrong secret', async () => {
+    await signupUser(testApp, CREDENTIALS);
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
-      payload: { email: CREDENTIALS.email, password: 'wrong-password' },
+      url: '/auth/dev-login',
+      payload: { email: CREDENTIALS.email, secret: 'wrong-secret' },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it('fails for an email that was never registered', async () => {
+  it('404s for an email with no account', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/login',
-      payload: { email: 'nobody@example.com', password: CREDENTIALS.password },
+      url: '/auth/dev-login',
+      payload: { email: 'nobody@example.com', secret: TEST_DEV_LOGIN_SECRET },
     });
-    expect(res.statusCode).toBe(401);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("isn't registered at all when no devLoginSecret is configured", async () => {
+    const noBypass = makeTestApp({ devLoginSecret: undefined });
+    try {
+      const res = await noBypass.app.inject({
+        method: 'POST',
+        url: '/auth/dev-login',
+        payload: { email: 'anyone@example.com', secret: 'whatever' },
+      });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await noBypass.cleanup();
+    }
   });
 });
 
@@ -116,27 +79,21 @@ describe('GET /auth/me', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('returns the authenticated user for a token issued by signup', async () => {
-    const signupRes = await signup();
-    const { token } = signupRes.json() as { token: string };
-
+  it('returns the authenticated user for a token issued at signup', async () => {
+    const token = await signupAndGetToken();
     const res = await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
     expect(res.statusCode).toBe(200);
     expect(res.json().user.email).toBe('teacher@example.com');
   });
 
   it('starts with no avatar — the default initial-letter circle, not a random pick', async () => {
-    const signupRes = await signup();
-    expect(signupRes.json().user.avatarEmoji).toBeNull();
+    const token = await signupAndGetToken();
+    const res = await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+    expect(res.json().user.avatarEmoji).toBeNull();
   });
 });
 
 describe('PATCH /auth/me', () => {
-  async function signupAndGetToken(): Promise<string> {
-    const res = await signup();
-    return (res.json() as { token: string }).token;
-  }
-
   it('rejects a request with no bearer token', async () => {
     const res = await app.inject({ method: 'PATCH', url: '/auth/me', payload: { displayName: 'New Name' } });
     expect(res.statusCode).toBe(401);
@@ -261,7 +218,7 @@ describe('PATCH /auth/me', () => {
   });
 
   it('rejects changing to a nickname another account already has, case-insensitively', async () => {
-    await signup({ email: 'other@example.com', displayName: 'Taken Name' });
+    await signupUser(testApp, { email: 'other@example.com', displayName: 'Taken Name' });
     const token = await signupAndGetToken();
     const res = await app.inject({
       method: 'PATCH',
@@ -300,188 +257,9 @@ describe('PATCH /auth/me', () => {
   });
 });
 
-describe('password reset', () => {
-  it('logs a reset link for a real email, and returns the same generic response for an unknown one (no account enumeration)', async () => {
-    await signup();
-    const known = await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
-    const unknown = await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: 'nobody@example.com' } });
-    expect(known.statusCode).toBe(200);
-    expect(unknown.statusCode).toBe(200);
-    expect(known.json()).toEqual(unknown.json());
-
-    // Signup itself already issued a 'verify' link -- only one 'reset' link should
-    // have been added on top of that.
-    const resetLinks = testApp.actionLinks.filter((l) => l.kind === 'reset');
-    expect(resetLinks).toHaveLength(1);
-    expect(resetLinks[0]).toMatchObject({ kind: 'reset', email: 'teacher@example.com' });
-  });
-
-  it('resets the password end to end: old password stops working, new one works', async () => {
-    await signup();
-    await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
-    const link = testApp.actionLinks.find((l) => l.kind === 'reset')?.link;
-    if (!link) throw new Error('expected a reset link to have been issued');
-    const token = new URL(link).searchParams.get('resetToken');
-
-    const reset = await app.inject({
-      method: 'POST',
-      url: '/auth/reset-password',
-      payload: { token, newPassword: 'a-brand-new-password' },
-    });
-    expect(reset.statusCode).toBe(200);
-
-    const oldLogin = await app.inject({ method: 'POST', url: '/auth/login', payload: { email: CREDENTIALS.email, password: CREDENTIALS.password } });
-    expect(oldLogin.statusCode).toBe(401);
-
-    const newLogin = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
-      payload: { email: CREDENTIALS.email, password: 'a-brand-new-password' },
-    });
-    expect(newLogin.statusCode).toBe(200);
-  });
-
-  it('rejects a garbage or already-used token', async () => {
-    const res = await app.inject({ method: 'POST', url: '/auth/reset-password', payload: { token: 'not-a-real-token', newPassword: 'whatever123' } });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('rejects an expired token', async () => {
-    await signup();
-    await app.inject({ method: 'POST', url: '/auth/forgot-password', payload: { email: CREDENTIALS.email } });
-    const link = testApp.actionLinks.find((l) => l.kind === 'reset')?.link;
-    if (!link) throw new Error('expected a reset link to have been issued');
-    const token = new URL(link).searchParams.get('resetToken');
-
-    // Directly back-date the stored expiry -- the only way to exercise real expiry
-    // without the test itself waiting an hour.
-    const usersPath = path.join(testApp.dir, 'users.json');
-    const users = JSON.parse(await readFile(usersPath, 'utf-8')) as { resetTokenExpiresAt: string | null }[];
-    users[0]!.resetTokenExpiresAt = new Date(Date.now() - 1000).toISOString();
-    await writeFile(usersPath, JSON.stringify(users, null, 2), 'utf-8');
-
-    const reset = await app.inject({ method: 'POST', url: '/auth/reset-password', payload: { token, newPassword: 'whatever123' } });
-    expect(reset.statusCode).toBe(400);
-  });
-});
-
-describe('email verification (legacy link flow, /auth/verify-email)', () => {
-  it('rejects a garbage token', async () => {
-    const res = await app.inject({ method: 'POST', url: '/auth/verify-email', payload: { token: 'not-a-real-token' } });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('requires authentication to request a new verification link', async () => {
-    const res = await app.inject({ method: 'POST', url: '/auth/send-verification' });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('reports alreadyVerified for an account created through the code-verified signup flow', async () => {
-    const signupRes = await signup();
-    const { token: authToken } = signupRes.json() as { token: string };
-
-    const resend = await app.inject({ method: 'POST', url: '/auth/send-verification', headers: { authorization: `Bearer ${authToken}` } });
-    expect(resend.statusCode).toBe(200);
-    expect(resend.json()).toMatchObject({ alreadyVerified: true });
-    // Signup already proved the inbox via the code -- no separate link should ever be sent.
-    expect(testApp.actionLinks).toHaveLength(0);
-  });
-});
-
-describe('POST /auth/signup/verify (email verification code)', () => {
-  it("doesn't create an account just from starting a pending signup", async () => {
-    const pending = await signupPending();
-    expect(pending.statusCode).toBe(200);
-    const body = pending.json() as { pending: true; pendingToken: string; email: string };
-    expect(body.pending).toBe(true);
-    expect(typeof body.pendingToken).toBe('string');
-    expect(body.email).toBe('teacher@example.com');
-
-    // The account doesn't exist yet -- logging in with the right credentials must fail.
-    const loginAttempt = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
-      payload: { email: CREDENTIALS.email, password: CREDENTIALS.password },
-    });
-    expect(loginAttempt.statusCode).toBe(401);
-  });
-
-  it('sends exactly one 6-digit code to the signup email', async () => {
-    await signupPending();
-    expect(testApp.signupCodes).toHaveLength(1);
-    expect(testApp.signupCodes[0]?.email).toBe('teacher@example.com');
-    expect(testApp.signupCodes[0]?.code).toMatch(/^\d{6}$/);
-  });
-
-  it('rejects the wrong code without creating the account', async () => {
-    const pending = await signupPending();
-    const { pendingToken } = pending.json() as { pendingToken: string };
-    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: '000000' } });
-    expect(res.statusCode).toBe(400);
-
-    const loginAttempt = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
-      payload: { email: CREDENTIALS.email, password: CREDENTIALS.password },
-    });
-    expect(loginAttempt.statusCode).toBe(401);
-  });
-
-  it('rejects a garbage or expired pending token', async () => {
-    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken: 'not-a-real-token', code: '123456' } });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('re-checks email/nickname uniqueness at verify time, not just at the start of signup', async () => {
-    const pending = await signupPending();
-    const { pendingToken } = pending.json() as { pendingToken: string };
-    const codeEntry = testApp.signupCodes[0];
-    if (!codeEntry) throw new Error('expected a signup code to have been issued');
-
-    // Someone else grabs the same email via a separate, faster signup before this one redeems its code.
-    await signup({ email: 'teacher@example.com', displayName: 'Someone Else' });
-
-    const res = await app.inject({ method: 'POST', url: '/auth/signup/verify', payload: { pendingToken, code: codeEntry.code } });
-    expect(res.statusCode).toBe(409);
-  });
-
-  it('creates the account with emailVerified already true', async () => {
-    const res = await signup();
-    expect(res.statusCode).toBe(201);
-    expect(res.json().user.emailVerified).toBe(true);
-  });
-});
-
-describe('POST /auth/signup/resend-code', () => {
-  it('issues a new working code for the same pending signup', async () => {
-    const pending = await signupPending();
-    const { pendingToken } = pending.json() as { pendingToken: string };
-
-    const resend = await app.inject({ method: 'POST', url: '/auth/signup/resend-code', payload: { pendingToken } });
-    expect(resend.statusCode).toBe(200);
-    const resendBody = resend.json() as { pendingToken: string; email: string };
-    expect(testApp.signupCodes).toHaveLength(2);
-
-    const newCode = testApp.signupCodes.at(-1);
-    if (!newCode) throw new Error('expected a resent signup code');
-    const verify = await app.inject({
-      method: 'POST',
-      url: '/auth/signup/verify',
-      payload: { pendingToken: resendBody.pendingToken, code: newCode.code },
-    });
-    expect(verify.statusCode).toBe(201);
-  });
-
-  it('rejects a garbage pending token', async () => {
-    const res = await app.inject({ method: 'POST', url: '/auth/signup/resend-code', payload: { pendingToken: 'not-a-real-token' } });
-    expect(res.statusCode).toBe(401);
-  });
-});
-
 describe('JWT expiration', () => {
   it('issues a token with an exp claim by default, bounding how long a leaked token stays useful', async () => {
-    const res = await signup();
-    const { token } = res.json() as { token: string };
+    const token = await signupAndGetToken();
     const payloadJson = Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf-8');
     const payload = JSON.parse(payloadJson) as { exp?: number; iat?: number };
     expect(typeof payload.exp).toBe('number');
@@ -491,20 +269,7 @@ describe('JWT expiration', () => {
   it('rejects a token once it actually expires, not just a token with no exp claim at all', async () => {
     const shortLived = makeTestApp({ jwtExpiresIn: '1s' });
     try {
-      const pendingRes = await shortLived.app.inject({
-        method: 'POST',
-        url: '/auth/signup',
-        payload: CREDENTIALS,
-      });
-      const { pendingToken } = pendingRes.json() as { pendingToken: string };
-      const codeEntry = shortLived.signupCodes[0];
-      if (!codeEntry) throw new Error('expected a signup code to have been issued');
-      const signupRes = await shortLived.app.inject({
-        method: 'POST',
-        url: '/auth/signup/verify',
-        payload: { pendingToken, code: codeEntry.code },
-      });
-      const { token } = signupRes.json() as { token: string };
+      const { token } = await signupUser(shortLived, CREDENTIALS);
 
       const beforeExpiry = await shortLived.app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
       expect(beforeExpiry.statusCode).toBe(200);
@@ -520,17 +285,21 @@ describe('JWT expiration', () => {
 });
 
 describe('rate limiting on /auth routes', () => {
-  it('throttles repeated signup attempts from the same caller', async () => {
+  it('throttles repeated dev-login attempts from the same caller', async () => {
     // Sequential, not `Promise.all` — the point is simulating a caller hammering the
     // route, and the in-memory rate-limit store needs each request's count actually
     // committed before the next is checked (a burst of concurrent `.inject()` calls can
     // race the same counter and undercount).
     const statusCodes: number[] = [];
     for (let i = 0; i < 11; i++) {
-      const res = await signup({ email: `rate-limit-${String(i)}@example.com` });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/dev-login',
+        payload: { email: `nobody-${String(i)}@example.com`, secret: TEST_DEV_LOGIN_SECRET },
+      });
       statusCodes.push(res.statusCode);
     }
     expect(statusCodes.filter((code) => code === 429).length).toBeGreaterThan(0);
-    expect(statusCodes.filter((code) => code === 201).length).toBeLessThanOrEqual(10);
+    expect(statusCodes.filter((code) => code === 404).length).toBeLessThanOrEqual(10);
   });
 });

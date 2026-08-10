@@ -16,7 +16,7 @@ export interface User {
   readonly avatarImage: string | null;
   /** Set once a verify-email token is successfully redeemed. Not currently enforced anywhere (no feature is gated behind it) — just a real, checkable fact about the account. */
   readonly emailVerified: boolean;
-  /** SHA-256 of the live token, never the raw token itself (same "never store the redeemable secret" reasoning as a password hash) — see auth/actionTokens.ts. Null when no reset is pending. */
+  /** Vestigial: dates from the pre-Google-only password-reset flow, which no route reaches anymore (KNOWLEDGE.md) -- always null for every account now. Kept rather than migrated away since dropping the column isn't worth the production migration risk for a harmless unused field. */
   readonly resetTokenHash: string | null;
   readonly resetTokenExpiresAt: string | null;
   readonly verifyTokenHash: string | null;
@@ -38,9 +38,9 @@ export interface UserStore {
   create(user: User): Promise<void>;
   /** Whole-record replace, same convention as GameStore/TournamentStore's `update` — currently only used to persist a changed `rating`. */
   update(user: User): Promise<void>;
-  /** Finds the one user (if any) whose `resetTokenHash` matches — see auth/actionTokens.ts. */
+  /** Finds the one user (if any) whose `resetTokenHash` matches. Vestigial (see field's own doc comment above) -- kept for interface symmetry, no route calls it anymore. */
   findByResetTokenHash(hash: string): Promise<User | null>;
-  /** Finds the one user (if any) whose `verifyTokenHash` matches — see auth/actionTokens.ts. */
+  /** Finds the one user (if any) whose `verifyTokenHash` matches. Vestigial (see field's own doc comment above) -- kept for interface symmetry, no route calls it anymore. */
   findByVerifyTokenHash(hash: string): Promise<User | null>;
   /** Every account ordered by rating (rating/elo.ts), highest first — the leaderboard's data source. `limit` bounds it the same way `GameStore.listForUser`/`listActive` do; this app has no real pagination need at classroom/tournament scale. */
   listTopByRating(limit: number): Promise<User[]>;
